@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TR Kids - ระบบบัญชี</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* --- General Layout Styles --- */
+        :root{--sidebar-width:240px;--sidebar-width-collapsed:65px;--top-bar-height:60px;--primary-color:#0056b3;--sidebar-bg:#1d2b3a;--sidebar-link-color:#c5d6de;--sidebar-link-hover-bg:#2a3f54;--sidebar-link-active-bg:#0071e3;--top-bar-bg:#4F634A}*{box-sizing:border-box}body{font-family:'Sarabun', sans-serif;margin:0;background-color:#f4f7f9}.app-container{display:flex;height:100vh}.sidebar{width:var(--sidebar-width);height:100%;position:fixed;z-index:1001;top:0;left:0;background-color:var(--sidebar-bg);transition:width .3s ease, transform .3s ease;color:#fff;padding-top:20px;flex-shrink:0}.page-wrapper{display:flex;flex-direction:column;width:100%;margin-left:var(--sidebar-width);transition:margin-left .3s ease}.top-bar{height:var(--top-bar-height);background-color:var(--top-bar-bg);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;box-shadow:0 2px 5px rgba(0,0,0,.1)}.main-content{flex-grow:1;overflow-y:auto;padding:20px;height:calc(100vh - var(--top-bar-height))}.sidebar .sidebar-header{padding:0 20px 20px;text-align:center;border-bottom:1px solid #3a4b5f;white-space:nowrap}.sidebar .sidebar-header h2{margin:0;font-size:1.6em;font-weight:600}.sidebar nav ul{list-style-type:none;padding:20px 0;margin:0}.sidebar nav li a{display:flex;align-items:center;padding:15px 20px;text-decoration:none;font-size:16px;color:var(--sidebar-link-color);white-space:nowrap;transition:background-color .2s ease-in-out}.sidebar nav li a .icon{margin-right:15px;font-size:1.5em;width:30px;text-align:center}.sidebar nav li a:hover{background-color:var(--sidebar-link-hover-bg)}.sidebar nav li a.active{background-color:var(--sidebar-link-active-bg);color:#fff;font-weight:700}body.sidebar-collapsed .sidebar{width:var(--sidebar-width-collapsed)}body.sidebar-collapsed .page-wrapper{margin-left:var(--sidebar-width-collapsed)}body.sidebar-collapsed .sidebar .sidebar-header h2,body.sidebar-collapsed .sidebar .nav-text{opacity:0;visibility:hidden}body.sidebar-collapsed .sidebar .nav-link .icon{margin-right:0}#user-info-bar{display:flex;align-items:center;gap:15px;font-size:14px}#logout-btn{background-color:#6c757d;color:#fff;padding:8px 15px;border:none;border-radius:4px;cursor:pointer;font-size:14px}#loading-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);color:#fff;display:none;justify-content:center;align-items:center;z-index:9999;font-size:2em}
+        
+        /* --- Accounting Page Specific Styles --- */
+        :root { --card-bg: #ffffff; --text-color: #333; --muted-color: #6c757d; --border-color: #dee2e6; --success-color: #28a745; --danger-color: #dc3545; --info-color: #17a2b8; --secondary-color: #007bff; }
+        .container { max-width: 1600px; margin: 0 auto; padding: 0; display: flex; flex-direction: column; gap: 20px; }
+        .card { background-color: var(--card-bg); border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); padding: 20px; margin-bottom: 0; }
+        h1, h2 { color: var(--primary-color); text-align: center; }
+        .filters { display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; justify-content: center;}
+        .filter-group { display: flex; flex-direction: column; }
+        .filter-group label { font-weight: 600; margin-bottom: 5px; font-size: 14px; }
+        
+        .filter-group input, .filter-group select { padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 16px; height: 45px !important; box-sizing: border-box; line-height: normal; }
+        .btn { padding: 12px 20px; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; color: #fff; height: 45px; }
+        .btn-primary { background-color: var(--primary-color); }
+        .btn-success { background-color: var(--success-color); }
+        .btn-info { background-color: var(--info-color); }
+        .btn-sm { height: 36px; padding: 8px 12px; font-size: 14px; } /* Small button */
+        .btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        #summary-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 25px; }
+        .summary-box { background-color: #f8f9fa; padding: 20px; border-radius: 8px; }
+        .summary-box h3 { margin-top: 0; border-bottom: 2px solid var(--primary-color); padding-bottom: 10px; }
+        .summary-table { width: 100%; text-align: left; }
+        .summary-table th, .summary-table td { padding: 8px 4px; border-bottom: 1px solid var(--border-color); }
+        .summary-table tr:last-child td { border-bottom: none; }
+        .summary-table .total-row { font-weight: bold; background-color: #e9ecef; }
+        .summary-value { font-weight: 700; text-align: right; }
+        .overall-summary { text-align: center; }
+        .overall-summary .metric { margin-bottom: 15px; }
+        .overall-summary .metric h4 { margin: 0 0 5px; color: var(--muted-color); font-size: 16px;}
+        .overall-summary .metric .value { font-size: 2.2em; font-weight: 700; color: var(--primary-color); }
+
+        .table-container { overflow-x: auto; max-height: 70vh;}
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid var(--border-color); padding: 12px; text-align: left; white-space: nowrap; }
+        th { background-color: #f8f9fa; position: sticky; top: 0; z-index: 10; }
+        #statementTable th, #salesReportTable th { background-color: var(--primary-color); color: white;}
+        td.currency { text-align: right; }
+        #loading-message { text-align: center; font-size: 1.2em; color: var(--muted-color); padding: 40px; }
+        .manual-match-cell { display: flex; gap: 8px; align-items: center; }
+        .manual-match-cell input { min-width: 120px; height: 36px !important; }
+        
+        /* --- Reconciliation Tool Styles --- */
+        .workflow { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 1rem; }
+        .step-card { background: #f8f9fa; border: 1px solid var(--border-color); border-radius: 8px; padding: 1.5rem; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1rem; }
+        .step-card .step-number { background-color: var(--primary-color); color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: bold; flex-shrink: 0; }
+        .step-card h3 { margin: 0; color: #343a40; }
+        .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; cursor: pointer; padding: 10px 20px; font-size: 1rem; background-color: var(--secondary-color); color: white; border-radius: 5px; width: 100%; box-sizing: border-box; }
+        .file-input-wrapper:hover { background-color: var(--primary-color); }
+        .file-input-wrapper input[type=file] { position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+        .file-name { margin-top: 0.5rem; font-style: italic; color: #6c757d; font-size: 0.9rem; word-break: break-all; }
+        .action-button { font-size: 1.1rem; padding: 0.8rem 1.5rem; border: none; border-radius: 8px; cursor: pointer; width: 100%; transition: background-color: 0.3s; }
+        #match-button { background-color: var(--success-color); color: white; }
+        #export-matched-btn { background-color: var(--info-color); color: white; }
+        .action-button:disabled { background-color: #a0a0a0; cursor: not-allowed; }
+        #status-area { width: 100%; text-align: center; padding: 1rem; background-color: #fff; border: 1px dashed var(--border-color); border-radius: 8px; box-sizing: border-box; }
+        .export-section { display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; justify-content: center; padding: 20px; background-color: #f8f9fa; border-radius: 8px; margin-top: 20px; }
+        #summary-dashboard { width: 100%; margin-top: 1rem; text-align: left; }
+        .summary-item { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); }
+        .summary-item:last-child { border-bottom: none; }
+        .summary-label { font-weight: 500; display: flex; align-items: center; gap: 8px;}
+        tr.matched-manual { background-color: #cce5ff !important; color: #004085; }
+        .match-badge { padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; }
+        .status-matched { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status-unmatched { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .loader { display: none; border: 5px solid #f3f3f3; border-top: 5px solid var(--primary-color); border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; margin: 0 auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .sheet-selector { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); justify-content: start; gap: 10px 15px; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; background: #fff; box-sizing: border-box; }
+        .checkbox-wrapper { display: flex; align-items: center; }
+        .checkbox-wrapper input[type="checkbox"] { margin-right: 8px; width: 17px; height: 17px; }
+        #mobile-menu-toggle { display: none; background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+        @media (max-width: 768px) {
+            .main-content { padding: 10px; } #mobile-menu-toggle { display: block; } .sidebar { transform: translateX(-100%); z-index: 1100; } body:not(.sidebar-collapsed) .sidebar { transform: translateX(0); } .page-wrapper, body.sidebar-collapsed .page-wrapper { margin-left: 0; } .filters, .export-section { flex-direction: column; align-items: stretch;} .btn { align-self: auto; width: 100%; margin-top: 10px; } .filter-group .select2-container { width: 100% !important; } #summary-section { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body class="sidebar-collapsed">
+    <div id="loading-overlay">กำลังโหลด...</div>
+
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="sidebar-header"> <h2>TR Kids</h2> </div>
+            <nav>
+                <ul>
+                    <li><a href="index.html" class="nav-link"><span class="icon">📝</span><span class="nav-text">ระบบจัดการออร์เดอร์</span></a></li>
+                    <li><a href="#" class="nav-link" id="nav-planner"><span class="icon">🗓️</span><span class="nav-text">ใบงาน (Export)</span></a></li>
+                    <li><a href="#" class="nav-link" id="nav-packing"><span class="icon">📦</span><span class="nav-text">ระบบจัดของ</span></a></li>
+                    <li><a href="#" class="nav-link" id="nav-product"><span class="icon">🏷️</span><span class="nav-text">ระบบจัดการสินค้า</span></a></li>
+                    <li><a href="#" class="nav-link" id="nav-sales-report"><span class="icon">📈</span><span class="nav-text">รายงานยอดขาย</span></a></li>
+                    <li><a href="accounting.html" class="nav-link active"><span class="icon">📊</span><span class="nav-text">ระบบบัญชี</span></a></li>
+                </ul>
+            </nav>
+        </div>
+        <div class="page-wrapper">
+            <header class="top-bar">
+                <button id="mobile-menu-toggle">☰</button>
+                <div id="user-info-bar">
+                    <span id="welcome-message"></span>
+                    <button type="button" id="logout-btn">ออกจากระบบ</button>
+                </div>
+            </header>
+            <main class="main-content">
+                <div class="container" id="main-container">
+                    <!-- Section 1: Sales Report -->
+                    <div class="card" id="sales-report-card">
+                        <h2>สรุปยอดขาย (ทั้งหมดในช่วงวันที่เลือก)</h2>
+                        <div class="filters">
+                            <div class="filter-group"> <label for="start-date">จากวันที่ชำระ</label> <input type="date" id="start-date"> </div>
+                            <div class="filter-group"> <label for="end-date">ถึงวันที่ชำระ</label> <input type="date" id="end-date"> </div>
+                            <div class="filter-group"> <label for="customer-search">ลูกค้า</label> <input type="text" id="customer-search" placeholder="ชื่อลูกค้า"> </div>
+                            <div class="filter-group"> <label for="amount-search">ยอดสุทธิ</label> <input type="number" id="amount-search" placeholder="จำนวนเงิน" step="0.01"> </div>
+                            <button id="generate-report-btn" class="btn btn-primary">สร้างรายงาน</button>
+                            <button id="export-xlsx-btn" class="btn btn-success" disabled>Export to XLSX</button>
+                            <button id="export-png-btn" class="btn btn-info" disabled>Export to PNG</button>
+                        </div>
+                        <div id="summary-container" style="margin-top: 20px;">
+                            <p id="initial-summary-message">กรุณาสร้างรายงานเพื่อดูสรุปยอด</p>
+                        </div>
+                    </div>
+
+                    <!-- Section 2: Reconciliation Tool -->
+                    <div class="card" id="reconciliation-card">
+                        <h2><i class="fa-solid fa-wand-magic-sparkles"></i> ระบบกระทบยอด Statement</h2>
+                        <div class="workflow">
+                            <div class="step-card">
+                                <div class="step-number">1</div>
+                                <h3>อัปโหลดและบันทึก Statement</h3>
+                                <label for="csvFileInput" class="file-input-wrapper">
+                                    <i class="fa-solid fa-cloud-arrow-up"></i> เลือกไฟล์ .csv เพื่อบันทึก
+                                    <input type="file" id="csvFileInput" accept=".csv">
+                                </label>
+                                <div id="csvFileName" class="file-name">ยังไม่ได้เลือกไฟล์</div>
+                            </div>
+                            <div class="step-card">
+                                <div class="step-number">2</div>
+                                <h3>เลือกช่องทางใบงาน</h3>
+                                <div class="form-group" style="width:100%;">
+                                    <label for="match-channel-checkbox-container">เลือกช่องทางที่ต้องการ</label>
+                                    <div id="match-channel-checkbox-container" class="sheet-selector"></div>
+                                </div>
+                                <div class="file-name">ระบบจะดึงใบงานตามช่วงวันที่<br>ที่แสดงในตารางด้านล่าง</div>
+                            </div>
+                            <div class="step-card">
+                                <div class="step-number">3</div>
+                                <h3>ดำเนินการกระทบยอดอัตโนมัติ</h3>
+                                <button id="match-button" class="action-button"> <i class="fa-solid fa-link"></i> เริ่มจับคู่อัตโนมัติ </button>
+                                <div id="status-area">
+                                    <div id="status-text">พร้อมดำเนินการ</div>
+                                    <div class="loader" id="loader"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="export-section">
+                            <div class="filter-group">
+                                <label for="stmt-start-date">วันที่รับเงิน (เริ่มต้น)</label>
+                                <input type="date" id="stmt-start-date">
+                            </div>
+                            <div class="filter-group">
+                                <label for="stmt-end-date">วันที่รับเงิน (สิ้นสุด)</label>
+                                <input type="date" id="stmt-end-date">
+                            </div>
+                            <button id="export-statement-xlsx-btn" class="btn btn-info">Export Statement (XLSX)</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Section 3: Unmatched Statements Table (Permanent) -->
+                    <div class="card" id="unmatched-statements-card">
+                        <h2><i class="fa-solid fa-table-list"></i> รายการ Statement ที่ยังไม่กระทบยอด</h2>
+                        <div id="unmatched-statements-container" class="table-container">
+                            <p>กำลังโหลดข้อมูล...</p>
+                        </div>
+                    </div>
+
+                    <!-- Section 4: Sales Report Data Table (Results) -->
+                    <div class="card" id="sales-report-table-card" style="display: none;">
+                        <h2 id="sales-report-table-title"><i class="fa-solid fa-file-invoice-dollar"></i> ตารางข้อมูลยอดขาย</h2>
+                        <div id="sales-report-container" class="table-container">
+                             <p>ผลลัพธ์รายงานจะแสดงที่นี่</p>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const SUPABASE_URL = 'https://scxcuwjhjbkxvqmpywqs.supabase.co';
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjeGN1d2poamJreHZxbXB5d3FzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyODM4NTMsImV4cCI6MjA3NDg1OTg1M30.UqcmQUxCkOxgDxjtUa8Sbb0cLHT26qOuHfdbtdilkI8';
+            const { createClient } = supabase;
+            const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+            let currentReportData = [];
+            let channelMap = {}; 
+
+            // --- Elements ---
+            const startDateInput = document.getElementById('start-date');
+            const endDateInput = document.getElementById('end-date');
+            const customerSearchInput = document.getElementById('customer-search');
+            const amountSearchInput = document.getElementById('amount-search');
+            const generateBtn = document.getElementById('generate-report-btn');
+            const exportXlsxBtn = document.getElementById('export-xlsx-btn');
+            const exportPngBtn = document.getElementById('export-png-btn');
+            const summaryContainer = document.getElementById('summary-container');
+            const csvFileInput = document.getElementById('csvFileInput');
+            const csvFileNameLabel = document.getElementById('csvFileName');
+            const matchBtn = document.getElementById('match-button');
+            const statusText = document.getElementById('status-text');
+            const loader = document.getElementById('loader');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const logoutBtn = document.getElementById('logout-btn');
+            const stmtStartDateInput = document.getElementById('stmt-start-date');
+            const stmtEndDateInput = document.getElementById('stmt-end-date');
+            const exportStatementXlsxBtn = document.getElementById('export-statement-xlsx-btn');
+            
+            const unmatchedContainer = document.getElementById('unmatched-statements-container');
+            const salesReportTableCard = document.getElementById('sales-report-table-card');
+            const salesReportTableTitle = document.getElementById('sales-report-table-title');
+            const salesReportContainer = document.getElementById('sales-report-container');
+
+            document.getElementById('mobile-menu-toggle').addEventListener('click', () => document.body.classList.toggle('sidebar-collapsed'));
+            logoutBtn.addEventListener('click', async () => {
+                await supabaseClient.auth.signOut();
+                window.location.href = 'index.html';
+            });
+            
+            async function checkAuth() {
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                if (!session) {
+                    window.location.href = 'index.html';
+                } else {
+                    const { data: userData } = await supabaseClient.from('users').select('username, role').eq('id', session.user.id).single();
+                    if (!userData || userData.role !== 'superadmin') {
+                        alert('คุณไม่มีสิทธิ์เข้าถึงหน้านี้');
+                        window.location.href = 'index.html';
+                    } else {
+                         document.getElementById('welcome-message').textContent = `ยินดีต้อนรับ, ${userData.username}`;
+                    }
+                }
+            }
+
+            function navigateTo(target) {
+                localStorage.setItem('navigateTo', target);
+                window.location.href = 'index.html';
+            }
+            document.getElementById('nav-planner').addEventListener('click', (e) => { e.preventDefault(); navigateTo('planner-system-container'); });
+            document.getElementById('nav-packing').addEventListener('click', (e) => { e.preventDefault(); navigateTo('packing-system-container'); });
+            document.getElementById('nav-product').addEventListener('click', (e) => { e.preventDefault(); navigateTo('product-system-container'); });
+            document.getElementById('nav-sales-report').addEventListener('click', (e) => { e.preventDefault(); navigateTo('sales-report-system-container'); });
+            
+            const today = new Date().toISOString().slice(0, 10);
+            startDateInput.value = today;
+            endDateInput.value = today;
+            stmtStartDateInput.value = today;
+            stmtEndDateInput.value = today;
+
+            async function loadChannels() {
+                const { data, error } = await supabaseClient.from('channels').select('channel_code, channel_name, bank_account');
+                if (error) { console.error('Error loading channels:', error); return; }
+                
+                channelMap = {};
+                const matchChannelContainer = document.getElementById('match-channel-checkbox-container');
+                matchChannelContainer.innerHTML = '';
+                data.forEach(ch => {
+                    channelMap[ch.channel_code] = { name: ch.channel_name, account: ch.bank_account || 'ไม่ระบุ' };
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'checkbox-wrapper';
+                    wrapper.innerHTML = `<input type="checkbox" id="match-ch-${ch.channel_code}" value="${ch.channel_code}"><label for="match-ch-${ch.channel_code}">${ch.channel_code}</label>`;
+                    matchChannelContainer.appendChild(wrapper);
+                });
+            }
+
+            // --- === SECTION 1: SALES REPORT (MODIFIED TO PULL ALL) === ---
+            async function generateReport() {
+                salesReportTableCard.style.display = 'block';
+                salesReportTableTitle.innerHTML = '<i class="fa-solid fa-file-invoice-dollar"></i> ตารางข้อมูลยอดขาย (ทั้งหมดในช่วงวันที่เลือก)';
+            
+                const startDate = startDateInput.value;
+                const endDate = endDateInput.value;
+                const customerKeyword = customerSearchInput.value.trim();
+                const amountKeyword = amountSearchInput.value.trim();
+
+                if (!startDate || !endDate) { alert('กรุณาเลือกช่วงวันที่ให้ครบถ้วน'); return; }
+                
+                generateBtn.disabled = true;
+                exportXlsxBtn.disabled = true;
+                exportPngBtn.disabled = true;
+                currentReportData = [];
+                salesReportContainer.innerHTML = '<p>กำลังดึงข้อมูลรายงานและตรวจสอบสถานะการจับคู่...</p>';
+                summaryContainer.innerHTML = '';
+
+                try {
+                    let allFetchedOrders = [];
+                    let from = 0;
+                    let to = 999;
+                    let hasMore = true;
+
+                    while (hasMore) {
+                        let query = supabaseClient.from('orders').select('*')
+                            .gte('payment_date', startDate)
+                            .lte('payment_date', endDate)
+                            .not('status', 'eq', 'ยกเลิก')
+                            .not('payment_date', 'is', null);
+
+                        if (customerKeyword) query = query.ilike('customer_name', `%${customerKeyword}%`);
+                        if (amountKeyword) query = query.eq('total_amount', amountKeyword);
+
+                        const { data: orders, error } = await query
+                            .order('payment_date', { ascending: true })
+                            .range(from, to);
+                            
+                        if (error) throw error;
+                        
+                        allFetchedOrders = allFetchedOrders.concat(orders);
+                        hasMore = orders.length >= 1000;
+                        from += 1000; to += 1000;
+                    }
+
+                    // --- จุดที่เพิ่ม: ตรวจสอบสถานะการจับคู่จาก Statement ---
+                    // --- แก้ไข Logic ใน generateReport ---
+
+// ดึงรายการที่เคย Match แล้วทั้งหมดมาไว้ใน Set
+const billNos = allFetchedOrders.map(o => o.bill_no).filter(b => b);
+const { data: matchedStatements } = await supabaseClient
+    .from('bank_statements')
+    .select('bill_no, deposit_amount')
+    .in('bill_no', billNos)
+    .eq('is_matched', true);
+
+// สร้าง Map เพื่อเก็บว่าแต่ละบิล มีการ Match ยอดรวมไปเท่าไหร่แล้ว
+const matchedAmountMap = {};
+matchedStatements?.forEach(s => {
+    matchedAmountMap[s.bill_no] = (matchedAmountMap[s.bill_no] || 0) + parseFloat(s.deposit_amount);
+});
+
+// เก็บข้อมูลลง currentReportData พร้อมตรวจสอบสถานะ
+currentReportData = allFetchedOrders.map(order => {
+    const totalPaidInStatements = matchedAmountMap[order.bill_no] || 0;
+    const orderTotalAmount = parseFloat(order.total_amount || 0);
+    
+    let matchStatus = "unmatched"; // ยังไม่เจอเลย
+    if (totalPaidInStatements >= orderTotalAmount && orderTotalAmount > 0) {
+        matchStatus = "fully_matched"; // เจอครบยอดแล้ว
+    } else if (totalPaidInStatements > 0) {
+        matchStatus = "partial"; // เจอแล้วบางยอด
+    }
+
+    return {
+        ...order,
+        match_status_type: matchStatus,
+        total_paid_in_statements: totalPaidInStatements
+    };
+});
+
+                    renderReportResults(currentReportData);
+                    
+                    if (currentReportData.length > 0) {
+                        exportXlsxBtn.disabled = false;
+                        exportPngBtn.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('Error generating report:', error);
+                    salesReportContainer.innerHTML = `<p style="color:var(--danger-color)">เกิดข้อผิดพลาด: ${error.message}</p>`;
+                } finally {
+                    generateBtn.disabled = false;
+                }
+            }
+            
+            function renderReportResults(orders) {
+                if (orders.length === 0) {
+                    salesReportContainer.innerHTML = '<p>ไม่พบข้อมูลใบงานตามเงื่อนไขที่เลือก</p>';
+                    summaryContainer.innerHTML = '<p id="initial-summary-message">ไม่พบข้อมูลสำหรับสรุปยอด</p>';
+                    return;
+                }
+                
+                const totalSales = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+                const totalShipping = orders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0);
+                const salesByChannel = {}, salesByAccount = {}, shippingByChannel = {};
+
+                orders.forEach(order => {
+                    const channelCode = order.channel_code, amount = order.total_amount || 0, shipping = order.shipping_cost || 0;
+                    const channelInfo = channelMap[channelCode] || { name: channelCode, account: 'ไม่ระบุ' };
+                    
+                    salesByChannel[channelCode] = (salesByChannel[channelCode] || 0) + amount;
+                    salesByAccount[channelInfo.account] = (salesByAccount[channelInfo.account] || 0) + amount;
+                    shippingByChannel[channelCode] = (shippingByChannel[channelCode] || 0) + shipping;
+                });
+                
+                summaryContainer.innerHTML = `
+                <div id="summary-section"> 
+                    <div class="summary-box overall-summary"> <h3>สรุปภาพรวม</h3> <div class="metric"> <h4>ยอดขายรวม</h4> <div class="value">${formatCurrency(totalSales)}</div> </div> <div class="metric"> <h4>จำนวนออร์เดอร์</h4> <div class="value">${orders.length.toLocaleString('th-TH')}</div> </div> </div>
+                    <div class="summary-box"> <h3>สรุปตามช่องทาง</h3> <table class="summary-table"> ${Object.entries(salesByChannel).map(([code, total]) => `<tr><td>${channelMap[code]?.name || code} (${code})</td><td class="summary-value">${formatCurrency(total)}</td></tr>`).join('')} <tr class="total-row"><td>รวม</td><td class="summary-value">${formatCurrency(totalSales)}</td></tr> </table> </div>
+                    <div class="summary-box"> <h3>สรุปค่าขนส่งตามช่องทาง</h3> <table class="summary-table"> ${Object.entries(shippingByChannel).map(([code, total]) => `<tr><td>${channelMap[code]?.name || code} (${code})</td><td class="summary-value">${formatCurrency(total)}</td></tr>`).join('')} <tr class="total-row"><td>รวม</td><td class="summary-value">${formatCurrency(totalShipping)}</td></tr> </table> </div>
+                    <div class="summary-box"> <h3>สรุปตามบัญชี</h3> <table class="summary-table"> ${Object.entries(salesByAccount).map(([account, total]) => `<tr><td>${account}</td><td class="summary-value">${formatCurrency(total)}</td></tr>`).join('')} <tr class="total-row"><td>รวม</td><td class="summary-value">${formatCurrency(totalSales)}</td></tr> </table> </div>
+                </div>`;
+
+                // --- แก้หัวตาราง เพิ่ม "การจับคู่" ---
+                const rawDataTableHeaders = ["วันที่ชำระ", "เวลา", "เลขบิล", "ช่องทาง", "ลูกค้า", "ยอดสุทธิ", "การจับคู่", "สถานะ"];
+                let tableHTML = `<table id="salesReportTable"><thead><tr>${rawDataTableHeaders.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>`;
+                
+                orders.forEach(order => {
+    // 1. สร้างตัวแปร Badge ตามสถานะที่คำนวณไว้ใน generateReport
+    let matchStatusBadge = '';
+    
+    if (order.match_status_type === "fully_matched") {
+        matchStatusBadge = '<span class="match-badge status-matched">✓ ครบถ้วน</span>';
+    } else if (order.match_status_type === "partial") {
+        // คำนวณยอดค้างจ่าย
+        const balance = (order.total_amount || 0) - (order.total_paid_in_statements || 0);
+        matchStatusBadge = `<span class="match-badge" style="background:#fff3cd; color:#856404; border:1px solid #ffeeba; font-size:11px;">⚠ ขาด ${formatCurrency(balance)}</span>`;
+    } else {
+        matchStatusBadge = '<span class="match-badge status-unmatched">✗ ยังไม่พบยอด</span>';
+    }
+
+    // 2. ส่วนการสร้างแถวตาราง (ปรับคอลัมน์ "การจับคู่")
+    tableHTML += `<tr>
+        <td>${order.payment_date ? new Date(order.payment_date).toLocaleDateString('th-TH') : ''}</td>
+        <td>${order.payment_time ? order.payment_time.substring(0, 5) : ''}</td>
+        <td>${order.bill_no || ''}</td>
+        <td>${order.channel_code || ''}</td>
+        <td>${order.customer_name || ''}</td>
+        <td class="currency">${formatCurrency(order.total_amount || 0)}</td>
+        <td>${matchStatusBadge}</td> <!-- ตรงนี้คือคอลัมน์ที่แสดง Badge -->
+        <td>${order.status || ''}</td>
+    </tr>`;
+});
+                tableHTML += `</tbody></table>`;
+                salesReportContainer.innerHTML = tableHTML;
+            }
+
+            function exportReportToXLSX() {
+                if (currentReportData.length === 0) { alert("ไม่มีข้อมูลสำหรับ Export"); return; }
+                const ordersByAccount = {};
+                currentReportData.forEach(order => {
+                    const channelInfo = channelMap[order.channel_code];
+                    const accountName = channelInfo ? channelInfo.account : 'ไม่ระบุ';
+                    if (!ordersByAccount[accountName]) ordersByAccount[accountName] = [];
+                    ordersByAccount[accountName].push(order);
+                });
+                Object.keys(ordersByAccount).forEach(accountName => {
+                    const workbook = XLSX.utils.book_new();
+                    let accountData = ordersByAccount[accountName];
+                    accountData.sort((a, b) => (a.channel_code || '').localeCompare(b.channel_code || ''));
+                    
+                    // เพิ่มหัวข้อ Excel
+                    const rawDataHeaders = ["วันที่ชำระ", "เวลา", "เลขบิล", "ช่องทาง", "ชื่อลูกค้า", "ยอดสุทธิ", "การจับคู่ Statement", "สถานะ"];
+                    
+                    const accountRows = accountData.map(order => [ 
+                        order.payment_date || '', 
+                        order.payment_time ? order.payment_time.substring(0, 5) : '', 
+                        order.bill_no || '', 
+                        order.channel_code || '', 
+                        order.customer_name || '', 
+                        order.total_amount || 0, 
+                        order.is_statement_matched ? "จับคู่แล้ว" : "ยังไม่พบยอด",
+                        order.status || '' 
+                    ]);
+
+                    const worksheet = XLSX.utils.aoa_to_sheet([rawDataHeaders, ...accountRows]);
+                    const sheetName = accountName.replace(/[\*\:\/\\ \?\[\]]/g, "").substring(0, 31);
+                    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+                    const fileName = `Sales_${accountName}_${startDateInput.value}.xlsx`;
+                    XLSX.writeFile(workbook, fileName);
+                });
+            }
+
+            function exportReportToPNG() {
+                const summaryElement = document.getElementById('summary-container');
+                if (!summaryElement || currentReportData.length === 0) { alert("ไม่มีข้อมูลสำหรับ Export"); return; }
+                loadingOverlay.style.display = 'flex';
+                html2canvas(summaryElement, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
+                    const link = document.createElement('a');
+                    link.download = `Sales_Summary_${startDateInput.value}.png`;
+                    link.href = canvas.toDataURL("image/png");
+                    link.click();
+                }).finally(() => {
+                    loadingOverlay.style.display = 'none';
+                });
+            }
+
+            // --- Reconciliation Tool Utils ---
+            async function exportStatementToXLSX() {
+                const startDate = stmtStartDateInput.value;
+                const endDate = stmtEndDateInput.value;
+                if (!startDate || !endDate) { alert('กรุณาเลือกช่วงวันที่'); return; }
+                
+                loadingOverlay.style.display = 'flex';
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('bank_statements')
+                        .select('*')
+                        .gte('statement_date', startDate)
+                        .lte('statement_date', endDate)
+                        .order('statement_date', { ascending: true })
+                        .order('id', { ascending: true });
+
+                    if (error) throw error;
+                    if (data.length === 0) { alert("ไม่พบข้อมูลในช่วงวันที่เลือก"); return; }
+
+                    const groupedData = {};
+                    data.forEach(item => {
+                        let accountKey = item.bank_account; 
+                        if (!accountKey || accountKey.trim() === "") {
+                            const info = channelMap[item.channel];
+                            accountKey = info ? info.account : (item.channel || "ไม่ระบุบัญชี");
+                        }
+
+                        if (!groupedData[accountKey]) groupedData[accountKey] = [];
+                        groupedData[accountKey].push({
+                            "วันที่": item.statement_date,
+                            "เวลา": item.statement_time.substring(0, 5),
+                            "รายการ": item.description,
+                            "ยอดเงินฝาก": item.deposit_amount,
+                            "เลขบิล": item.bill_no || "",
+                            "ยอดคงเหลือ": item.balance,
+                            "ช่องทาง": item.channel,
+                            "รายละเอียด": item.details
+                        });
+                    });
+
+                    const workbook = XLSX.utils.book_new();
+                    Object.keys(groupedData).forEach(accountName => {
+                        const worksheet = XLSX.utils.json_to_sheet(groupedData[accountName]);
+                        
+                        // --- ส่วนที่แก้ไข: ตั้งค่าความกว้างคอลัมน์ให้พอดีกับข้อมูล ---
+                        worksheet['!cols'] = [
+                            { wch: 15 }, // วันที่
+                            { wch: 10 }, // เวลา
+                            { wch: 15 }, // รายการ
+                            { wch: 10 }, // ยอดเงินฝาก
+                            { wch: 20 }, // เลขบิล
+                            { wch: 15 }, // ยอดคงเหลือ
+                            { wch: 25 }, // ช่องทาง (Internet/Mobile...)
+                            { wch: 70 }  // รายละเอียด (ข้อความยาวๆ)
+                        ];
+
+                        // ป้องกัน Error ชื่อแท็บที่มีอักขระพิเศษ
+                        const safeSheetName = accountName.substring(0, 31).replace(/[\\\/\?\*\[\]]/g, "");
+                        XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName);
+                    });
+
+                    XLSX.writeFile(workbook, `Report_Statement_${startDate}.xlsx`);
+                } catch (error) { 
+                    alert('เกิดข้อผิดพลาด: ' + error.message); 
+                } finally { 
+                    loadingOverlay.style.display = 'none'; 
+                }
+            }
+            async function displayUnmatchedStatements() {
+                unmatchedContainer.innerHTML = '<p>กำลังโหลดข้อมูล...</p>';
+                
+                const { data, error } = await supabaseClient
+                    .from('bank_statements')
+                    .select('*')
+                    .eq('is_matched', false)
+                    .order('id', { ascending: true }); // UPDATED: Order by id
+
+                if (error) {
+                    unmatchedContainer.innerHTML = `<p style="color:var(--danger-color)">เกิดข้อผิดพลาด: ${error.message}</p>`;
+                    return [];
+                }
+                if (data.length === 0) {
+                    unmatchedContainer.innerHTML = '<p>ไม่มีรายการที่ค้างอยู่</p>';
+                    return [];
+                }
+
+                let tableHTML = `<table id="statementTable"><thead><tr><th>เลขบิล</th><th>วันที่</th><th>เวลา</th><th>รายการ</th><th>ฝาก</th><th>ช่องทาง</th><th>รายละเอียด</th></tr></thead><tbody>`;
+                data.forEach(stmt => {
+                    tableHTML += `<tr data-statement-id="${stmt.id}">
+                        <td class="manual-match-cell"><input type="text" placeholder="เลขบิล"><button class="btn btn-success btn-sm manual-save-btn">บันทึก</button></td>
+                        <td>${new Date(stmt.statement_date).toLocaleDateString('th-TH')}</td>
+                        <td>${stmt.statement_time.substring(0, 5)}</td>
+                        <td>${stmt.description}</td>
+                        <td class="currency">${formatCurrency(stmt.deposit_amount)}</td>
+                        <td>${stmt.channel}</td>
+                        <td>${stmt.details}</td>
+                    </tr>`;
+                });
+                tableHTML += `</tbody></table>`;
+                unmatchedContainer.innerHTML = tableHTML;
+                document.querySelectorAll('.manual-save-btn').forEach(btn => btn.addEventListener('click', handleManualSave));
+                return data;
+            }
+
+            async function handleManualSave(e) {
+                const row = e.target.closest('tr');
+                const billNo = row.querySelector('input').value.trim();
+                if (!billNo) return;
+                const { error } = await supabaseClient.from('bank_statements').update({ bill_no: billNo, is_matched: true }).eq('id', row.dataset.statementId);
+                if (!error) {
+                    row.remove(); // Remove row on successful save
+                } else {
+                    alert('เกิดข้อผิดพลาดในการบันทึก: ' + error.message);
+                }
+            }
+// ฟังก์ชันช่วยแยกคอลัมน์ CSV ที่รองรับเครื่องหมายคำพูด (เหมือนในไฟล์เก่า)
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (const char of line.trim()) {
+        if (char === '"') { inQuotes = !inQuotes; continue; }
+        if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; } 
+        else { current += char; }
+    }
+    result.push(current.trim());
+    return result;
+}
+            async function handleCsvUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                csvFileNameLabel.textContent = `ไฟล์: ${file.name}`;
+                loadingOverlay.style.display = 'flex';
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const text = e.target.result;
+                        const lines = text.split('\n').filter(line => line.trim() !== '');
+                        
+                        // 1. ดึงเลขบัญชีดิบจาก CSV (เช่น "115-8-98581-7")
+                        let rawAccountNo = "";
+                        for (let line of lines) {
+                            if (line.includes("เลขที่บัญชีเงินฝาก")) {
+                                const cols = parseCSVLine(line);
+                                rawAccountNo = cols.find(c => /\d+-\d+-\d+-\d+/.test(c)) || "";
+                                break;
+                            }
+                        }
+
+                        // 2. ค้นหาชื่อเต็มจาก ChannelMap (เช่น หาว่าเลขนี้ตรงกับ "TR (1) 115-8-98581-7" หรือไม่)
+                        let fullAccountName = rawAccountNo; // ค่าเริ่มต้นเป็นเลขบัญชีดิบ
+                        for (let code in channelMap) {
+                            let accountInSystem = channelMap[code].account; // เช่น "TR (1) 115-8-98581-7"
+                            if (accountInSystem && accountInSystem.includes(rawAccountNo)) {
+                                fullAccountName = accountInSystem; // เจอชื่อเต็มแล้ว!
+                                break;
+                            }
+                        }
+
+                        const headerRowIndex = lines.findIndex(line => line.includes('วันที่') && line.includes('รายการ'));
+                        if (headerRowIndex === -1) { alert("ไม่พบหัวตาราง"); loadingOverlay.style.display = 'none'; return; }
+
+                        let newStatements = [];
+                        for (let i = headerRowIndex + 1; i < lines.length; i++) {
+                            const columns = parseCSVLine(lines[i]);
+                            if (columns.length < 7) continue;
+
+                            const deposit_amount = parseFloat((columns[6] || "0").replace(/,/g, '')) || 0;
+                            if (deposit_amount > 0) {
+                                // ... (Logic วันที่ และ Unique Hash คงเดิมเหมือนก่อนหน้า) ...
+                                const datePart = columns[1].replace(/[\/\.]/g, '-');
+                                const dateMatch = datePart.split('-');
+                                let statement_date = `${dateMatch[2].length === 2 ? '20' + dateMatch[2] : dateMatch[2]}-${dateMatch[1].padStart(2, '0')}-${dateMatch[0].padStart(2, '0')}`;
+                                const statement_time = (columns[2] || "00:00") + ':00';
+                                const description = columns[3] || "";
+                                const balance = parseFloat((columns[8] || "0").replace(/,/g, '')) || 0;
+                                const rawHash = `${statement_date}${statement_time}${deposit_amount}${balance}${description}`;
+                                const unique_hash = btoa(unescape(encodeURIComponent(rawHash)));
+
+                                newStatements.push({
+                                    statement_date, statement_time, description, deposit_amount, balance,
+                                    channel: columns[10] || "",
+                                    details: columns[12] || "",
+                                    withdrawal_amount: 0, 
+                                    is_matched: false,
+                                    unique_hash: unique_hash,
+                                    bank_account: fullAccountName // บันทึกเป็น "TR (1) 115-8-98581-7"
+                                });
+                            }
+                        }
+
+                        // ... (Logic การ Insert / Filter ข้อมูลซ้ำ คงเดิม) ...
+                        const allHashes = newStatements.map(s => s.unique_hash);
+                        const { data: existingRecords } = await supabaseClient.from('bank_statements').select('unique_hash').in('unique_hash', allHashes);
+                        const existingHashes = new Set(existingRecords?.map(r => r.unique_hash) || []);
+                        const statementsToInsert = newStatements.filter(s => !existingHashes.has(s.unique_hash));
+
+                        if (statementsToInsert.length > 0) {
+                            await supabaseClient.from('bank_statements').insert(statementsToInsert);
+                            alert(`นำเข้าสำเร็จ ${statementsToInsert.length} รายการ (บัญชี: ${fullAccountName})`);
+                        } else { alert("พบรายการซ้ำทั้งหมด"); }
+                        await displayUnmatchedStatements();
+                    } catch (error) { alert(error.message); } finally { loadingOverlay.style.display = 'none'; csvFileInput.value = ''; }
+                };
+                reader.readAsText(file, 'TIS-620');
+            }
+            async function matchData() {
+                const selectedChannels = Array.from(document.querySelectorAll('#match-channel-checkbox-container input:checked')).map(cb => cb.value);
+                
+                if (selectedChannels.length === 0) {
+                    alert('กรุณาเลือกช่องทางใบงานอย่างน้อย 1 ช่องทาง');
+                    return;
+                }
+
+                loader.style.display = 'block';
+                statusText.textContent = 'กำลังดึงรายการที่ยังไม่ได้จับคู่...';
+                statusText.style.color = 'inherit';
+
+                try {
+                    // 1. ดึงรายการ Statement ที่ยังไม่ได้จับคู่จาก Database
+                    const { data: unmatchedStmts, error: stmtError } = await supabaseClient
+                        .from('bank_statements')
+                        .select('*')
+                        .eq('is_matched', false);
+
+                    if (stmtError) throw stmtError;
+                    if (!unmatchedStmts || unmatchedStmts.length === 0) {
+                        alert('ไม่มีรายการ Statement ที่ค้างการจับคู่ในระบบ');
+                        loader.style.display = 'none';
+                        return;
+                    }
+
+                    // หาช่วงวันที่เพื่อไปดึงใบงาน (Orders)
+                    const dates = unmatchedStmts.map(s => s.statement_date);
+                    const minDate = new Date(Math.min(...dates.map(d => new Date(d)))).toISOString().split('T')[0];
+                    const maxDate = new Date(Math.max(...dates.map(d => new Date(d)))).toISOString().split('T')[0];
+
+                    statusText.textContent = `กำลังดึงข้อมูลใบงานช่วงวันที่ ${minDate} ถึง ${maxDate}...`;
+
+                    // 2. ดึงข้อมูล Orders จาก Database (ตามช่องทางที่เลือก)
+                    const { data: orders, error: orderError } = await supabaseClient
+                        .from('orders')
+                        .select('bill_no, payment_date, payment_time, total_amount, channel_code')
+                        .gte('payment_date', minDate)
+                        .lte('payment_date', maxDate)
+                        .in('channel_code', selectedChannels)
+                        .not('status', 'eq', 'ยกเลิก');
+
+                    if (orderError) throw orderError;
+
+                    // 3. เริ่มขั้นตอนการจับคู่
+                    statusText.textContent = 'กำลังเปรียบเทียบข้อมูลและบันทึกลงฐานข้อมูล...';
+                    let matchCount = 0;
+
+                    for (const stmt of unmatchedStmts) {
+                        // สร้าง Key สำหรับ Statement นี้: วันที่_เวลา(HH:mm)_ยอดเงิน
+                        const stmtTime = stmt.statement_time.substring(0, 5);
+                        const stmtAmount = parseFloat(stmt.deposit_amount).toFixed(2);
+                        
+                        // ค้นหาใน Orders
+                        const matchedOrder = orders.find(order => {
+    const stmtTime = stmt.statement_time.substring(0, 5); // เวลาจาก Statement (HH:mm)
+    const stmtAmount = parseFloat(stmt.deposit_amount).toFixed(2); // ยอดเงินจาก Statement
+    
+    // 1. ตรวจสอบในรายการโอนหลายยอด (payment_details) ที่เป็น JSONB
+    const details = order.payment_details || [];
+    if (Array.isArray(details) && details.length > 0) {
+        return details.some(p => {
+            const pAmount = parseFloat(p.amount).toFixed(2);
+            const pTime = p.time ? p.time.substring(0, 5) : "";
+            // เช็ค วันที่ตรงกัน AND เวลาตรงกัน AND ยอดเงินตรงกัน
+            return p.date === stmt.statement_date && 
+                   pTime === stmtTime && 
+                   pAmount === stmtAmount;
+        });
+    }
+
+    // 2. Fallback: ตรวจสอบจากคอลัมน์เดิม (กรณีออร์เดอร์เก่าที่ยังไม่มี payment_details)
+    const orderTime = order.payment_time ? order.payment_time.substring(0, 5) : "";
+    const orderAmount = parseFloat(order.total_amount).toFixed(2);
+    
+    return order.payment_date === stmt.statement_date && 
+           orderTime === stmtTime && 
+           orderAmount === stmtAmount;
+});
+
+                        if (matchedOrder) {
+                            // 4. ถ้าเจอคู่ -> สั่ง UPDATE กลับไปที่ Supabase
+                            const { error: updateError } = await supabaseClient
+                                .from('bank_statements')
+                                .update({ 
+                                    bill_no: matchedOrder.bill_no, 
+                                    is_matched: true 
+                                })
+                                .eq('id', stmt.id);
+
+                            if (!updateError) matchCount++;
+                        }
+                    }
+
+                    alert(`จับคู่สำเร็จ ${matchCount} รายการ!`);
+                    await displayUnmatchedStatements(); // รีเฟรชตารางหน้าจอ
+
+                } catch (error) {
+                    console.error('Match Error:', error);
+                    alert('เกิดข้อผิดพลาดในการจับคู่: ' + error.message);
+                } finally {
+                    loader.style.display = 'none';
+                    statusText.textContent = 'พร้อมดำเนินการ';
+                }
+            }
+
+            function formatCurrency(num) {
+                return (num || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+
+            // --- Event Listeners ---
+            generateBtn.addEventListener('click', generateReport);
+            exportXlsxBtn.addEventListener('click', exportReportToXLSX);
+            exportPngBtn.addEventListener('click', exportReportToPNG);
+            exportStatementXlsxBtn.addEventListener('click', exportStatementToXLSX);
+            matchBtn.addEventListener('click', matchData);
+            csvFileInput.addEventListener('change', handleCsvUpload); // ADDED: Listener for file input
+            
+            await checkAuth();
+            await loadChannels();
+            await displayUnmatchedStatements(); // Initial load of permanent table
+        });
+    </script>
+</body>
+</html>
