@@ -5239,7 +5239,7 @@ window.patternSystem = (() => {
             return { initializeApp };
         })();
 
-// --- TRANSPORT SYSTEM MODULE (แก้ไขให้ปุ่ม PNG ทำงาน) ---
+// --- TRANSPORT SYSTEM MODULE (OPTIMIZED FOR CONTINUOUS SCANNING) ---
         window.transportSystem = (() => {
             let isInitialized = false;
             let activeCarrier = null;
@@ -5284,7 +5284,6 @@ window.patternSystem = (() => {
                     scanInput.addEventListener('change', handleScan);
                     exportBtn.addEventListener('click', exportCSV);
                     
-                    // --- เพิ่มคำสั่งปุ่ม Export PNG ---
                     const exportPngBtn = document.getElementById('btn-export-summary-png');
                     if (exportPngBtn) {
                         exportPngBtn.addEventListener('click', async () => {
@@ -5340,33 +5339,100 @@ window.patternSystem = (() => {
 
             async function handleScan() {
                 const trackingNo = scanInput.value.trim().toUpperCase();
-                if (!trackingNo || !activeCarrier) { scanInput.value = ""; return; }
+                // 1. ล้างค่าทันทีเพื่อให้เบราว์เซอร์ว่างสำหรับการสแกนครั้งต่อไป
+                scanInput.value = ""; 
+                
+                if (!trackingNo || !activeCarrier) return;
+                
                 try {
                     const allOrders = window.orderSystem.getAllOrdersData();
-                    const order = allOrders.find(o => String(o.tracking_number).toUpperCase() === trackingNo);
+                    const orderIndex = allOrders.findIndex(o => String(o.tracking_number).toUpperCase() === trackingNo);
+                    const order = allOrders[orderIndex];
+
+                    // --- Validation ---
                     if (!order) throw new Error("ไม่พบเลขพัสดุ!");
                     if (order.status !== 'จัดส่งแล้ว') throw new Error(`บิลยังแพ็คไม่เสร็จ`);
                     const carrier = getCarrierName(order.channel_code);
                     if (carrier !== activeCarrier) throw new Error(`❌ ผิด! ของเจ้า ${carrier}`);
                     if (order.transport_meta?.verified) throw new Error("สแกนซ้ำ");
 
-                    const { error } = await supabaseClient.from('orders').update({ 
-                        transport_meta: { verified: true, verified_at: new Date().toISOString(), verified_by: loggedInUsername, carrier: carrier, parcel_type: activeParcelType }
-                    }).eq('id', order.id);
+                    // 2. อัปเดตข้อมูลใน Memory ทันที
+                    const now = new Date().toISOString();
+                    const transport_meta = { 
+                        verified: true, 
+                        verified_at: now, 
+                        verified_by: loggedInUsername, 
+                        carrier: carrier, 
+                        parcel_type: activeParcelType 
+                    };
+                    
+                    // แก้ไข Object ใน Array โดยตรง
+                    allOrders[orderIndex].transport_meta = transport_meta;
 
-                    if (error) throw error;
+                    // 3. แสดงผลหน้าจอทันทีเฉพาะจุด (Direct DOM Update) เพื่อความเร็ว
+                    const rowId = `tr-track-${trackingNo.replace(/\s+/g, '')}`;
+                    const rowEl = document.getElementById(rowId);
+                    if (rowEl) {
+                        rowEl.classList.add('tr-row-success');
+                        const timeCol = rowEl.querySelector('.col-time');
+                        const statusCol = rowEl.querySelector('.col-status');
+                        if (timeCol) timeCol.innerText = new Date().toLocaleTimeString().substring(0, 5);
+                        if (statusCol) statusCol.innerHTML = `<span class="pill-status pill-ok">✓ ตรวจแล้ว</span> <span onclick="window.transportSystem.undo('${order.id}')" style="color:#0071e3; cursor:pointer; font-size:10px; margin-left:8px; text-decoration:underline;">ยกเลิก</span>`;
+                    }
+
+                    // อัปเดตตัวเลขสรุป (เบามาก)
+                    renderOnlyStats();
+
                     statusMsg.textContent = `✅ ${order.bill_no} ผ่าน [${activeParcelType}]`;
                     statusMsg.style.color = "#28a745";
-                    if (successSound) successSound.play();
-                    await window.orderSystem.loadInitialData(true);
-                    render();
+                    
+                    if (successSound) {
+                        successSound.currentTime = 0;
+                        successSound.play();
+                    }
+
+                    // 4. บันทึกลง Database (Background - Non-blocking)
+                    supabaseClient.from('orders').update({ 
+                        transport_meta: transport_meta
+                    }).eq('id', order.id);
+
                 } catch (err) {
                     statusMsg.textContent = err.message;
                     statusMsg.style.color = "#dc3545";
-                    if (errorSound) errorSound.play();
+                    if (errorSound) {
+                        errorSound.currentTime = 0;
+                        errorSound.play();
+                    }
                 } finally {
-                    scanInput.value = ""; scanInput.focus();
+                    scanInput.focus();
                 }
+            }
+
+            function renderOnlyStats() {
+                const allOrders = window.orderSystem.getAllOrdersData();
+                const date = dateFilter.value;
+                const relevant = allOrders.filter(o => {
+                    const sDate = o.shipped_time?.substring(0, 10);
+                    const vDate = o.transport_meta?.verified_at?.substring(0, 10);
+                    return sDate === date || vDate === date;
+                });
+
+                let gTotal = 0, gVer = 0, cTotal = 0, cVer = 0;
+                relevant.forEach(o => {
+                    if (o.status === 'จัดส่งแล้ว') gTotal++;
+                    const isV = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
+                    if (isV) gVer++;
+                    
+                    if (getCarrierName(o.channel_code) === activeCarrier) {
+                        if (o.status === 'จัดส่งแล้ว') cTotal++;
+                        if (isV) cVer++;
+                    }
+                });
+
+                statsPanel.innerHTML = `
+                    <div class="stat-box total-box"><span class="stat-label">รวมทั้งหมด</span><span class="stat-value">${gVer} / ${gTotal}</span></div>
+                    <div class="stat-box" style="border-top: 5px solid #0071e3;"><span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span><span class="stat-value" style="color:#0071e3;">${activeCarrier ? cVer + ' / ' + cTotal : '-'}</span></div>
+                `;
             }
 
             function render() {
@@ -5381,26 +5447,16 @@ window.patternSystem = (() => {
                     return sDate === date || vDate === date;
                 });
 
-                let gTotal = 0, gVer = 0;
-                const stats = {};
-                carriers.forEach(c => stats[c] = { total: 0, verified: 0 });
-
                 // --- ส่วนคำนวณตารางสรุป ---
                 const channelSummary = {};
-
                 relevant.forEach(o => {
-                    const c = getCarrierName(o.channel_code);
-                    if (stats[c]) {
-                        if (o.status === 'จัดส่งแล้ว') { stats[c].total++; gTotal++; }
-                        const isTodayVer = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
-                        if (isTodayVer) {
-                            stats[c].verified++; gVer++;
-                            const ch = (o.channel_code || 'N/A').toUpperCase();
-                            const pType = o.transport_meta?.parcel_type || 'กล่อง';
-                            if (!channelSummary[ch]) channelSummary[ch] = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
-                            if (channelSummary[ch][pType] !== undefined) channelSummary[ch][pType]++;
-                            channelSummary[ch].total++;
-                        }
+                    const isTodayVer = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
+                    if (isTodayVer) {
+                        const ch = (o.channel_code || 'N/A').toUpperCase();
+                        const pType = o.transport_meta?.parcel_type || 'กล่อง';
+                        if (!channelSummary[ch]) channelSummary[ch] = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
+                        if (channelSummary[ch][pType] !== undefined) channelSummary[ch][pType]++;
+                        channelSummary[ch].total++;
                     }
                 });
 
@@ -5437,27 +5493,28 @@ window.patternSystem = (() => {
                     }
                 }
 
-                statsPanel.innerHTML = `
-                    <div class="stat-box total-box"><span class="stat-label">รวมทั้งหมด</span><span class="stat-value">${gVer} / ${gTotal}</span></div>
-                    <div class="stat-box" style="border-top: 5px solid #0071e3;"><span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span><span class="stat-value" style="color:#0071e3;">${activeCarrier ? stats[activeCarrier].verified + ' / ' + stats[activeCarrier].total : '-'}</span></div>
-                `;
+                // วาดปุ่มเลือกขนส่งและ Stats
+                renderOnlyStats();
+                tabsContainer.innerHTML = carriers.map(c => {
+                    const cCount = relevant.filter(o => getCarrierName(o.channel_code) === c && o.status === 'จัดส่งแล้ว').length;
+                    return `<button class="carrier-btn ${activeCarrier === c ? 'active' : ''}" onclick="window.transportSystem.setCarrier('${c}')">${c} (${cCount})</button>`;
+                }).join('');
 
-                tabsContainer.innerHTML = carriers.map(c => `<button class="carrier-btn ${activeCarrier === c ? 'active' : ''}" onclick="window.transportSystem.setCarrier('${c}')">${c} (${stats[c].total})</button>`).join('');
                 exportBtn.style.display = activeCarrier ? 'block' : 'none';
-                if (activeCarrier) exportBtn.innerText = `📥 Export ข้อมูล ${activeCarrier} (${stats[activeCarrier].verified} บิล)`;
-
+                
+                // วาดตารางรายการ (ไม่ใช้ Sort เพื่อลดภาระ)
                 let display = relevant.filter(o => activeCarrier ? getCarrierName(o.channel_code) === activeCarrier && o.status === 'จัดส่งแล้ว' : false);
-                display.sort((a,b) => (a.transport_meta?.verified ? 1 : 0) - (b.transport_meta?.verified ? 1 : 0) || a.bill_no.localeCompare(b.bill_no));
-
+                
                 tbody.innerHTML = display.length ? display.map(o => {
                     const isV = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
-                    return `<tr class="${isV ? 'tr-row-success' : ''}">
-                        <td style="padding:10px 15px; color:#888;">${isV ? new Date(o.transport_meta.verified_at).toLocaleTimeString().substring(0,5) : '-'}</td>
+                    const rowId = `tr-track-${String(o.tracking_number).replace(/\s+/g, '')}`;
+                    return `<tr id="${rowId}" class="${isV ? 'tr-row-success' : ''}">
+                        <td class="col-time" style="padding:10px 15px; color:#888;">${isV ? new Date(o.transport_meta.verified_at).toLocaleTimeString().substring(0,5) : '-'}</td>
                         <td style="padding:10px 15px; font-weight:600;">${o.bill_no}</td>
                         <td style="padding:10px 15px; font-family:monospace;">${o.tracking_number}</td>
                         <td style="padding:10px 15px;"><span class="pill-type" style="background:#eee; padding:2px 8px; border-radius:5px;">${o.transport_meta?.parcel_type || '-'}</span></td>
                         <td style="padding:10px 15px;">${o.customer_name}</td>
-                        <td style="padding:10px 15px; text-align:center;">
+                        <td class="col-status" style="padding:10px 15px; text-align:center;">
                             <span class="pill-status ${isV ? 'pill-ok' : 'pill-wait'}">${isV ? '✓ ตรวจแล้ว' : '🔴 รอตรวจ'}</span>
                             ${isV ? `<span onclick="window.transportSystem.undo('${o.id}')" style="color:#0071e3; cursor:pointer; font-size:10px; margin-left:8px; text-decoration:underline;">ยกเลิก</span>` : ''}
                         </td>
@@ -5475,7 +5532,7 @@ window.patternSystem = (() => {
             }
 
             async function undo(id) {
-                if(!confirm('ยกเลิกบิลนี้?')) return;
+                if(!confirm('ยกเลิกการทวนสอบบิลนี้?')) return;
                 await supabaseClient.from('orders').update({ transport_meta: null }).eq('id', id);
                 await window.orderSystem.loadInitialData(true);
                 render();
