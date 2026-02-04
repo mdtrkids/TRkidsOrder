@@ -477,6 +477,7 @@
                     <li><a href="#" class="nav-link active" data-target="order-system-container"><span class="icon">📝</span><span class="nav-text">ระบบจัดการออร์เดอร์</span></a></li>
                     <li id="nav-planner"><a href="#" class="nav-link" data-target="planner-system-container"><span class="icon">🗓️</span><span class="nav-text">ใบงาน (Export)</span></a></li>
                     <li><a href="#" class="nav-link" data-target="packing-system-container"><span class="icon">📦</span><span class="nav-text">ระบบจัดของ</span></a></li>
+	<li id="nav-transport"><a href="#" class="nav-link" data-target="transport-system-container"><span class="icon">🚚</span><span class="nav-text">ระบบขนส่ง (Transport)</span></a></li>
                     <li id="nav-product"><a href="#" class="nav-link" data-target="product-system-container"><span class="icon">🏷️</span><span class="nav-text">ระบบจัดการสินค้า</span></a></li>
 	<li id="nav-pattern"><a href="#" class="nav-link" data-target="pattern-system-container"><span class="icon">🖼️</span><span class="nav-text">จัดการลายการ์ตูน</span></a></li>
                     <li id="nav-sales-report"><a href="#" class="nav-link" data-target="sales-report-system-container"><span class="icon">📈</span><span class="nav-text">รายงานยอดขาย</span></a></li>
@@ -937,6 +938,74 @@
                     </div>
                 </div>
 
+<!-- ==================== TRANSPORT SYSTEM (BIG FONT & EXPORT) ==================== -->
+                <div id="transport-system-container" class="system-content">
+                    <div class="container" style="background: transparent; border: none; box-shadow: none; padding-top: 10px;">
+                        
+                        <!-- Header Row -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: white; padding: 12px 20px; border-radius: 12px; border: 1px solid #e5e5e7;">
+                            <h2 style="margin:0; color: #1d1d1f; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 20px;">🚚</span> ทวนสอบขนส่ง
+                            </h2>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-weight: 600; color: #6e6e73; font-size: 12px;">วันที่:</span>
+                                <input type="date" id="transport-date-filter" style="border: 1px solid #e5e5e7; padding: 4px 8px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #0071e3; outline: none;">
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <!-- ส่วนสแกน (ฝั่งซ้าย) -->
+                            <div style="background: white; border-radius: 15px; padding: 20px; text-align: center; border: 1px solid #e5e5e7; display: flex; flex-direction: column; justify-content: center;">
+                                <div id="transport-parcel-types" style="display: flex; justify-content: center; gap: 6px; margin-bottom: 15px;">
+                                    <button class="pt-btn active" data-ptype="กล่อง">📦 กล่อง</button>
+                                    <button class="pt-btn" data-ptype="ซองกระดาษ">📄 ซอง</button>
+                                    <button class="pt-btn" data-ptype="ซองบับเบิล">🫧 บับเบิล</button>
+                                    <button class="pt-btn" data-ptype="ถุงพัสดุ">🛍️ ถุง</button>
+                                </div>
+                                <div id="scan-badge-container" style="margin-bottom: 10px;">
+                                    <span id="current-scan-target" style="padding: 4px 15px; border-radius: 20px; font-weight: 800; font-size: 12px; background: #fff0f0; color: #dc3545; border: 1px solid #ffcccc;">
+                                        ⚠️ ต้องเลือกขนส่งก่อน!
+                                    </span>
+                                </div>
+                                <input type="text" id="transport-scan-input" placeholder="ยิงบาร์โค้ดเลขพัสดุ..." 
+                                       style="font-size: 28px; padding: 12px; width: 100%; text-align: center; border: 2px solid #0071e3; border-radius: 12px; text-transform: uppercase; background: #fff; outline: none;" disabled>
+                                <p id="transport-status-msg" style="font-size: 16px; font-weight: 800; margin: 12px 0 0 0; height: 20px;"></p>
+                            </div>
+
+                            <!-- ส่วนสรุปยอด (ฝั่งขวา) -->
+                            <div style="display: flex; flex-direction: column; gap: 10px;">
+                                <div id="transport-stats-panel" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex-grow: 1;">
+                                    <!-- Stats from JS -->
+                                </div>
+                                <!-- ปุ่ม Export -->
+                                <button id="btn-export-transport" class="btn btn-success" style="width: 100%; border-radius: 10px; font-weight: 700; display: none;">
+                                    📥 ดาวน์โหลดไฟล์สรุป (CSV)
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- แถบปุ่มเลือกขนส่ง -->
+                        <div id="carrier-tabs-dynamic" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 15px; background: white; padding: 10px; border-radius: 12px; border: 1px solid #e5e5e7;"></div>
+
+                        <!-- ตารางรายการ -->
+                        <div style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e5e5e7; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                            <table id="transport-table" style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                                <thead style="background: #f5f5f7; border-bottom: 1px solid #e5e5e7;">
+                                    <tr>
+                                        <th style="padding: 12px 15px; text-align: left; width: 10%;">เวลา</th>
+                                        <th style="padding: 12px 15px; text-align: left; width: 15%;">เลขบิล</th>
+                                        <th style="padding: 12px 15px; text-align: left; width: 20%;">เลขพัสดุ</th>
+                                        <th style="padding: 12px 15px; text-align: left; width: 15%;">ประเภท</th>
+                                        <th style="padding: 12px 15px; text-align: left;">ลูกค้า</th>
+                                        <th style="padding: 12px 15px; text-align: center; width: 15%;">สถานะ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="transport-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
             </main>
         </div>
     </div>
@@ -984,6 +1053,8 @@
 
             if (targetId === 'packing-system-container') { window.packingSystem.loadWorkOrdersForPacking(); }
             
+	if (targetId === 'transport-system-container') { window.transportSystem.initialize(); }
+
             if (window.innerWidth <= 768) { document.body.classList.add('sidebar-collapsed'); }
         });
     }
@@ -1352,7 +1423,7 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
                 try {
                    const [productsRes, channelsRes, workOrdersRes, inkTypesRes, promotionsRes, patternsRes] = await Promise.all([
     supabaseClient.from('products').select('*'),
-    supabaseClient.from('channels').select('channel_code, channel_name'),
+    supabaseClient.from('channels').select('channel_code, channel_name, default_carrier'), 
     supabaseClient.from('work_orders').select('*').eq('status', 'กำลังผลิต').order('created_at', { ascending: false }),
     supabaseClient.from('ink_types').select('ink_name').order('id'),
     supabaseClient.from('orders').select('promotion').neq('promotion', '').not('promotion', 'is', null),
@@ -3833,7 +3904,13 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
 	            eventListenersInitialized = true;
             }
 
-            return { initializeApp, loadInitialData, getFullProductList: () => fullProductList };
+            return { 
+    initializeApp, 
+    loadInitialData, 
+    getFullProductList: () => fullProductList,
+    getChannelList: () => channelList,      // เพิ่มบรรทัดนี้
+    getAllOrdersData: () => allOrdersData   // เพิ่มบรรทัดนี้
+};
         })();
 // --- PACKING SYSTEM MODULE (FULL VERSION WITH AUTO-RESET & SPEED OPTIMIZATION) ---
 window.packingSystem = (() => {
@@ -5132,6 +5209,206 @@ window.patternSystem = (() => {
                 XLSX.writeFile(workbook, `SalesReport_${startDate}_to_${endDate}.xlsx`);
             }
             return { initializeApp };
+        })();
+
+// --- TRANSPORT SYSTEM MODULE (PRO VERSION) ---
+        window.transportSystem = (() => {
+            let isInitialized = false;
+            let activeCarrier = null;
+            let activeParcelType = "กล่อง";
+            
+            const scanInput = document.getElementById('transport-scan-input');
+            const dateFilter = document.getElementById('transport-date-filter');
+            const statusMsg = document.getElementById('transport-status-msg');
+            const targetLabel = document.getElementById('current-scan-target');
+            const tabsContainer = document.getElementById('carrier-tabs-dynamic');
+            const statsPanel = document.getElementById('transport-stats-panel');
+            const exportBtn = document.getElementById('btn-export-transport');
+            const tbody = document.getElementById('transport-tbody');
+            const successSound = document.getElementById('success-sound');
+            const errorSound = document.getElementById('error-sound');
+
+            const injectStyles = () => {
+                if (document.getElementById('transport-pro-css')) return;
+                const style = document.createElement('style');
+                style.id = 'transport-pro-css';
+                style.innerHTML = `
+                    .carrier-btn { padding: 8px 18px; border-radius: 10px; border: 1px solid #e5e5e7; background: white; cursor: pointer; font-weight: 700; font-size: 13px; transition: all 0.2s; }
+                    .carrier-btn.active { background: #0071e3; color: white; border-color: #0071e3; box-shadow: 0 4px 8px rgba(0,113,227,0.2); }
+                    .pt-btn { padding: 6px 14px; border-radius: 8px; border: 1px solid #e5e5e7; background: #fff; cursor: pointer; font-size: 13px; font-weight: 700; color: #555; }
+                    .pt-btn.active { background: #34c759; color: white; border-color: #34c759; }
+                    .stat-box { background: white; padding: 15px; border-radius: 15px; border: 1px solid #e5e5e7; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+                    .stat-box.total-box { background: #1d1d1f; color: white; border: none; }
+                    .stat-label { font-size: 12px; font-weight: 700; opacity: 0.8; margin-bottom: 5px; }
+                    .stat-value { font-size: 32px; font-weight: 900; } /* ขยายตัวเลขให้ใหญ่พิเศษ */
+                    .tr-row-success { background-color: #f0fff4 !important; }
+                    .pill-status { padding: 3px 12px; border-radius: 10px; font-size: 12px; font-weight: 700; }
+                    .pill-ok { background: #e6ffed; color: #28a745; border: 1px solid #28a745; }
+                    .pill-wait { background: #fff0f0; color: #dc3545; border: 1px solid #ffcccc; }
+                `;
+                document.head.appendChild(style);
+            };
+
+            async function initialize() {
+                injectStyles();
+                if (!dateFilter.value) dateFilter.value = new Date().toLocaleDateString('en-CA');
+                if (!isInitialized) {
+                    scanInput.addEventListener('change', handleScan);
+                    exportBtn.addEventListener('click', exportCSV);
+                    document.querySelectorAll('.pt-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            document.querySelectorAll('.pt-btn').forEach(b => b.classList.remove('active'));
+                            e.target.classList.add('active');
+                            activeParcelType = e.target.dataset.ptype;
+                            scanInput.focus();
+                        });
+                    });
+                    dateFilter.addEventListener('change', async () => { await window.orderSystem.loadInitialData(true); render(); });
+                    isInitialized = true;
+                }
+                await window.orderSystem.loadInitialData(true);
+                render();
+            }
+
+            function getCarrierName(channelCode) {
+                const channelList = window.orderSystem.getChannelList();
+                const channel = channelList.find(c => c.channel_code === channelCode);
+                return (channel && channel.default_carrier) ? channel.default_carrier.toUpperCase() : "OTHER";
+            }
+
+            // --- ฟังก์ชัน Export เป็น CSV ---
+            function exportCSV() {
+                if (!activeCarrier) return;
+                const rows = [["เวลาสแกน", "เลขบิล", "เลขพัสดุ", "ประเภทพัสดุ", "ชื่อลูกค้า", "สถานะ"]];
+                const tableRows = tbody.querySelectorAll('tr');
+                
+                tableRows.forEach(tr => {
+                    const cells = tr.querySelectorAll('td');
+                    if (cells.length < 5) return;
+                    rows.push([
+                        cells[0].innerText,
+                        cells[1].innerText,
+                        cells[2].innerText,
+                        cells[3].innerText,
+                        cells[4].innerText,
+                        cells[5].innerText.split(' ')[0] // ตัดคำว่า ยกเลิก ออก
+                    ]);
+                });
+
+                const csvContent = "\uFEFF" + rows.map(e => e.map(val => `"${val}"`).join(",")).join("\n");
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `ขนส่ง_${activeCarrier}_${dateFilter.value}.csv`;
+                link.click();
+            }
+
+            async function handleScan() {
+                const trackingNo = scanInput.value.trim().toUpperCase();
+                if (!trackingNo || !activeCarrier) { scanInput.value = ""; return; }
+                try {
+                    const allOrders = window.orderSystem.getAllOrdersData();
+                    const order = allOrders.find(o => String(o.tracking_number).toUpperCase() === trackingNo);
+                    if (!order) throw new Error("ไม่พบเลขพัสดุ!");
+                    if (order.status !== 'จัดส่งแล้ว') throw new Error(`บิลยังแพ็คไม่เสร็จ`);
+                    const carrier = getCarrierName(order.channel_code);
+                    if (carrier !== activeCarrier) throw new Error(`❌ ผิด! ของเจ้า ${carrier}`);
+                    if (order.transport_meta?.verified) throw new Error("สแกนซ้ำ");
+
+                    const { error } = await supabaseClient.from('orders').update({ 
+                        transport_meta: { verified: true, verified_at: new Date().toISOString(), verified_by: loggedInUsername, carrier: carrier, parcel_type: activeParcelType }
+                    }).eq('id', order.id);
+
+                    if (error) throw error;
+                    statusMsg.textContent = `✅ ${order.bill_no} ผ่าน [${activeParcelType}]`;
+                    statusMsg.style.color = "#28a745";
+                    if (successSound) successSound.play();
+                    await window.orderSystem.loadInitialData(true);
+                    render();
+                } catch (err) {
+                    statusMsg.textContent = err.message;
+                    statusMsg.style.color = "#dc3545";
+                    if (errorSound) errorSound.play();
+                } finally {
+                    scanInput.value = ""; scanInput.focus();
+                }
+            }
+
+            function render() {
+                const allOrders = window.orderSystem.getAllOrdersData();
+                const channelList = window.orderSystem.getChannelList();
+                const date = dateFilter.value;
+                const carriers = [...new Set(channelList.map(c => (c.default_carrier || "OTHER").toUpperCase()))].sort();
+
+                const relevant = allOrders.filter(o => {
+                    const sDate = o.shipped_time?.substring(0, 10);
+                    const vDate = o.transport_meta?.verified_at?.substring(0, 10);
+                    return sDate === date || vDate === date;
+                });
+
+                let gTotal = 0, gVer = 0;
+                const stats = {};
+                carriers.forEach(c => stats[c] = { total: 0, verified: 0 });
+                relevant.forEach(o => {
+                    const c = getCarrierName(o.channel_code);
+                    if (stats[c]) {
+                        if (o.status === 'จัดส่งแล้ว') { stats[c].total++; gTotal++; }
+                        if (o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date) {
+                            stats[c].verified++; gVer++;
+                        }
+                    }
+                });
+
+                // วาด Stat Panel (ขยายตัวเลข)
+                statsPanel.innerHTML = `
+                    <div class="stat-box total-box"><span class="stat-label">รวมทั้งหมด</span><span class="stat-value">${gVer} / ${gTotal}</span></div>
+                    <div class="stat-box" style="border-top: 5px solid #0071e3;"><span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span><span class="stat-value" style="color:#0071e3;">${activeCarrier ? stats[activeCarrier].verified + ' / ' + stats[activeCarrier].total : '-'}</span></div>
+                `;
+
+                // วาดแท็บ
+                tabsContainer.innerHTML = carriers.map(c => `<button class="carrier-btn ${activeCarrier === c ? 'active' : ''}" onclick="window.transportSystem.setCarrier('${c}')">${c} (${stats[c].total})</button>`).join('');
+
+                // วาดปุ่ม Export (แสดงเฉพาะเมื่อเลือกขนส่ง)
+                exportBtn.style.display = activeCarrier ? 'block' : 'none';
+                if (activeCarrier) exportBtn.innerText = `📥 Export ข้อมูล ${activeCarrier} (${stats[activeCarrier].verified} บิล)`;
+
+                // วาดตาราง Checklist
+                let display = relevant.filter(o => activeCarrier ? getCarrierName(o.channel_code) === activeCarrier && o.status === 'จัดส่งแล้ว' : false);
+                display.sort((a,b) => (a.transport_meta?.verified ? 1 : 0) - (b.transport_meta?.verified ? 1 : 0) || a.bill_no.localeCompare(b.bill_no));
+
+                tbody.innerHTML = display.length ? display.map(o => {
+                    const isV = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
+                    return `<tr class="${isV ? 'tr-row-success' : ''}">
+                        <td style="padding:10px 15px; color:#888;">${isV ? new Date(o.transport_meta.verified_at).toLocaleTimeString().substring(0,5) : '-'}</td>
+                        <td style="padding:10px 15px; font-weight:600;">${o.bill_no}</td>
+                        <td style="padding:10px 15px; font-family:monospace;">${o.tracking_number}</td>
+                        <td style="padding:10px 15px;"><span class="pill-type" style="background:#eee; padding:2px 8px; border-radius:5px;">${o.transport_meta?.parcel_type || '-'}</span></td>
+                        <td style="padding:10px 15px;">${o.customer_name}</td>
+                        <td style="padding:10px 15px; text-align:center;">
+                            <span class="pill-status ${isV ? 'pill-ok' : 'pill-wait'}">${isV ? '✓ ตรวจแล้ว' : '🔴 รอตรวจ'}</span>
+                            ${isV ? `<span onclick="window.transportSystem.undo('${o.id}')" style="color:#0071e3; cursor:pointer; font-size:10px; margin-left:8px; text-decoration:underline;">ยกเลิก</span>` : ''}
+                        </td>
+                    </tr>`;
+                }).join('') : `<tr><td colspan="6" style="text-align:center; padding:40px; color:#ccc;">กรุณาเลือกขนส่ง</td></tr>`;
+            }
+
+            function setCarrier(c) {
+                activeCarrier = c;
+                targetLabel.innerHTML = `ตรวจขนส่ง: <b style="color:#0071e3;">${c}</b>`;
+                targetLabel.style.background = "#eef7ff";
+                scanInput.disabled = false;
+                setTimeout(() => scanInput.focus(), 100);
+                render();
+            }
+
+            async function undo(id) {
+                if(!confirm('ยกเลิกบิลนี้?')) return;
+                await supabaseClient.from('orders').update({ transport_meta: null }).eq('id', id);
+                await window.orderSystem.loadInitialData(true);
+                render();
+            }
+
+            return { initialize, setCarrier, undo };
         })();
         
         // --- INITIAL LOAD ---
