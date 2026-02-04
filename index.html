@@ -988,6 +988,7 @@
                         <div id="carrier-tabs-dynamic" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 15px; background: white; padding: 10px; border-radius: 12px; border: 1px solid #e5e5e7;"></div>
 
                         <!-- ตารางรายการ -->
+                        <!-- ตารางรายการรายการเดิม -->
                         <div style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e5e5e7; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
                             <table id="transport-table" style="width: 100%; border-collapse: collapse; font-size: 14px;">
                                 <thead style="background: #f5f5f7; border-bottom: 1px solid #e5e5e7;">
@@ -1001,6 +1002,33 @@
                                     </tr>
                                 </thead>
                                 <tbody id="transport-tbody"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- === ส่วนสรุปยอด (แก้ไขใหม่ให้ถูกต้อง) === -->
+                        <div id="transport-summary-section" style="margin-top: 20px; background: white; border-radius: 12px; padding: 20px; border: 1px solid #e5e5e7; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <h3 style="margin: 0; color: #1d1d1f; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                                    📊 สรุปยอดตามช่องทาง (เฉพาะที่สแกนแล้ว)
+                                </h3>
+                                <button id="btn-export-summary-png" class="btn" style="background: #5856d6; color: white; padding: 6px 15px; font-size: 13px; font-weight: 700; border-radius: 8px; cursor: pointer;">
+                                    📸 บันทึกเป็นภาพ (PNG)
+                                </button>
+                            </div>
+                            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                                <thead style="background: #f5f5f7; border-bottom: 1px solid #e5e5e7;">
+                                    <tr>
+                                        <th style="padding: 12px; text-align: left;">ช่องทาง</th>
+                                        <th style="padding: 12px; text-align: center;">📦 กล่อง</th>
+                                        <th style="padding: 12px; text-align: center;">📄 ซอง</th>
+                                        <th style="padding: 12px; text-align: center;">🫧 บับเบิล</th>
+                                        <th style="padding: 12px; text-align: center;">🛍️ ถุง</th>
+                                        <th style="padding: 12px; text-align: center; background: #eef7ff; font-weight: bold;">รวม</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="transport-summary-tbody">
+                                    <tr><td colspan="6" style="padding:20px; text-align:center; color:#ccc;">กรุณาเลือกขนส่งเพื่อดูสรุป</td></tr>
+                                </tbody>
                             </table>
                         </div>
                     </div>
@@ -5211,7 +5239,7 @@ window.patternSystem = (() => {
             return { initializeApp };
         })();
 
-// --- TRANSPORT SYSTEM MODULE (PRO VERSION) ---
+// --- TRANSPORT SYSTEM MODULE (แก้ไขให้ปุ่ม PNG ทำงาน) ---
         window.transportSystem = (() => {
             let isInitialized = false;
             let activeCarrier = null;
@@ -5240,7 +5268,7 @@ window.patternSystem = (() => {
                     .stat-box { background: white; padding: 15px; border-radius: 15px; border: 1px solid #e5e5e7; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
                     .stat-box.total-box { background: #1d1d1f; color: white; border: none; }
                     .stat-label { font-size: 12px; font-weight: 700; opacity: 0.8; margin-bottom: 5px; }
-                    .stat-value { font-size: 32px; font-weight: 900; } /* ขยายตัวเลขให้ใหญ่พิเศษ */
+                    .stat-value { font-size: 32px; font-weight: 900; }
                     .tr-row-success { background-color: #f0fff4 !important; }
                     .pill-status { padding: 3px 12px; border-radius: 10px; font-size: 12px; font-weight: 700; }
                     .pill-ok { background: #e6ffed; color: #28a745; border: 1px solid #28a745; }
@@ -5255,6 +5283,25 @@ window.patternSystem = (() => {
                 if (!isInitialized) {
                     scanInput.addEventListener('change', handleScan);
                     exportBtn.addEventListener('click', exportCSV);
+                    
+                    // --- เพิ่มคำสั่งปุ่ม Export PNG ---
+                    const exportPngBtn = document.getElementById('btn-export-summary-png');
+                    if (exportPngBtn) {
+                        exportPngBtn.addEventListener('click', async () => {
+                            const element = document.getElementById('transport-summary-section');
+                            if (!element) return;
+                            loadingOverlay.style.display = 'flex';
+                            try {
+                                const canvas = await html2canvas(element, { scale: 2, backgroundColor: "#ffffff" });
+                                const link = document.createElement('a');
+                                link.download = `สรุปยอดขนส่ง_${dateFilter.value}.png`;
+                                link.href = canvas.toDataURL("image/png");
+                                link.click();
+                            } catch (err) { alert("สร้างภาพไม่ได้: " + err.message); }
+                            finally { loadingOverlay.style.display = 'none'; }
+                        });
+                    }
+
                     document.querySelectorAll('.pt-btn').forEach(btn => {
                         btn.addEventListener('click', (e) => {
                             document.querySelectorAll('.pt-btn').forEach(b => b.classList.remove('active'));
@@ -5276,25 +5323,13 @@ window.patternSystem = (() => {
                 return (channel && channel.default_carrier) ? channel.default_carrier.toUpperCase() : "OTHER";
             }
 
-            // --- ฟังก์ชัน Export เป็น CSV ---
             function exportCSV() {
                 if (!activeCarrier) return;
                 const rows = [["เวลาสแกน", "เลขบิล", "เลขพัสดุ", "ประเภทพัสดุ", "ชื่อลูกค้า", "สถานะ"]];
-                const tableRows = tbody.querySelectorAll('tr');
-                
-                tableRows.forEach(tr => {
+                tbody.querySelectorAll('tr').forEach(tr => {
                     const cells = tr.querySelectorAll('td');
-                    if (cells.length < 5) return;
-                    rows.push([
-                        cells[0].innerText,
-                        cells[1].innerText,
-                        cells[2].innerText,
-                        cells[3].innerText,
-                        cells[4].innerText,
-                        cells[5].innerText.split(' ')[0] // ตัดคำว่า ยกเลิก ออก
-                    ]);
+                    if (cells.length >= 5) rows.push([cells[0].innerText, cells[1].innerText, cells[2].innerText, cells[3].innerText, cells[4].innerText, cells[5].innerText.split(' ')[0]]);
                 });
-
                 const csvContent = "\uFEFF" + rows.map(e => e.map(val => `"${val}"`).join(",")).join("\n");
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement("a");
@@ -5349,30 +5384,68 @@ window.patternSystem = (() => {
                 let gTotal = 0, gVer = 0;
                 const stats = {};
                 carriers.forEach(c => stats[c] = { total: 0, verified: 0 });
+
+                // --- ส่วนคำนวณตารางสรุป ---
+                const channelSummary = {};
+
                 relevant.forEach(o => {
                     const c = getCarrierName(o.channel_code);
                     if (stats[c]) {
                         if (o.status === 'จัดส่งแล้ว') { stats[c].total++; gTotal++; }
-                        if (o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date) {
+                        const isTodayVer = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
+                        if (isTodayVer) {
                             stats[c].verified++; gVer++;
+                            const ch = (o.channel_code || 'N/A').toUpperCase();
+                            const pType = o.transport_meta?.parcel_type || 'กล่อง';
+                            if (!channelSummary[ch]) channelSummary[ch] = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
+                            if (channelSummary[ch][pType] !== undefined) channelSummary[ch][pType]++;
+                            channelSummary[ch].total++;
                         }
                     }
                 });
 
-                // วาด Stat Panel (ขยายตัวเลข)
+                // วาดตารางสรุป
+                const sumTbody = document.getElementById('transport-summary-tbody');
+                if (sumTbody) {
+                    const sortedCh = Object.keys(channelSummary).sort();
+                    let html = '';
+                    let grandRow = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
+                    sortedCh.forEach(ch => {
+                        const s = channelSummary[ch];
+                        html += `<tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding:10px; font-weight:bold;">${ch}</td>
+                            <td style="padding:10px; text-align:center;">${s["กล่อง"]}</td>
+                            <td style="padding:10px; text-align:center;">${s["ซองกระดาษ"]}</td>
+                            <td style="padding:10px; text-align:center;">${s["ซองบับเบิล"]}</td>
+                            <td style="padding:10px; text-align:center;">${s["ถุงพัสดุ"]}</td>
+                            <td style="padding:10px; text-align:center; font-weight:bold; background:#f0f7ff;">${s.total}</td>
+                        </tr>`;
+                        grandRow["กล่อง"] += s["กล่อง"]; grandRow["ซองกระดาษ"] += s["ซองกระดาษ"]; grandRow["ซองบับเบิล"] += s["ซองบับเบิล"]; grandRow["ถุงพัสดุ"] += s["ถุงพัสดุ"]; grandRow.total += s.total;
+                    });
+                    if (sortedCh.length) {
+                        html += `<tr style="background:#1d1d1f; color:white; font-weight:bold;">
+                            <td style="padding:10px;">รวมสุทธิ</td>
+                            <td style="padding:10px; text-align:center;">${grandRow["กล่อง"]}</td>
+                            <td style="padding:10px; text-align:center;">${grandRow["ซองกระดาษ"]}</td>
+                            <td style="padding:10px; text-align:center;">${grandRow["ซองบับเบิล"]}</td>
+                            <td style="padding:10px; text-align:center;">${grandRow["ถุงพัสดุ"]}</td>
+                            <td style="padding:10px; text-align:center; background:#0071e3;">${grandRow.total}</td>
+                        </tr>`;
+                        sumTbody.innerHTML = html;
+                    } else {
+                        sumTbody.innerHTML = '<tr><td colspan="6" style="padding:30px; text-align:center; color:#ccc;">ไม่มีข้อมูลสรุป</td></tr>';
+                    }
+                }
+
                 statsPanel.innerHTML = `
                     <div class="stat-box total-box"><span class="stat-label">รวมทั้งหมด</span><span class="stat-value">${gVer} / ${gTotal}</span></div>
                     <div class="stat-box" style="border-top: 5px solid #0071e3;"><span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span><span class="stat-value" style="color:#0071e3;">${activeCarrier ? stats[activeCarrier].verified + ' / ' + stats[activeCarrier].total : '-'}</span></div>
                 `;
 
-                // วาดแท็บ
                 tabsContainer.innerHTML = carriers.map(c => `<button class="carrier-btn ${activeCarrier === c ? 'active' : ''}" onclick="window.transportSystem.setCarrier('${c}')">${c} (${stats[c].total})</button>`).join('');
-
-                // วาดปุ่ม Export (แสดงเฉพาะเมื่อเลือกขนส่ง)
                 exportBtn.style.display = activeCarrier ? 'block' : 'none';
                 if (activeCarrier) exportBtn.innerText = `📥 Export ข้อมูล ${activeCarrier} (${stats[activeCarrier].verified} บิล)`;
 
-                // วาดตาราง Checklist
                 let display = relevant.filter(o => activeCarrier ? getCarrierName(o.channel_code) === activeCarrier && o.status === 'จัดส่งแล้ว' : false);
                 display.sort((a,b) => (a.transport_meta?.verified ? 1 : 0) - (b.transport_meta?.verified ? 1 : 0) || a.bill_no.localeCompare(b.bill_no));
 
