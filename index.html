@@ -1575,8 +1575,9 @@ window.cartoonPatternList = cartoonPatternList;
             function excelDateToJSDate(serial) { if (typeof serial !== 'number' || isNaN(serial)) return null; const utc_days = Math.floor(serial - 25569); const utc_value = utc_days * 86400; const date_info = new Date(utc_value * 1000); const fractional_day = serial - Math.floor(serial) + 0.0000001; let total_seconds = Math.floor(86400 * fractional_day); const seconds = total_seconds % 60; total_seconds -= seconds; const hours = Math.floor(total_seconds / (60 * 60)); const minutes = Math.floor(total_seconds / 60) % 60; return new Date(date_info.getFullYear(), date_info.getMonth(), date_info.getDate(), hours, minutes, seconds); }
 
             function handleExcelImport(file) { if (!file) return; const reader = new FileReader(); reader.onload = async (e) => { try { const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, { type: 'array' }); const firstSheetName = workbook.SheetNames[0]; const worksheet = workbook.Sheets[firstSheetName]; const rowsData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: false }); if (rowsData.length <= 1) throw new Error("ไม่พบข้อมูล"); const processedOrders = []; let currentOrder = null; for (let i = 1; i < rowsData.length; i++) { const row = rowsData[i]; if (row.every(cell => String(cell).trim() === '')) continue; const channelCode = String(row[0]).trim(); const customerName = String(row[1]).trim(); const productNameOrCode = String(row[10]).trim(); if (channelCode && customerName) { const price = parseFloat(row[3]) || 0; const shippingCost = parseFloat(row[4]) || 0; const discount = parseFloat(row[5]) || 0; let paymentDate = row[8] ? String(row[8]).trim() : null; let paymentTime = row[9] ? String(row[9]).trim() : null; if (paymentDate && !isNaN(paymentDate) && Number(paymentDate) > 1) { const jsDate = excelDateToJSDate(Number(paymentDate)); if(jsDate) { paymentDate = jsDate.toISOString().split('T')[0]; } } if (paymentTime && !isNaN(paymentTime) && Number(paymentTime) < 1) { const jsDate = excelDateToJSDate(Number(paymentTime)); if(jsDate) { paymentTime = jsDate.toTimeString().split(' ')[0].substring(0,5); } } currentOrder = { channel_code: channelCode, customer_name: customerName, customer_address: String(row[2]).trim(), price: price, shipping_cost: shippingCost, discount: discount, total_amount: price + shippingCost - discount, payment_method: String(row[6]).trim(), promotion: String(row[7]).trim(), payment_date: paymentDate, payment_time: paymentTime, admin_user: loggedInUsername, status: 'ลงข้อมูลเสร็จสิ้น', entry_date: new Date().toISOString().slice(0, 10), items: [] }; if (ecommerceChannels.includes(channelCode)) { currentOrder.tracking_number = currentOrder.customer_address.replace(/\s/g, ''); } processedOrders.push(currentOrder); } if (productNameOrCode) { if (!currentOrder) throw new Error(`พบสินค้า '${productNameOrCode}' แถว ${i + 1} แต่ไม่พบออร์เดอร์`); const searchTerm = productNameOrCode.toLowerCase(); const product = fullProductList.find(p => p.product_code.toLowerCase() === searchTerm || p.product_name.toLowerCase().includes(searchTerm)); if (!product) { console.warn(`ไม่พบสินค้า '${productNameOrCode}' แถว ${i+1} - ข้ามไป`); continue; } const itemData = { product_id: product.id, product_name: product.product_name, ink_color: String(row[11]).trim(), product_type: String(row[12]).trim(), cartoon_pattern: String(row[13]).trim(), line_pattern: String(row[14]).trim(), font: String(row[15]).trim(), line_1: String(row[16]).trim(), line_2: String(row[17]).trim(), line_3: String(row[18]).trim(), quantity: parseInt(row[19]) || 1, notes: String(row[20]).trim(), file_attachment: String(row[21]).trim() }; currentOrder.items.push(itemData); } } if (processedOrders.length === 0) throw new Error("ไม่พบออร์เดอร์"); if (confirm(`พบ ${processedOrders.length} ออร์เดอร์, ต้องการนำเข้า?`)) { await processAndSaveImportedOrders(processedOrders); } } catch (err) { console.error('Excel Import Error:', err); alert('เกิดพลาด: ' + err.message); } finally { importOrdersFileInput.value = ''; } }; reader.readAsArrayBuffer(file); }
-            function handlePgtrImport(file) {
-                if (!file) return;
+            
+                function handlePgtrImport(file) {
+	if (!file) return;
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     try {
@@ -1591,14 +1592,10 @@ window.cartoonPatternList = cartoonPatternList;
                         const orderNumberHeader = findHeader(headers, ['เลขออร์เดอร์', 'เลขที่ออเดอร์', 'Order Number']);
                         const paymentDateHeader = findHeader(headers, ['วันที่สั่งซื้อ']);
                         const paymentTimeHeader = findHeader(headers, ['เวลา']);
-                        
-                        // ค้นหา Header เพิ่มเติมสำหรับ Mapping ใหม่
                         const productCodeHeader = findHeader(headers, ['รหัสสินค้า']);
                         const productNameHeader = findHeader(headers, ['ชื่อสินค้า']);
 
-                        if (!orderNumberHeader) {
-                            throw new Error("ไม่พบ 'เลขออร์เดอร์'");
-                        }
+                        if (!orderNumberHeader) throw new Error("ไม่พบ 'เลขออร์เดอร์'");
 
                         const ordersMap = new Map();
                         for (const row of jsonData) {
@@ -1666,28 +1663,27 @@ window.cartoonPatternList = cartoonPatternList;
                             }
 
                             const currentOrder = ordersMap.get(orderNumber);
-
-                            // --- ส่วนที่แก้ไข: ค้นหาสินค้าจาก รหัสสินค้า (ตัดเลขหน้าขีด) ---
                             const rawProductCode = String(row[productCodeHeader] || '').trim();
-                            const cleanProductCode = rawProductCode.split('-')[0].trim(); // ตัดเอาแค่เลขหน้า -
+                            const cleanProductCode = rawProductCode.split('-')[0].trim();
                             
                             const product = fullProductList.find(p => p.product_code === cleanProductCode);
-
                             if (!product) {
-                                console.warn(`ไม่พบสินค้าที่มีรหัส '${cleanProductCode}' ในระบบ (จากข้อมูล: ${rawProductCode}) - ข้ามรายการนี้`);
+                                console.warn(`ไม่พบสินค้าที่มีรหัส '${cleanProductCode}' ในระบบ - ข้ามรายการนี้`);
                                 continue;
                             }
 
                             const comment = String(row["comment"] || "").trim();
                             const remark = String(row["remark"] || "").trim();
 
+                            const category = (product.product_category || '').toUpperCase();
+                            const isUvOrSub = category.includes('UV') || category.includes('SUB');
+
                             const itemData = {
                                 product_id: product.id,
                                 product_name: product.product_name,
                                 ink_color: (`${row["Ink"] || ''}${row["สี"] || ''}`).trim(),
                                 product_type: "",
-                                // --- ส่วนที่แก้ไข: ย้าย ชื่อสินค้า ไปไว้ที่ ลายการ์ตูน (cartoon_pattern) ---
-                                cartoon_pattern: String(row[productNameHeader] || '').trim(),
+                                cartoon_pattern: isUvOrSub ? String(row[productNameHeader] || '').trim() : "",
                                 line_pattern: String(row["Underline"] || '').trim(),
                                 font: String(row["ฟอนต์"] || '').trim(),
                                 line_1: String(row["Label1"] || '').trim(),
@@ -1698,7 +1694,7 @@ window.cartoonPatternList = cartoonPatternList;
                                 file_attachment: ""
                             };
                             currentOrder.items.push(itemData);
-                        }
+                        } // <--- ปิดลูป for ตรงนี้ (จุดที่หายไป)
 
                         const processedOrders = Array.from(ordersMap.values());
                         if (processedOrders.length === 0) throw new Error("ไม่พบข้อมูล");
