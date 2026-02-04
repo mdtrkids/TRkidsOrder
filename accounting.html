@@ -104,6 +104,7 @@
                     <li><a href="#" class="nav-link" id="nav-planner"><span class="icon">🗓️</span><span class="nav-text">ใบงาน (Export)</span></a></li>
                     <li><a href="#" class="nav-link" id="nav-packing"><span class="icon">📦</span><span class="nav-text">ระบบจัดของ</span></a></li>
                     <li><a href="#" class="nav-link" id="nav-product"><span class="icon">🏷️</span><span class="nav-text">ระบบจัดการสินค้า</span></a></li>
+    <li><a href="#" class="nav-link" id="nav-pattern"><span class="icon">🖼️</span><span class="nav-text">จัดการลายการ์ตูน</span></a></li>
                     <li><a href="#" class="nav-link" id="nav-sales-report"><span class="icon">📈</span><span class="nav-text">รายงานยอดขาย</span></a></li>
                     <li><a href="accounting.html" class="nav-link active"><span class="icon">📊</span><span class="nav-text">ระบบบัญชี</span></a></li>
                 </ul>
@@ -265,6 +266,7 @@
             document.getElementById('nav-packing').addEventListener('click', (e) => { e.preventDefault(); navigateTo('packing-system-container'); });
             document.getElementById('nav-product').addEventListener('click', (e) => { e.preventDefault(); navigateTo('product-system-container'); });
             document.getElementById('nav-sales-report').addEventListener('click', (e) => { e.preventDefault(); navigateTo('sales-report-system-container'); });
+           document.getElementById('nav-pattern').addEventListener('click', (e) => { e.preventDefault(); navigateTo('pattern-system-container'); });
             
             const today = new Date().toISOString().slice(0, 10);
             startDateInput.value = today;
