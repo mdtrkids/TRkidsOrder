@@ -511,7 +511,7 @@
                             <button id="export-master-status-btn" class="btn btn-success">📊 Export สถานะรวม (Excel)</button>
                         </div>
                         
-                        <input type="file" id="tracking-file-input" style="display: none;" accept=".csv, text/csv">
+                        <input type="file" id="tracking-file-input" style="display: none;" accept=".csv, .xlsx, .xls">
                         <input type="file" id="import-orders-file-input" style="display: none;" accept=".csv, .xlsx, .xls">
                         
                         <input type="file" id="slip-file-input" style="display: none;" accept="image/*">
@@ -1561,7 +1561,67 @@ window.cartoonPatternList = cartoonPatternList;
             let isOpeningWindow = false;
             function prepareForWaybill(workOrderName) { if (isOpeningWindow) return; isOpeningWindow = true; const ordersToProcess = allOrdersData.filter(order => order.work_order_name === workOrderName); if (ordersToProcess.length === 0) { alert("ไม่พบออร์เดอร์"); isOpeningWindow = false; return; } const headers = ['bill_no', 'customer_address', 'payment_method', 'total_amount']; const rows = ordersToProcess.map(order => { const escapeCsvField = (field) => { const strField = String(field || ''); if (strField.includes(',') || strField.includes('"') || strField.includes('\n')) { return `"${strField.replace(/"/g, '""')}"`; } return strField; }; const addressForExport = ecommerceChannels.includes(order.channel_code) ? '' : order.customer_address; return [escapeCsvField(order.bill_no), escapeCsvField(addressForExport), escapeCsvField(order.payment_method), escapeCsvField(order.total_amount)].join(','); }); const csvContent = [headers.join(','), ...rows].join('\n'); try { localStorage.setItem('waybillDataForFlash', csvContent); localStorage.setItem('workOrderNameForFlash', workOrderName); window.open('flash_express_tool.html', '_blank'); } catch (e) { console.error("Error:", e); alert("เกิดข้อผิดพลาด"); } finally { setTimeout(() => { isOpeningWindow = false; }, 1000); } }
             
-            async function handleTrackingImport(file) { if (!file) return; loadingOverlay.style.display = 'flex'; const reader = new FileReader(); reader.onload = async (event) => { try { const csv = event.target.result; const lines = csv.split(/[\r\n]+/).filter(line => line.trim() !== ''); if (lines.length <= 1) throw new Error('ไฟล์ CSV ว่างเปล่า'); const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '')); const billNoIndex = headers.indexOf('bill_no'); const trackingIndex = headers.indexOf('tracking_number'); if (billNoIndex === -1 || trackingIndex === -1) throw new Error('ไม่พบหัวข้อ bill_no และ tracking_number'); const updates = lines.slice(1).map(line => { const values = line.split(','); const bill_no = values[billNoIndex]?.trim().replace(/"/g, ''); const tracking_number = values[trackingIndex]?.trim().replace(/"/g, ''); if (!bill_no || !tracking_number) return null; return { bill_no, tracking_number }; }).filter(Boolean); if (updates.length === 0) throw new Error('ไม่พบข้อมูลที่ถูกต้อง'); const { data: updatedCount, error } = await supabaseClient.rpc('update_tracking_numbers_batch', { p_updates: updates }); if (error) throw error; alert(`นำเข้าสำเร็จ! อัปเดต ${updatedCount} รายการ`); } catch (err) { console.error('Error:', err); alert('เกิดข้อผิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; trackingFileInput.value = ''; } }; reader.readAsText(file, 'UTF-8'); }
+            async function handleTrackingImport(file) {
+    if (!file) return;
+    loadingOverlay.style.display = 'flex';
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+        try {
+            const data = new Uint8Array(event.target.result);
+            // ใช้ XLSX อ่านไฟล์ (รองรับทั้ง Excel และ CSV)
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+            if (jsonData.length === 0) throw new Error('ไฟล์ไม่มีข้อมูล');
+
+            // ดึงชื่อหัวคอลัมน์ทั้งหมดออกมา
+            const headers = Object.keys(jsonData[0]);
+
+            // ตรวจหาหัวคอลัมน์ที่ต้องการ (รองรับหลายชื่อ)
+            const billNoHeader = findHeader(headers, ['bill_no', 'เลขออเดอร์', 'เลขที่ออเดอร์', 'Order Number', 'เลขบิล']);
+            const trackingIndex = findHeader(headers, ['tracking_number', 'เลขพัสดุ', 'Tracking Number', 'เลขพัสดุ/Tracking No.']);
+
+            if (!billNoHeader || !trackingIndex) {
+                throw new Error("ไม่พบคอลัมน์ที่ต้องการในไฟล์\n(กรุณาตั้งชื่อคอลัมน์เป็น 'เลขออเดอร์' และ 'เลขพัสดุ')");
+            }
+
+            // แปลงข้อมูลให้เข้า format ที่ Database ต้องการ
+            const updates = jsonData.map(row => {
+                const bill_no = String(row[billNoHeader] || '').trim();
+                const tracking_number = String(row[trackingIndex] || '').trim();
+                
+                if (!bill_no || !tracking_number) return null;
+                return { bill_no, tracking_number };
+            }).filter(Boolean);
+
+            if (updates.length === 0) throw new Error('ไม่พบข้อมูลที่สมบูรณ์สำหรับอัปเดต');
+
+            // ส่งข้อมูลไปอัปเดตที่ Database (เรียก RPC เดิม)
+            const { data: updatedCount, error } = await supabaseClient.rpc('update_tracking_numbers_batch', { 
+                p_updates: updates 
+            });
+
+            if (error) throw error;
+
+            alert(`นำเข้าสำเร็จ! อัปเดตเลขพัสดุทั้งหมด ${updatedCount} รายการ`);
+            // โหลดข้อมูลหน้าจอใหม่เพื่อให้เห็นเลขพัสดุที่อัปเดต
+            await loadInitialData(true);
+
+        } catch (err) {
+            console.error('Error:', err);
+            alert('เกิดข้อผิดพลาด: ' + err.message);
+        } finally {
+            loadingOverlay.style.display = 'none';
+            trackingFileInput.value = ''; // Reset input
+        }
+    };
+
+    // อ่านเป็น ArrayBuffer เพื่อรองรับไฟล์ Excel
+    reader.readAsArrayBuffer(file);
+}
 
             function downloadStandardOrderTemplate() { const headers = ["ช่องทาง", "ชื่อลูกค้า", "ที่อยู่ลูกค้า", "ราคา", "ค่าส่ง", "ส่วนลด", "วิธีการชำระ", "ชื่อโปรโมชั่น", "วันที่ชำระ", "เวลาที่ชำระ", "ชื่อสินค้า", "สีหมึก", "ชั้นที่", "ลายการ์ตูน", "ลายเส้น", "ฟอนต์", "บรรทัด 1", "บรรทัด 2", "บรรทัด 3", "จำนวน", "หมายเหตุ", "ไฟล์แนบ"]; const sampleData = [["SP", "สมชาย ใจดี", "123/45 ถ.สุขุมวิท พระโขนง คลองเตย กทม. 10110", 300, 30, 0, "โอน", "โปร 9.9", "2025-10-15", "10:30", "ป้ายชื่อรีดติด", "ดำ", "1", "กระต่าย", "เส้นปกติ", "TH01", "ด.ช. รักเรียน", "ชั้น ป.1", "", 2, "ไม่มี", ""]]; const worksheet = XLSX.utils.aoa_to_sheet([headers, ...sampleData]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, "OrderTemplate"); XLSX.writeFile(workbook, "TRKids_Multi_Order_Template_Simple.xlsx"); }
             function downloadPgtrTemplate() { const headers = ['#', 'วันที่สั่งซื้อ', 'เวลา', 'หลักฐานการโอน', 'ราคาก่อนส่วนลด', 'ค่าขนส่ง', 'coupon', 'ส่วนลด admin', 'ยอดสุทธิ', 'ตัวแทน', 'แอดมิน', 'ช่องทางการสั่งซื้อ', 'เลขออร์เดอร์', 'ชื่อสินค้า', 'รหัสสินค้า', 'ฟอนต์', 'รหัสรูปแบบ', 'Underline', 'Ink', 'สี', 'Label1', 'Label2', 'Label3', 'จำนวน', 'comment', 'remark', 'ชื่อสกุลผู้รับ', 'โทรศัพท์', 'อีเมล', 'จังหวัด', 'เขตอำเภอ', 'ตำบลปลายทาง', 'รหัสไปษณีย์', 'ที่อยู่ผู้รับ', 'ที่อยู่เต็ม']; const sampleData = [[]]; const worksheet = XLSX.utils.aoa_to_sheet([headers, ...sampleData]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, "PGTR_Template"); XLSX.writeFile(workbook, "TRKids_PGTR_Order_Template.xlsx"); }
