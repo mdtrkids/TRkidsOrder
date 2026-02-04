@@ -1342,19 +1342,28 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
 
 function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
     const tbody = document.getElementById('payment-records-tbody');
+    if (!tbody) return;
     const row = tbody.insertRow();
+    row.style.borderBottom = "1px solid #f1f1f1";
     row.innerHTML = `
-        <td style="padding:5px;"><input type="number" class="pay-amount" value="${data.amount || 0}" step="0.01" style="width:100%"></td>
-        <td style="padding:5px;"><input type="date" class="pay-date" value="${data.date || ''}" style="width:100%"></td>
-        <td style="padding:5px;"><input type="time" class="pay-time" value="${data.time || ''}" style="width:100%"></td>
-        <td style="padding:5px; text-align:center;"><button type="button" class="btn btn-danger btn-sm remove-pay-row">X</button></td>
+        <td style="padding:5px 15px;"><input type="number" class="pay-amount" value="${data.amount || 0}" step="0.01" style="width:100%; padding: 6px; font-size: 14px; border: 1px solid #eee; border-radius: 4px;"></td>
+        <td style="padding:5px 15px;"><input type="date" class="pay-date" value="${data.date || ''}" style="width:100%; padding: 6px; font-size: 14px; border: 1px solid #eee; border-radius: 4px;"></td>
+        <td style="padding:5px 15px;"><input type="time" class="pay-time" value="${data.time || ''}" style="width:100%; padding: 6px; font-size: 14px; border: 1px solid #eee; border-radius: 4px;"></td>
+        <td style="padding:5px 15px; text-align:center;"><button type="button" class="btn btn-danger btn-sm remove-pay-row" style="padding: 2px 8px; font-size: 12px; border-radius: 4px;">✕</button></td>
     `;
     
-    // ผูก Event ให้คำนวณยอดใหม่เมื่อมีการเปลี่ยนค่า
-    row.querySelectorAll('input').forEach(input => {
-        input.addEventListener('input', calculateTotal);
+    const amountInput = row.querySelector('.pay-amount');
+
+    // ดักจับว่าถ้าผู้ใช้มีการพิมพ์ตัวเลขเองในช่องนี้ ให้หยุดการ Auto-fill
+    amountInput.addEventListener('input', function() {
+        amountInput.dataset.manual = "true"; // ตั้งค่าว่าเราพิมพ์เองแล้วนะ
+        calculateTotal();
     });
-    
+
+    row.querySelectorAll('input').forEach(input => {
+        if(input !== amountInput) input.addEventListener('input', calculateTotal);
+    });
+
     row.querySelector('.remove-pay-row').addEventListener('click', function() {
         row.remove();
         calculateTotal();
@@ -2064,6 +2073,7 @@ window.cartoonPatternList = cartoonPatternList;
             
             function setFormMode(mode, order = null) {
                 orderForm.reset();
+	document.querySelectorAll('.pay-amount').forEach(input => delete input.dataset.manual);
                 itemsTbody.innerHTML = '';
                 currentEditingOrderId = null;
                 adminUserInput.value = loggedInUsername;
@@ -2723,15 +2733,25 @@ remainingBills.forEach(order => {
                 }
                 container.querySelector('#total_amount').value = total.toFixed(2);
 
-                // --- ส่วนคำนวณยอดโอนสะสม และ Sync วันที่/เวลา จากแถวแรก ---
-                let sumPaid = 0;
+                // --- ส่วนที่ปรับปรุง: ให้ยอดเงินวิ่งตามยอดสุทธิตลอด จนกว่าจะมีการพิมพ์เอง ---
                 const rows = document.querySelectorAll('#payment-records-tbody tr');
-                
+                if (rows.length > 0) {
+                    const firstPayInput = rows[0].querySelector('.pay-amount');
+                    if (firstPayInput) {
+                        // ถ้าเรายังไม่เคยไปพิมพ์แก้ที่ช่องนี้เอง (ไม่มี manual flag)
+                        // ให้ยอดเงินเปลี่ยนตามยอดสุทธิ (total) ตลอดเวลา ไม่ว่าจะพิมพ์เลขอะไรข้างบน
+                        if (firstPayInput.dataset.manual !== "true") {
+                            firstPayInput.value = total.toFixed(2);
+                        }
+                    }
+                }
+
+                // --- ส่วนคำนวณยอดโอนสะสม เดิม ---
+                let sumPaid = 0;
                 rows.forEach((row, index) => {
                     const amt = parseFloat(row.querySelector('.pay-amount').value) || 0;
                     sumPaid += amt;
 
-                    // ถ้าเป็นแถวแรก ให้เอาวันที่และเวลาไปเก็บในช่อง Hidden เพื่อใช้บันทึก
                     if (index === 0) {
                         document.getElementById('payment_date').value = row.querySelector('.pay-date').value || '';
                         document.getElementById('payment_time').value = row.querySelector('.pay-time').value || '';
@@ -2739,7 +2759,6 @@ remainingBills.forEach(order => {
                 });
 
                 const balance = total - sumPaid;
-                
                 const sumPaidEl = document.getElementById('sum-paid-display');
                 const balanceDueEl = document.getElementById('balance-due-display');
                 
@@ -5239,7 +5258,7 @@ window.patternSystem = (() => {
             return { initializeApp };
         })();
 
-// --- TRANSPORT SYSTEM MODULE (OPTIMIZED FOR CONTINUOUS SCANNING) ---
+// --- TRANSPORT SYSTEM MODULE (FIXED DB SAVING & PARCEL TYPE) ---
         window.transportSystem = (() => {
             let isInitialized = false;
             let activeCarrier = null;
@@ -5339,7 +5358,6 @@ window.patternSystem = (() => {
 
             async function handleScan() {
                 const trackingNo = scanInput.value.trim().toUpperCase();
-                // 1. ล้างค่าทันทีเพื่อให้เบราว์เซอร์ว่างสำหรับการสแกนครั้งต่อไป
                 scanInput.value = ""; 
                 
                 if (!trackingNo || !activeCarrier) return;
@@ -5349,90 +5367,47 @@ window.patternSystem = (() => {
                     const orderIndex = allOrders.findIndex(o => String(o.tracking_number).toUpperCase() === trackingNo);
                     const order = allOrders[orderIndex];
 
-                    // --- Validation ---
                     if (!order) throw new Error("ไม่พบเลขพัสดุ!");
                     if (order.status !== 'จัดส่งแล้ว') throw new Error(`บิลยังแพ็คไม่เสร็จ`);
                     const carrier = getCarrierName(order.channel_code);
                     if (carrier !== activeCarrier) throw new Error(`❌ ผิด! ของเจ้า ${carrier}`);
                     if (order.transport_meta?.verified) throw new Error("สแกนซ้ำ");
 
-                    // 2. อัปเดตข้อมูลใน Memory ทันที
                     const now = new Date().toISOString();
                     const transport_meta = { 
                         verified: true, 
                         verified_at: now, 
                         verified_by: loggedInUsername, 
                         carrier: carrier, 
-                        parcel_type: activeParcelType 
+                        parcel_type: activeParcelType // บันทึกประเภทพัสดุลงใน Object
                     };
                     
-                    // แก้ไข Object ใน Array โดยตรง
+                    // 1. บันทึกลง Database (บังคับรอให้สำเร็จ)
+                    const { error: dbError } = await supabaseClient.from('orders').update({ 
+                        transport_meta: transport_meta
+                    }).eq('id', order.id);
+
+                    if (dbError) throw new Error("ไม่สามารถบันทึกลง Database ได้: " + dbError.message);
+
+                    // 2. อัปเดตข้อมูลในหน่วยความจำหลักเพื่อให้ Render ตารางสรุปได้ถูกต้อง
                     allOrders[orderIndex].transport_meta = transport_meta;
 
-                    // 3. แสดงผลหน้าจอทันทีเฉพาะจุด (Direct DOM Update) เพื่อความเร็ว
-                    const rowId = `tr-track-${trackingNo.replace(/\s+/g, '')}`;
-                    const rowEl = document.getElementById(rowId);
-                    if (rowEl) {
-                        rowEl.classList.add('tr-row-success');
-                        const timeCol = rowEl.querySelector('.col-time');
-                        const statusCol = rowEl.querySelector('.col-status');
-                        if (timeCol) timeCol.innerText = new Date().toLocaleTimeString().substring(0, 5);
-                        if (statusCol) statusCol.innerHTML = `<span class="pill-status pill-ok">✓ ตรวจแล้ว</span> <span onclick="window.transportSystem.undo('${order.id}')" style="color:#0071e3; cursor:pointer; font-size:10px; margin-left:8px; text-decoration:underline;">ยกเลิก</span>`;
-                    }
-
-                    // อัปเดตตัวเลขสรุป (เบามาก)
-                    renderOnlyStats();
+                    // 3. แสดงผล UI
+                    if (successSound) { successSound.currentTime = 0; successSound.play(); }
 
                     statusMsg.textContent = `✅ ${order.bill_no} ผ่าน [${activeParcelType}]`;
                     statusMsg.style.color = "#28a745";
                     
-                    if (successSound) {
-                        successSound.currentTime = 0;
-                        successSound.play();
-                    }
-
-                    // 4. บันทึกลง Database (Background - Non-blocking)
-                    supabaseClient.from('orders').update({ 
-                        transport_meta: transport_meta
-                    }).eq('id', order.id);
+                    // สั่ง Render ใหม่ทั้งหมดเพื่อให้ตารางสรุปยอดด้านล่างอัปเดตทันที
+                    render();
 
                 } catch (err) {
                     statusMsg.textContent = err.message;
                     statusMsg.style.color = "#dc3545";
-                    if (errorSound) {
-                        errorSound.currentTime = 0;
-                        errorSound.play();
-                    }
+                    if (errorSound) { errorSound.currentTime = 0; errorSound.play(); }
                 } finally {
                     scanInput.focus();
                 }
-            }
-
-            function renderOnlyStats() {
-                const allOrders = window.orderSystem.getAllOrdersData();
-                const date = dateFilter.value;
-                const relevant = allOrders.filter(o => {
-                    const sDate = o.shipped_time?.substring(0, 10);
-                    const vDate = o.transport_meta?.verified_at?.substring(0, 10);
-                    return sDate === date || vDate === date;
-                });
-
-                let gTotal = 0, gVer = 0, cTotal = 0, cVer = 0;
-                relevant.forEach(o => {
-                    if (o.status === 'จัดส่งแล้ว') gTotal++;
-                    const isV = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
-                    if (isV) gVer++;
-                    
-                    if (getCarrierName(o.channel_code) === activeCarrier) {
-                        if (o.status === 'จัดส่งแล้ว') cTotal++;
-                        if (isV) cVer++;
-                    }
-                });
-
-                statsPanel.innerHTML = `
-                    <div class="stat-box total-box"><span class="stat-label">รวมทั้งหมด</span><span class="stat-value">${gVer} / ${gTotal}</span></div>
-                    <div class="stat-box" style="border-top: 5px solid #0071e3;"><span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span><span class="stat-value" style="color:#0071e3;">${activeCarrier ? cVer + ' / ' + cTotal : '-'}</span></div>
-                `;
             }
 
             function render() {
@@ -5441,6 +5416,7 @@ window.patternSystem = (() => {
                 const date = dateFilter.value;
                 const carriers = [...new Set(channelList.map(c => (c.default_carrier || "OTHER").toUpperCase()))].sort();
 
+                // กรองออร์เดอร์ที่เกี่ยวข้องกับวันนี้ (ทั้งวันที่ส่ง และวันที่ทวนสอบ)
                 const relevant = allOrders.filter(o => {
                     const sDate = o.shipped_time?.substring(0, 10);
                     const vDate = o.transport_meta?.verified_at?.substring(0, 10);
@@ -5494,7 +5470,23 @@ window.patternSystem = (() => {
                 }
 
                 // วาดปุ่มเลือกขนส่งและ Stats
-                renderOnlyStats();
+                let gTotal = 0, gVer = 0, cTotal = 0, cVer = 0;
+                relevant.forEach(o => {
+                    if (o.status === 'จัดส่งแล้ว') gTotal++;
+                    const isV = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
+                    if (isV) gVer++;
+                    
+                    if (getCarrierName(o.channel_code) === activeCarrier) {
+                        if (o.status === 'จัดส่งแล้ว') cTotal++;
+                        if (isV) cVer++;
+                    }
+                });
+
+                statsPanel.innerHTML = `
+                    <div class="stat-box total-box"><span class="stat-label">รวมทั้งหมด</span><span class="stat-value">${gVer} / ${gTotal}</span></div>
+                    <div class="stat-box" style="border-top: 5px solid #0071e3;"><span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span><span class="stat-value" style="color:#0071e3;">${activeCarrier ? cVer + ' / ' + cTotal : '-'}</span></div>
+                `;
+
                 tabsContainer.innerHTML = carriers.map(c => {
                     const cCount = relevant.filter(o => getCarrierName(o.channel_code) === c && o.status === 'จัดส่งแล้ว').length;
                     return `<button class="carrier-btn ${activeCarrier === c ? 'active' : ''}" onclick="window.transportSystem.setCarrier('${c}')">${c} (${cCount})</button>`;
@@ -5502,7 +5494,7 @@ window.patternSystem = (() => {
 
                 exportBtn.style.display = activeCarrier ? 'block' : 'none';
                 
-                // วาดตารางรายการ (ไม่ใช้ Sort เพื่อลดภาระ)
+                // วาดตารางรายการ
                 let display = relevant.filter(o => activeCarrier ? getCarrierName(o.channel_code) === activeCarrier && o.status === 'จัดส่งแล้ว' : false);
                 
                 tbody.innerHTML = display.length ? display.map(o => {
@@ -5533,8 +5525,10 @@ window.patternSystem = (() => {
 
             async function undo(id) {
                 if(!confirm('ยกเลิกการทวนสอบบิลนี้?')) return;
+                loadingOverlay.style.display = 'flex';
                 await supabaseClient.from('orders').update({ transport_meta: null }).eq('id', id);
                 await window.orderSystem.loadInitialData(true);
+                loadingOverlay.style.display = 'none';
                 render();
             }
 
