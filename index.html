@@ -1745,7 +1745,7 @@ window.cartoonPatternList = cartoonPatternList;
             function handleExcelImport(file) { if (!file) return; const reader = new FileReader(); reader.onload = async (e) => { try { const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, { type: 'array' }); const firstSheetName = workbook.SheetNames[0]; const worksheet = workbook.Sheets[firstSheetName]; const rowsData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: false }); if (rowsData.length <= 1) throw new Error("ไม่พบข้อมูล"); const processedOrders = []; let currentOrder = null; for (let i = 1; i < rowsData.length; i++) { const row = rowsData[i]; if (row.every(cell => String(cell).trim() === '')) continue; const channelCode = String(row[0]).trim(); const customerName = String(row[1]).trim(); const productNameOrCode = String(row[10]).trim(); if (channelCode && customerName) { const price = parseFloat(row[3]) || 0; const shippingCost = parseFloat(row[4]) || 0; const discount = parseFloat(row[5]) || 0; let paymentDate = row[8] ? String(row[8]).trim() : null; let paymentTime = row[9] ? String(row[9]).trim() : null; if (paymentDate && !isNaN(paymentDate) && Number(paymentDate) > 1) { const jsDate = excelDateToJSDate(Number(paymentDate)); if(jsDate) { paymentDate = jsDate.toISOString().split('T')[0]; } } if (paymentTime && !isNaN(paymentTime) && Number(paymentTime) < 1) { const jsDate = excelDateToJSDate(Number(paymentTime)); if(jsDate) { paymentTime = jsDate.toTimeString().split(' ')[0].substring(0,5); } } currentOrder = { channel_code: channelCode, customer_name: customerName, customer_address: String(row[2]).trim(), price: price, shipping_cost: shippingCost, discount: discount, total_amount: price + shippingCost - discount, payment_method: String(row[6]).trim(), promotion: String(row[7]).trim(), payment_date: paymentDate, payment_time: paymentTime, admin_user: loggedInUsername, status: 'ลงข้อมูลเสร็จสิ้น', entry_date: new Date().toISOString().slice(0, 10), items: [] }; if (ecommerceChannels.includes(channelCode)) { currentOrder.tracking_number = currentOrder.customer_address.replace(/\s/g, ''); } processedOrders.push(currentOrder); } if (productNameOrCode) { if (!currentOrder) throw new Error(`พบสินค้า '${productNameOrCode}' แถว ${i + 1} แต่ไม่พบออร์เดอร์`); const searchTerm = productNameOrCode.toLowerCase(); const product = fullProductList.find(p => p.product_code.toLowerCase() === searchTerm || p.product_name.toLowerCase().includes(searchTerm)); if (!product) { console.warn(`ไม่พบสินค้า '${productNameOrCode}' แถว ${i+1} - ข้ามไป`); continue; } const itemData = { product_id: product.id, product_name: product.product_name, ink_color: String(row[11]).trim(), product_type: String(row[12]).trim(), cartoon_pattern: String(row[13]).trim(), line_pattern: String(row[14]).trim(), font: String(row[15]).trim(), line_1: String(row[16]).trim(), line_2: String(row[17]).trim(), line_3: String(row[18]).trim(), quantity: parseInt(row[19]) || 1, notes: String(row[20]).trim(), file_attachment: String(row[21]).trim() }; currentOrder.items.push(itemData); } } if (processedOrders.length === 0) throw new Error("ไม่พบออร์เดอร์"); if (confirm(`พบ ${processedOrders.length} ออร์เดอร์, ต้องการนำเข้า?`)) { await processAndSaveImportedOrders(processedOrders); } } catch (err) { console.error('Excel Import Error:', err); alert('เกิดพลาด: ' + err.message); } finally { importOrdersFileInput.value = ''; } }; reader.readAsArrayBuffer(file); }
             
                 function handlePgtrImport(file) {
-	if (!file) return;
+                if (!file) return;
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     try {
@@ -1766,11 +1766,14 @@ window.cartoonPatternList = cartoonPatternList;
                         if (!orderNumberHeader) throw new Error("ไม่พบ 'เลขออร์เดอร์'");
 
                         const ordersMap = new Map();
+                        const missingProductsLog = []; // <--- 1. เพิ่มตัวเก็บ Log สินค้าที่หาไม่เจอ
+
                         for (const row of jsonData) {
                             const orderNumberRaw = String(row[orderNumberHeader] || '').trim();
                             if (!orderNumberRaw) continue;
 
                             let orderNumber = orderNumberRaw;
+                            // ลบตัวเลขหลังขีดออกถ้ามี (เช่น S2Y-01 -> S2Y)
                             const lastHyphenIndex = orderNumber.lastIndexOf('-');
                             if (lastHyphenIndex > 0) {
                                 const lastSegment = orderNumber.substring(lastHyphenIndex + 1);
@@ -1780,12 +1783,15 @@ window.cartoonPatternList = cartoonPatternList;
                             }
 
                             if (!ordersMap.has(orderNumber)) {
-	const price = parseFloat(String(row["ราคาก่อนส่วนลด"] || 0).replace(/,/g, '')) || 0;
-	const shippingCost = parseFloat(String(row["ค่าขนส่ง"] || 0).replace(/,/g, '')) || 0;
-	const discount = parseFloat(String(row["ส่วนลด admin"] || 0).replace(/,/g, '')) || 0;
+                                // แก้ไขเรื่องยอดเงินที่มีคอมม่า (,) ตามที่คุณพบปัญหาล่าสุด
+                                const price = parseFloat(String(row["ราคาก่อนส่วนลด"] || 0).replace(/,/g, '')) || 0;
+                                const shippingCost = parseFloat(String(row["ค่าขนส่ง"] || 0).replace(/,/g, '')) || 0;
+                                const discount = parseFloat(String(row["ส่วนลด admin"] || 0).replace(/,/g, '')) || 0;
+                                const totalAmount = parseFloat(String(row["ยอดสุทธิ"] || 0).replace(/,/g, '')) || (price + shippingCost - discount);
+
                                 let paymentDate = null;
                                 let paymentTime = null;
-
+                                // ... (โค้ดจัดการวันที่/เวลา เหมือนเดิม) ...
                                 if (paymentDateHeader && row[paymentDateHeader]) {
                                     const rawDate = row[paymentDateHeader];
                                     if (typeof rawDate === 'number' && !isNaN(rawDate)) {
@@ -1798,7 +1804,6 @@ window.cartoonPatternList = cartoonPatternList;
                                         }
                                     }
                                 }
-
                                 if (paymentTimeHeader && row[paymentTimeHeader]) {
                                     const rawTime = row[paymentTimeHeader];
                                     if (typeof rawTime === 'number' && !isNaN(rawTime) && rawTime < 1) {
@@ -1817,7 +1822,7 @@ window.cartoonPatternList = cartoonPatternList;
                                     price: price,
                                     shipping_cost: shippingCost,
                                     discount: discount,
-                                    total_amount: price + shippingCost - discount,
+                                    total_amount: totalAmount,
                                     payment_method: "โอน",
                                     promotion: "",
                                     payment_date: paymentDate,
@@ -1835,14 +1840,15 @@ window.cartoonPatternList = cartoonPatternList;
                             const cleanProductCode = rawProductCode.split('-')[0].trim();
                             
                             const product = fullProductList.find(p => p.product_code === cleanProductCode);
+                            
                             if (!product) {
-                                console.warn(`ไม่พบสินค้าที่มีรหัส '${cleanProductCode}' ในระบบ - ข้ามรายการนี้`);
+                                // <--- 2. แก้ไขส่วนแจ้งเตือนสินค้าหาไม่เจอ --->
+                                missingProductsLog.push(`บิล ${orderNumber}: ไม่พบรหัสสินค้า '${cleanProductCode}' ในระบบ`);
                                 continue;
                             }
 
                             const comment = String(row["comment"] || "").trim();
                             const remark = String(row["remark"] || "").trim();
-
                             const category = (product.product_category || '').toUpperCase();
                             const isUvOrSub = category.includes('UV') || category.includes('SUB');
 
@@ -1862,131 +1868,22 @@ window.cartoonPatternList = cartoonPatternList;
                                 file_attachment: ""
                             };
                             currentOrder.items.push(itemData);
-                        } // <--- ปิดลูป for ตรงนี้ (จุดที่หายไป)
+                        }
 
-                        const processedOrders = Array.from(ordersMap.values());
-                        if (processedOrders.length === 0) throw new Error("ไม่พบข้อมูล");
-                        if (confirm(`พบ ${processedOrders.length} ออร์เดอร์, ต้องการนำเข้า?`)) {
+                        // <--- 3. สรุปรายการสินค้าที่ผิดพลาดก่อนดำเนินการต่อ --->
+                        if (missingProductsLog.length > 0) {
+                            alert("⚠️ ตรวจพบข้อมูลไม่ครบถ้วนในไฟล์:\n\n" + missingProductsLog.join("\n") + "\n\n(รายการเหล่านี้จะถูกข้ามไป ไม่ถูกนำเข้า)");
+                        }
+
+                        const processedOrders = Array.from(ordersMap.values()).filter(o => o.items.length > 0);
+                        if (processedOrders.length === 0) throw new Error("ไม่พบออร์เดอร์ที่สามารถนำเข้าได้ (อาจเพราะรหัสสินค้าไม่ตรงทั้งหมด)");
+                        
+                        if (confirm(`พบข้อมูลพร้อมนำเข้า ${processedOrders.length} ออร์เดอร์ ต้องการดำเนินการต่อหรือไม่?`)) {
                             await processAndSaveImportedOrders(processedOrders, true);
                         }
                     } catch (err) {
                         console.error('Error importing PGTR:', err);
-                        alert('เกิดพลาด: ' + err.message);
-                    } finally {
-                        importOrdersFileInput.value = '';
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-            }
-            
-            function handleWyImport(file) {
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheetName = workbook.SheetNames[0];
-                        const worksheet = workbook.Sheets[firstSheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-                        if (jsonData.length === 0) throw new Error("ไม่พบข้อมูลในไฟล์");
-
-                        const headers = Object.keys(jsonData[0]);
-                        const billNoHeader = findHeader(headers, ['เลขบิล', 'bill_no', 'เลขที่บิล']);
-                        const dateTimeHeader = findHeader(headers, ['วันที่สั่งซื้อ']);
-                        const customerNameHeader = findHeader(headers, ['ชื่อลูกค้า']);
-                        const customerAddressHeader = findHeader(headers, ['ชื่อที่อยู่-เบอร์โทรผู้รับ']);
-                        const productIdentifierHeader = findHeader(headers, ['รหัส']); 
-
-                        if (!billNoHeader) { throw new Error("ไม่พบหัวคอลัมน์ 'เลขบิล'"); }
-                        if (!customerNameHeader) { throw new Error("ไม่พบหัวคอลัมน์ 'ชื่อลูกค้า'"); }
-                        if (!customerAddressHeader) { throw new Error("ไม่พบหัวคอลัมน์ 'ชื่อที่อยู่-เบอร์โทรผู้รับ'"); }
-                        if (!productIdentifierHeader) { throw new Error("ไม่พบหัวคอลัมน์ 'รหัส'"); }
-
-
-                        const ordersMap = new Map();
-                        for (const row of jsonData) {
-                            const billNo = String(row[billNoHeader]).trim();
-                            if (!billNo) continue;
-
-                            if (!ordersMap.has(billNo)) {
-                                const price = parseFloat(row['ราคาก่อนลด']) || 0;
-                                const shippingCost = parseFloat(row['ค่าส่ง']) || 0;
-                                const discount = parseFloat(row['ส่วนลด']) || 0;
-                                
-                                const customerName = String(row[customerNameHeader] || '').trim();
-                                const customerAddress = String(row[customerAddressHeader] || '').trim();
-
-                                let paymentDate = null;
-                                let paymentTime = null;
-
-                                if (dateTimeHeader && row[dateTimeHeader]) {
-                                    const rawDateTime = String(row[dateTimeHeader]).trim();
-                                    if (rawDateTime.includes(' ')) {
-                                        const parts = rawDateTime.split(' ');
-                                        paymentDate = parts[0]; 
-                                        if (parts[1] && parts[1].length >= 5) {
-                                           paymentTime = parts[1].substring(0, 5); 
-                                        }
-                                    }
-                                }
-                                
-                                const orderData = {
-                                    bill_no: billNo,
-                                    channel_code: 'WY',
-                                    customer_name: customerName,
-                                    customer_address: customerAddress,
-                                    price: price,
-                                    shipping_cost: shippingCost,
-                                    discount: discount,
-                                    total_amount: parseFloat(row['ยอดสุทธิ']) || (price + shippingCost - discount),
-                                    payment_method: 'โอน',
-                                    promotion: String(row['โค้ดส่วนลด'] || '').trim(),
-                                    payment_date: paymentDate,
-                                    payment_time: paymentTime,
-                                    admin_user: loggedInUsername,
-                                    status: 'ลงข้อมูลเสร็จสิ้น',
-                                    entry_date: new Date().toISOString().slice(0, 10),
-                                    items: []
-                                };
-                                ordersMap.set(billNo, orderData);
-                            }
-
-                            const currentOrder = ordersMap.get(billNo);
-                            const productNameFromFile = String(row[productIdentifierHeader]).trim();
-                            
-                            const product = fullProductList.find(p => p.product_name.toLowerCase() === productNameFromFile.toLowerCase());
-                            
-                            if (product) {
-                                const itemData = {
-                                    product_id: product.id,
-                                    product_name: product.product_name,
-                                    ink_color: "",
-                                    product_type: "",
-                                    cartoon_pattern: "",
-                                    line_pattern: "",
-                                    font: String(row['font'] || '').trim(),
-                                    line_1: String(row['บรรทัด1'] || '').trim(),
-                                    line_2: String(row['บรรทัด2'] || '').trim(),
-                                    line_3: "",
-                                    quantity: parseInt(row['จำนวน']) || 1,
-                                    notes: String(row['หมายเหตุ'] || '').trim(),
-                                    file_attachment: ""
-                                };
-                                currentOrder.items.push(itemData);
-                            } else {
-                                console.warn(`ไม่พบสินค้าสำหรับชื่อ '${productNameFromFile}' ในบิล ${billNo} - ข้ามรายการนี้ไป`);
-                            }
-                        }
-
-                        const processedOrders = Array.from(ordersMap.values());
-                        if (processedOrders.length === 0) throw new Error("ไม่พบข้อมูลออร์เดอร์ที่ถูกต้องในไฟล์");
-                        if (confirm(`พบ ${processedOrders.length} ออร์เดอร์, ต้องการนำเข้าหรือไม่?`)) {
-                            await processAndSaveImportedOrders(processedOrders, true);
-                        }
-                    } catch (err) {
-                        console.error('Error importing WY:', err);
-                        alert('เกิดข้อผิดพลาดระหว่างนำเข้าไฟล์ WY: ' + err.message);
+                        alert('เกิดผิดพลาด: ' + err.message);
                     } finally {
                         importOrdersFileInput.value = '';
                     }
