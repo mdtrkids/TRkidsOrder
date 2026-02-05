@@ -1774,62 +1774,7 @@ window.cartoonPatternList = cartoonPatternList;
                 return true;
             }
 
-            async function processAndSaveImportedOrders(ordersToImport, useProvidedBillNo = false) {
-                if (ordersToImport.length === 0) return alert("ไม่พบข้อมูลออร์เดอร์");
-                if (!confirm(`พบ ${ordersToImport.length} ออร์เดอร์ ต้องการนำเข้าหรือไม่?`)) return;
-
-                loadingOverlay.style.display = 'flex';
-                let completeCount = 0; let waitingCount = 0; let skippedCount = 0;
-                const todayStr = new Date().toISOString().slice(0, 10); // วันที่ปัจจุบันสำหรับ entry_date
-
-                for (const order of ordersToImport) {
-                    try {
-                        const billNo = useProvidedBillNo ? order.bill_no : await generateNextBillNo(order.channel_code);
-                        if (allOrdersData.some(o => o.bill_no === billNo)) { skippedCount++; continue; }
-                        
-                        const isComplete = checkImportedOrderCompleteness(order);
-                        if (!isComplete) {
-                            order.status = 'รอลงข้อมูล'; waitingCount++;
-                        } else {
-                            order.status = 'ลงข้อมูลเสร็จสิ้น'; completeCount++;
-                        }
-
-                        applyStampInkLogicToOrderObject(order);
-                        
-                        // สร้างรายการโอนเพื่อให้แสดงในตารางหน้าแก้ไข
-                        if (order.payment_date || order.total_amount > 0) {
-                            order.payment_details = [{
-                                amount: order.total_amount || 0,
-                                date: order.payment_date || todayStr,
-                                time: order.payment_time || '00:00'
-                            }];
-                        }
-
-                        const orderData = { 
-                            ...order, 
-                            bill_no: billNo,
-                            entry_date: todayStr, // บันทึกวันที่นำเข้าลง Supabase
-                            admin_user: loggedInUsername 
-                        }; 
-                        
-                        const items = orderData.items; delete orderData.items;
-                        const { data: inserted, error: err } = await supabaseClient.from('orders').insert(orderData).select().single();
-                        if (err) throw err;
-
-                        const itemsToIns = []; let seq = 1;
-                        for (const item of items) {
-                            const qty = item.quantity || 1; const baseItem = { ...item }; delete baseItem.quantity;
-                            for (let i = 0; i < qty; i++) {
-                                itemsToIns.push({ ...baseItem, order_id: inserted.id, bill_no: billNo, item_uid: `${billNo}-${seq++}` });
-                            }
-                        }
-                        if (itemsToIns.length > 0) await supabaseClient.from('order_items').insert(itemsToIns);
-                    } catch (err) { console.error(`Error with ${order.customer_name}:`, err); }
-                }
-                loadingOverlay.style.display = 'none';
-                alert(`✅ นำเข้าเสร็จสิ้น!\n📦 ข้อมูลครบ: ${completeCount}\n⚠️ ข้อมูลไม่ครบ: ${waitingCount}\n⏭️ ข้ามซ้ำ: ${skippedCount}`);
-                await loadInitialData(true);
-            }
+           
 
             function handleExcelImport(file) {
                 if (!file) return;
@@ -1988,36 +1933,73 @@ window.cartoonPatternList = cartoonPatternList;
                 loadingOverlay.style.display = 'flex';
                 let completeCount = 0; let waitingCount = 0; let skippedCount = 0;
                 let incompleteBills = [];
+                
+                // กำหนดวันที่วันนี้สำหรับ entry_date
+                const todayStr = new Date().toISOString().slice(0, 10);
 
                 for (const order of ordersToImport) {
                     try {
                         const billNo = useProvidedBillNo ? order.bill_no : await generateNextBillNo(order.channel_code);
-                        if (allOrdersData.some(o => o.bill_no === billNo)) { skippedCount++; continue; }
                         
-                        // ตรวจสอบความครบถ้วน
+                        // ตรวจสอบบิลซ้ำในระบบ
+                        if (allOrdersData.some(o => o.bill_no === billNo)) { 
+                            skippedCount++; 
+                            continue; 
+                        }
+                        
+                        // ตรวจสอบความครบถ้วนของข้อมูล
                         const isComplete = checkImportedOrderCompleteness(order);
+                        let currentStatus = 'ลงข้อมูลเสร็จสิ้น';
+                        
                         if (!isComplete) {
-                            order.status = 'รอลงข้อมูล';
+                            currentStatus = 'รอลงข้อมูล';
                             waitingCount++;
                             incompleteBills.push(billNo);
                         } else {
                             completeCount++;
                         }
 
+                        // ใส่ Logic ของสินค้าแถม (ถ้ามี)
                         applyStampInkLogicToOrderObject(order);
-                        const orderData = { ...order }; const items = orderData.items; delete orderData.items;
-                        const { data: inserted, error: err } = await supabaseClient.from('orders').insert({ ...orderData, bill_no: billNo }).select().single();
+
+                        // เตรียมข้อมูลสำหรับบันทึก (สำคัญ: ต้องใส่ entry_date และ admin_user ตรงนี้)
+                        const items = [...order.items]; 
+                        const orderData = { 
+                            ...order, 
+                            bill_no: billNo,
+                            status: currentStatus,
+                            entry_date: todayStr,
+                            admin_user: loggedInUsername 
+                        }; 
+                        delete orderData.items;
+
+                        // บันทึกลง Supabase ตาราง orders
+                        const { data: inserted, error: err } = await supabaseClient.from('orders').insert(orderData).select().single();
                         if (err) throw err;
 
-                        const itemsToIns = []; let seq = 1;
+                        // บันทึกรายการสินค้าลงตาราง order_items
+                        const itemsToIns = []; 
+                        let seq = 1;
                         for (const item of items) {
-                            const qty = item.quantity || 1; const baseItem = { ...item }; delete baseItem.quantity;
+                            const qty = item.quantity || 1; 
+                            const baseItem = { ...item }; 
+                            delete baseItem.quantity;
                             for (let i = 0; i < qty; i++) {
-                                itemsToIns.push({ ...baseItem, order_id: inserted.id, bill_no: billNo, item_uid: `${billNo}-${seq++}` });
+                                itemsToIns.push({ 
+                                    ...baseItem, 
+                                    order_id: inserted.id, 
+                                    bill_no: billNo, 
+                                    item_uid: `${billNo}-${seq++}` 
+                                });
                             }
                         }
-                        if (itemsToIns.length > 0) await supabaseClient.from('order_items').insert(itemsToIns);
-                    } catch (err) { console.error(`Error with ${order.customer_name}:`, err); }
+                        if (itemsToIns.length > 0) {
+                            const { error: itemsErr } = await supabaseClient.from('order_items').insert(itemsToIns);
+                            if (itemsErr) throw itemsErr;
+                        }
+                    } catch (err) { 
+                        console.error(`Error with ${order.customer_name}:`, err); 
+                    }
                 }
 
                 loadingOverlay.style.display = 'none';
