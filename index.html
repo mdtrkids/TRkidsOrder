@@ -4441,224 +4441,265 @@ window.packingSystem = (() => {
 })();
         
         // --- PRODUCT SYSTEM MODULE ---
-        window.productSystem = (() => {
-            let isInitialized = false; 
-            const addBtn = document.getElementById('add-product-btn'); 
-            const importBtn = document.getElementById('import-product-btn'); 
-            const importInput = document.getElementById('import-product-input'); 
-            const downloadTemplateBtn = document.getElementById('download-product-template-btn'); 
-            const searchInput = document.getElementById('search-product-input'); 
-            const tableBody = document.getElementById('products-tbody'); 
-            const modal = document.getElementById('product-modal'); 
-            const modalTitle = document.getElementById('product-modal-title'); 
-            const productForm = document.getElementById('product-form'); 
-            const cancelModalBtn = document.getElementById('cancel-product-modal-btn'); 
-            const categoryInput = document.getElementById('product-category-input'); 
-            const rubberCodeGroup = document.getElementById('rubber-code-group');
-            const imgInput = document.getElementById('product-image-input');
-            const imgPreview = document.getElementById('product-image-preview');
-            const bulkUploadBtn = document.getElementById('bulk-upload-images-btn');
-            const bulkImageInput = document.getElementById('bulk-image-input');
+        // --- PRODUCT SYSTEM MODULE (UPDATED: UPSERT & STATUS) ---
+window.productSystem = (() => {
+    let isInitialized = false; 
+    const addBtn = document.getElementById('add-product-btn'); 
+    const importBtn = document.getElementById('import-product-btn'); 
+    const importInput = document.getElementById('import-product-input'); 
+    const downloadTemplateBtn = document.getElementById('download-product-template-btn'); 
+    const searchInput = document.getElementById('search-product-input'); 
+    const tableBody = document.getElementById('products-tbody'); 
+    const modal = document.getElementById('product-modal'); 
+    const modalTitle = document.getElementById('product-modal-title'); 
+    const productForm = document.getElementById('product-form'); 
+    const cancelModalBtn = document.getElementById('cancel-product-modal-btn'); 
+    const categoryInput = document.getElementById('product-category-input'); 
+    const rubberCodeGroup = document.getElementById('rubber-code-group');
+    const imgInput = document.getElementById('product-image-input');
+    const imgPreview = document.getElementById('product-image-preview');
+    const bulkUploadBtn = document.getElementById('bulk-upload-images-btn');
+    const bulkImageInput = document.getElementById('bulk-image-input');
 
-            let allProductsData = [];
+    let allProductsData = [];
 
-            function initializeApp() { 
-                if(isInitialized) return; 
-                if(addBtn) addBtn.addEventListener('click', () => showProductModal()); 
-                if(importBtn) importBtn.addEventListener('click', () => importInput.click()); 
-                if(importInput) importInput.addEventListener('change', (e) => handleProductImport(e.target.files[0])); 
-                if(downloadTemplateBtn) downloadTemplateBtn.addEventListener('click', downloadProductTemplate); 
-                if(cancelModalBtn) cancelModalBtn.addEventListener('click', hideProductModal); 
-                if(modal) modal.addEventListener('click', (e) => { if(e.target === modal) hideProductModal(); }); 
-                if(productForm) productForm.addEventListener('submit', saveProduct); 
-                if(tableBody) tableBody.addEventListener('click', handleTableClick); 
-                if(searchInput) searchInput.addEventListener('input', () => renderProductTable(searchInput.value)); 
-                if(bulkUploadBtn) bulkUploadBtn.addEventListener('click', () => bulkImageInput.click());
-                if(bulkImageInput) bulkImageInput.addEventListener('change', (e) => handleBulkImageUpload(e.target.files));
-                
-                if(categoryInput) {
-                    categoryInput.addEventListener('input', (e) => { 
-                        const isStamp = (e.target.value || '').toUpperCase().includes('STAMP'); 
-                        if(rubberCodeGroup) rubberCodeGroup.style.display = isStamp ? 'block' : 'none'; 
-                    });
+    function initializeApp() { 
+        if(isInitialized) return; 
+        if(addBtn) addBtn.addEventListener('click', () => showProductModal()); 
+        if(importBtn) importBtn.addEventListener('click', () => importInput.click()); 
+        if(importInput) importInput.addEventListener('change', (e) => handleProductUpsert(e.target.files[0])); 
+        if(downloadTemplateBtn) downloadTemplateBtn.addEventListener('click', downloadProductTemplate); 
+        if(cancelModalBtn) cancelModalBtn.addEventListener('click', hideProductModal); 
+        if(modal) modal.addEventListener('click', (e) => { if(e.target === modal) hideProductModal(); }); 
+        if(productForm) productForm.addEventListener('submit', saveProduct); 
+        if(tableBody) tableBody.addEventListener('click', handleTableClick); 
+        if(searchInput) searchInput.addEventListener('input', () => renderProductTable(searchInput.value)); 
+        if(bulkUploadBtn) bulkUploadBtn.addEventListener('click', () => bulkImageInput.click());
+        if(bulkImageInput) bulkImageInput.addEventListener('change', (e) => handleBulkImageUpload(e.target.files));
+        
+        if(categoryInput) {
+            categoryInput.addEventListener('input', (e) => { 
+                const isStamp = (e.target.value || '').toUpperCase().includes('STAMP'); 
+                if(rubberCodeGroup) rubberCodeGroup.style.display = isStamp ? 'block' : 'none'; 
+            });
+        }
+        if (imgInput) {
+            imgInput.addEventListener('change', function() {
+                const file = this.files[0];
+                if (file && imgPreview) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => { imgPreview.src = e.target.result; imgPreview.style.display = 'inline-block'; }
+                    reader.readAsDataURL(file);
                 }
+            });
+        }
+        loadProducts(); 
+        isInitialized = true; 
+    }
 
-                if (imgInput) {
-                    imgInput.addEventListener('change', function() {
-                        const file = this.files[0];
-                        if (file && imgPreview) {
-                            const reader = new FileReader();
-                            reader.onload = (e) => { imgPreview.src = e.target.result; imgPreview.style.display = 'inline-block'; }
-                            reader.readAsDataURL(file);
-                        }
-                    });
-                }
-                loadProducts(); 
-                isInitialized = true; 
-            }
+    async function loadProducts() { 
+        loadingOverlay.style.display = 'flex'; 
+        try { 
+            const { data, error } = await supabaseClient.from('products').select('*').order('product_code'); 
+            if (error) throw error; 
+            allProductsData = data; 
+            renderProductTable(); 
+        } catch (err) { alert('โหลดข้อมูลสินค้าผิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; } 
+    }
 
-            async function loadProducts() { 
-                loadingOverlay.style.display = 'flex'; 
-                try { 
-                    const { data, error } = await supabaseClient.from('products').select('*').order('product_code'); 
-                    if (error) throw error; 
-                    allProductsData = data; 
-                    renderProductTable(); 
-                } catch (err) { alert('โหลดข้อมูลสินค้าผิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; } 
-            }
+    function renderProductTable(searchTerm = '') { 
+        tableBody.innerHTML = ''; 
+        const lowercasedFilter = searchTerm.toLowerCase(); 
+        const filteredData = allProductsData.filter(p => (p.product_code || '').toLowerCase().includes(lowercasedFilter) || (p.product_name || '').toLowerCase().includes(lowercasedFilter)); 
+        
+        filteredData.forEach(product => { 
+            const isInactive = product.is_active === false;
+            const rowStyle = isInactive ? 'style="background-color: #f9f9f9; color: #bbb;"' : ''; 
+            const statusLabel = isInactive ? '🔴 ปิด' : '🟢 เปิด';
+            const statusBtnClass = isInactive ? 'btn-success' : 'btn-warning';
+            const statusBtnText = isInactive ? 'เปิด' : 'ปิด';
 
-            function renderProductTable(searchTerm = '') { 
-                tableBody.innerHTML = ''; 
-                const lowercasedFilter = searchTerm.toLowerCase(); 
-                const filteredData = allProductsData.filter(p => (p.product_code || '').toLowerCase().includes(lowercasedFilter) || (p.product_name || '').toLowerCase().includes(lowercasedFilter)); 
-                
-                if (filteredData.length === 0) { 
-                    tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">ไม่พบข้อมูล</td></tr>'; 
-                    return; 
-                } 
-
-                filteredData.forEach(product => { 
-                    const inactiveStyle = product.is_active === false ? 'style="color: #999; text-decoration: line-through;"' : ''; 
-                    
-                    // --- แก้ไขจุดนี้: เพิ่ม class="packing-product-img" และปรับ cursor ---
-                    const imgHTML = product.image_url 
-                        ? `<img src="${product.image_url}" class="packing-product-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; cursor: zoom-in;" onclick="window.open('${product.image_url}', '_blank')">` 
-                        : `<div style="width: 45px; height: 45px; background: #f0f0f0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc;">No Pic</div>`;
-                    
-                    const row = `<tr ${inactiveStyle}>
-                        <td>${imgHTML}</td>
-                        <td>${product.product_code || ''}</td>
-                        <td>${product.product_name || ''}</td>
-                        <td>${product.product_category || ''}</td>
-                        <td>${product.product_type || ''}</td>
-                        <td>${product.rubber_code || ''}</td>
-                        <td>${product.storage_location || ''}</td>
-                        <td>
-                            <div class="action-cell-buttons">
-                                <button class="btn btn-warning btn-sm edit-product-btn" data-product-code="${product.product_code}">แก้ไข</button>
-                                <button class="btn btn-danger btn-sm delete-product-btn" data-product-code="${product.product_code}">ลบ</button>
-                            </div>
-                        </td>
-                    </tr>`; 
-                    tableBody.insertAdjacentHTML('beforeend', row); 
-                }); 
-            }
-
-            function showProductModal(product = null) { 
-                if (!productForm) return;
-                productForm.reset(); 
-                if (imgInput) imgInput.value = ""; 
-                if (imgPreview) {
-                    imgPreview.src = (product && product.image_url) ? product.image_url : "";
-                    imgPreview.style.display = (product && product.image_url) ? 'inline-block' : 'none';
-                }
-                if (product) { 
-                    modalTitle.textContent = 'แก้ไขข้อมูลสินค้า'; 
-                    document.getElementById('product-id-input').value = product.id; 
-                    document.getElementById('product-code-input').value = product.product_code; 
-                    document.getElementById('product-code-input').readOnly = true; 
-                    document.getElementById('product-name-input').value = product.product_name; 
-                    document.getElementById('product-category-input').value = product.product_category || ''; 
-                    document.getElementById('product-type-input').value = product.product_type || ''; 
-                    document.getElementById('product-rubber-code-input').value = product.rubber_code || ''; 
-                    document.getElementById('storage-location-input').value = product.storage_location || ''; 
-                } else { 
-                    modalTitle.textContent = 'เพิ่มสินค้าใหม่'; 
-                    document.getElementById('product-code-input').readOnly = false; 
-                } 
-                modal.style.display = 'flex'; 
-            }
-
-            function hideProductModal() { if(modal) modal.style.display = 'none'; }
-
-            async function saveProduct(e) {
-                e.preventDefault();
-                loadingOverlay.style.display = 'flex';
-                const productCode = document.getElementById('product-code-input').value.trim();
-                const file = imgInput.files[0];
-                let imageUrl = imgPreview.src;
-                try {
-                    if (file) {
-                        const fileExt = file.name.split('.').pop();
-                        const fileName = `${productCode}-${Date.now()}.${fileExt}`;
-                        const filePath = `products/${fileName}`;
-                        let { error: uploadError } = await supabaseClient.storage.from('product-images').upload(filePath, file);
-                        if (uploadError) throw uploadError;
-                        const { data: publicUrlData } = supabaseClient.storage.from('product-images').getPublicUrl(filePath);
-                        imageUrl = publicUrlData.publicUrl;
-                    }
-                    const productData = {
-                        product_code: productCode,
-                        product_name: document.getElementById('product-name-input').value.trim(),
-                        product_category: document.getElementById('product-category-input').value.trim() || null,
-                        product_type: document.getElementById('product-type-input').value.trim() || null,
-                        rubber_code: document.getElementById('product-rubber-code-input').value.trim() || null,
-                        storage_location: document.getElementById('storage-location-input').value.trim() || null,
-                        image_url: imageUrl.startsWith('data:') || imageUrl.includes('blob:') ? null : imageUrl,
-                        is_active: true
-                    };
-                    const { error } = await supabaseClient.from('products').upsert(productData, { onConflict: 'product_code' });
-                    if (error) throw error;
-                    alert('บันทึกสำเร็จ!'); hideProductModal(); await loadProducts(); await window.orderSystem.loadInitialData(true); 
-                } catch (err) { alert('ผิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; }
-            }
-
-            async function deleteProduct(productCode) { 
-                if (!confirm(`ต้องการลบสินค้า "${productCode}"?`)) return; 
-                loadingOverlay.style.display = 'flex'; 
-                try { 
-                    const { error } = await supabaseClient.from('products').delete().eq('product_code', productCode); 
-                    if (error) throw error; 
-                    alert('ลบสำเร็จ!'); await loadProducts(); await window.orderSystem.loadInitialData(true); 
-                } catch (err) { alert('เกิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; } 
-            }
-
-            function handleTableClick(e) { 
-                const btn = e.target.closest('button'); if (!btn) return;
-                const productCode = btn.dataset.productCode;
-                if (btn.classList.contains('edit-product-btn')) { const p = allProductsData.find(p => p.product_code === productCode); if (p) showProductModal(p); } 
-                if (btn.classList.contains('delete-product-btn')) deleteProduct(productCode); 
-            }
-
-            function downloadProductTemplate() { 
-                const headers = ["product_code", "product_name", "product_category", "product_type", "rubber_code", "storage_location"]; 
-                const sampleData = [ ["P001", "สติกเกอร์กันน้ำ", "STK", "FINISHPRODUCT", "", "3Aชั้น2แถว2"] ]; 
-                const worksheet = XLSX.utils.aoa_to_sheet([headers, ...sampleData]); 
-                const workbook = XLSX.utils.book_new(); 
-                XLSX.utils.book_append_sheet(workbook, worksheet, "ProductTemplate"); 
-                XLSX.writeFile(workbook, "Product_Import_Template.xlsx"); 
-            }
+            const imgHTML = product.image_url 
+                ? `<img src="${product.image_url}" class="packing-product-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; cursor: zoom-in;" onclick="window.open('${product.image_url}', '_blank')">` 
+                : `<div style="width: 45px; height: 45px; background: #f0f0f0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc;">No Pic</div>`;
             
-            function handleProductImport(file) { /* ...โค้ดเดิมของคุณ... */ }
+            const row = `<tr ${rowStyle}>
+                <td>${imgHTML}</td>
+                <td><b>${product.product_code || ''}</b></td>
+                <td>${product.product_name || ''}</td>
+                <td>${product.product_category || ''}</td>
+                <td>${product.product_type || ''}</td>
+                <td>${product.rubber_code || ''}</td>
+                <td>${product.storage_location || ''}</td>
+                <td>
+                    <div class="action-cell-buttons">
+                        <button class="btn ${statusBtnClass} btn-sm toggle-status-btn" data-product-code="${product.product_code}" data-current-status="${!isInactive}">${statusBtnText}</button>
+                        <button class="btn btn-primary btn-sm edit-product-btn" data-product-code="${product.product_code}">แก้ไข</button>
+                        <button class="btn btn-danger btn-sm delete-product-btn" data-product-code="${product.product_code}">ลบ</button>
+                    </div>
+                </td>
+            </tr>`; 
+            tableBody.insertAdjacentHTML('beforeend', row); 
+        }); 
+    }
 
-            async function handleBulkImageUpload(files) {
-                if (files.length === 0) return;
-                if (!confirm(`คุณกำลังจะอัปโหลดรูปภาพจำนวน ${files.length} ไฟล์\nระบบจะจับคู่รูปกับสินค้าตาม "รหัสสินค้า" (ชื่อไฟล์ = รหัสสินค้า)\n\nดำเนินการต่อหรือไม่?`)) {
-                    bulkImageInput.value = ""; return;
-                }
-                loadingOverlay.textContent = "กำลังอัปโหลดรูปภาพ...";
+    // --- ฟังก์ชัน Import แบบ Upsert (Update + Insert) ---
+    async function handleProductUpsert(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
                 loadingOverlay.style.display = 'flex';
-                let successCount = 0; let failCount = 0;
-                for (let file of files) {
-                    try {
-                        const productCode = file.name.substring(0, file.name.lastIndexOf('.')).trim();
-                        const fileExt = file.name.split('.').pop();
-                        const fileName = `${productCode}-${Date.now()}.${fileExt}`;
-                        const filePath = `products/${fileName}`;
-                        await supabaseClient.storage.from('product-images').upload(filePath, file);
-                        const { data: urlData } = supabaseClient.storage.from('product-images').getPublicUrl(filePath);
-                        await supabaseClient.from('products').update({ image_url: urlData.publicUrl }).eq('product_code', productCode);
-                        successCount++;
-                    } catch (err) { failCount++; }
-                }
-                loadingOverlay.style.display = 'none';
-                bulkImageInput.value = "";
-                alert(`อัปเดตเรียบร้อย!\nสำเร็จ: ${successCount} รายการ\nล้มเหลว: ${failCount} รายการ`);
-                await loadProducts();
-            }
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
 
-            return { initializeApp };
-        })();
+                const productsToUpsert = jsonData.map(row => ({
+                    product_code: String(row.product_code || row.รหัสสินค้า || '').trim(),
+                    product_name: String(row.product_name || row.ชื่อสินค้า || '').trim(),
+                    product_category: String(row.product_category || row.หมวดหมู่ || '').trim() || null,
+                    product_type: String(row.product_type || row.ประเภท || '').trim() || null,
+                    rubber_code: String(row.rubber_code || row.รหัสยาง || '').trim() || null,
+                    storage_location: String(row.storage_location || row.ที่จัดเก็บ || '').trim() || null,
+                    is_active: true
+                })).filter(p => p.product_code && p.product_name);
+
+                const { error } = await supabaseClient.from('products').upsert(productsToUpsert, { onConflict: 'product_code' });
+                if (error) throw error;
+
+                alert(`นำเข้าเรียบร้อย! อัปเดต/เพิ่มสินค้าใหม่รวม ${productsToUpsert.length} รายการ`);
+                await loadProducts();
+                await window.orderSystem.loadInitialData(true); 
+            } catch (err) { alert('Import ผิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; importInput.value = ""; }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // --- ฟังก์ชันสลับสถานะ หยุดขาย/เปิดขาย ---
+    async function toggleProductStatus(productCode, currentActiveStatus) {
+        const newStatus = !currentActiveStatus;
+        if (!confirm(newStatus ? `ต้องการเปิดการขายสินค้า "${productCode}"?` : `ต้องการหยุดขายสินค้า "${productCode}"?`)) return;
+
+        loadingOverlay.style.display = 'flex';
+        try {
+            const { error } = await supabaseClient.from('products').update({ is_active: newStatus }).eq('product_code', productCode);
+            if (error) throw error;
+            await loadProducts();
+            await window.orderSystem.loadInitialData(true); 
+        } catch (err) { alert('ผิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; }
+    }
+
+    function handleTableClick(e) { 
+        const btn = e.target.closest('button'); if (!btn) return;
+        const code = btn.dataset.productCode;
+        if (btn.classList.contains('toggle-status-btn')) toggleProductStatus(code, btn.dataset.currentStatus === 'true');
+        if (btn.classList.contains('edit-product-btn')) { const p = allProductsData.find(x => x.product_code === code); if (p) showProductModal(p); } 
+        if (btn.classList.contains('delete-product-btn')) deleteProduct(code); 
+    }
+
+    function showProductModal(product = null) { 
+        if (!productForm) return;
+        productForm.reset(); 
+        if (imgPreview) {
+            imgPreview.src = (product && product.image_url) ? product.image_url : "";
+            imgPreview.style.display = (product && product.image_url) ? 'inline-block' : 'none';
+        }
+        if (product) { 
+            modalTitle.textContent = 'แก้ไขข้อมูลสินค้า'; 
+            document.getElementById('product-id-input').value = product.id; 
+            document.getElementById('product-code-input').value = product.product_code; 
+            document.getElementById('product-code-input').readOnly = true; 
+            document.getElementById('product-name-input').value = product.product_name; 
+            document.getElementById('product-category-input').value = product.product_category || ''; 
+            document.getElementById('product-type-input').value = product.product_type || ''; 
+            document.getElementById('product-rubber-code-input').value = product.rubber_code || ''; 
+            document.getElementById('storage-location-input').value = product.storage_location || ''; 
+        } else { 
+            modalTitle.textContent = 'เพิ่มสินค้าใหม่'; 
+            document.getElementById('product-code-input').readOnly = false; 
+        } 
+        modal.style.display = 'flex'; 
+    }
+
+    function hideProductModal() { if(modal) modal.style.display = 'none'; }
+
+    async function saveProduct(e) {
+        e.preventDefault();
+        loadingOverlay.style.display = 'flex';
+        const productCode = document.getElementById('product-code-input').value.trim();
+        const productId = document.getElementById('product-id-input').value;
+        const file = imgInput.files[0];
+        let imageUrl = imgPreview.src;
+        try {
+            if (file) {
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${productCode}-${Date.now()}.${fileExt}`;
+                const filePath = `products/${fileName}`;
+                let { error: uploadError } = await supabaseClient.storage.from('product-images').upload(filePath, file);
+                if (uploadError) throw uploadError;
+                const { data: publicUrlData } = supabaseClient.storage.from('product-images').getPublicUrl(filePath);
+                imageUrl = publicUrlData.publicUrl;
+            }
+            const productData = {
+                product_code: productCode,
+                product_name: document.getElementById('product-name-input').value.trim(),
+                product_category: document.getElementById('product-category-input').value.trim() || null,
+                product_type: document.getElementById('product-type-input').value.trim() || null,
+                rubber_code: document.getElementById('product-rubber-code-input').value.trim() || null,
+                storage_location: document.getElementById('storage-location-input').value.trim() || null,
+                image_url: imageUrl.startsWith('data:') || imageUrl.includes('blob:') ? null : imageUrl
+            };
+            if (!productId) productData.is_active = true;
+
+            const { error } = await supabaseClient.from('products').upsert(productData, { onConflict: 'product_code' });
+            if (error) throw error;
+            alert('บันทึกสำเร็จ!'); hideProductModal(); await loadProducts(); await window.orderSystem.loadInitialData(true); 
+        } catch (err) { alert('ผิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; }
+    }
+
+    async function deleteProduct(productCode) { 
+        if (!confirm(`ต้องการลบสินค้า "${productCode}" ออกจากระบบถาวรหรือไม่?\n(แนะนำให้ใช้ปุ่มหยุดขายแทนเพื่อเก็บประวัติ)`)) return; 
+        loadingOverlay.style.display = 'flex'; 
+        try { 
+            const { error } = await supabaseClient.from('products').delete().eq('product_code', productCode); 
+            if (error) throw error; 
+            alert('ลบสำเร็จ!'); await loadProducts(); await window.orderSystem.loadInitialData(true); 
+        } catch (err) { alert('เกิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; } 
+    }
+
+    function downloadProductTemplate() { 
+        const headers = ["product_code", "product_name", "product_category", "product_type", "rubber_code", "storage_location"]; 
+        const sampleData = [ ["P001", "สติกเกอร์กันน้ำ", "STK", "FINISHPRODUCT", "", "3Aชั้น2แถว2"] ]; 
+        const worksheet = XLSX.utils.aoa_to_sheet([headers, ...sampleData]); 
+        const workbook = XLSX.utils.book_new(); 
+        XLSX.utils.book_append_sheet(workbook, worksheet, "ProductTemplate"); 
+        XLSX.writeFile(workbook, "Product_Import_Template.xlsx"); 
+    }
+
+    async function handleBulkImageUpload(files) {
+        if (files.length === 0) return;
+        loadingOverlay.style.display = 'flex';
+        let successCount = 0; let failCount = 0;
+        for (let file of files) {
+            try {
+                const productCode = file.name.substring(0, file.name.lastIndexOf('.')).trim();
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${productCode}-${Date.now()}.${fileExt}`;
+                const filePath = `products/${fileName}`;
+                await supabaseClient.storage.from('product-images').upload(filePath, file);
+                const { data: urlData } = supabaseClient.storage.from('product-images').getPublicUrl(filePath);
+                await supabaseClient.from('products').update({ image_url: urlData.publicUrl }).eq('product_code', productCode);
+                successCount++;
+            } catch (err) { failCount++; }
+        }
+        loadingOverlay.style.display = 'none';
+        bulkImageInput.value = "";
+        alert(`อัปเดตรูปภาพเรียบร้อย! สำเร็จ: ${successCount} รายการ`);
+        await loadProducts();
+    }
+
+    return { initializeApp };
+})();
 
 window.patternSystem = (() => {
     let isInitialized = false;
