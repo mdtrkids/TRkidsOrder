@@ -5475,68 +5475,111 @@ window.patternSystem = (() => {
                 const allOrders = window.orderSystem.getAllOrdersData();
                 const channelList = window.orderSystem.getChannelList();
                 const date = dateFilter.value;
-                const carriers = [...new Set(channelList.map(c => (c.default_carrier || "OTHER").toUpperCase()))].sort();
+                const carriersList = [...new Set(channelList.map(c => (c.default_carrier || "OTHER").toUpperCase()))].sort();
 
-                // กรองออร์เดอร์ที่เกี่ยวข้องกับวันนี้ (ทั้งวันที่ส่ง และวันที่ทวนสอบ)
+                // กรองออร์เดอร์ที่เกี่ยวข้องกับวันนี้
                 const relevant = allOrders.filter(o => {
                     const sDate = o.shipped_time?.substring(0, 10);
                     const vDate = o.transport_meta?.verified_at?.substring(0, 10);
                     return sDate === date || vDate === date;
                 });
 
-                // --- ส่วนคำนวณตารางสรุป ---
-                const channelSummary = {};
+                // --- ส่วนคำนวณตารางสรุปแบบ Group by Carrier > Channel ---
+                const nestedSummary = {}; 
                 relevant.forEach(o => {
                     const isTodayVer = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
                     if (isTodayVer) {
+                        const carrier = getCarrierName(o.channel_code);
                         const ch = (o.channel_code || 'N/A').toUpperCase();
                         const pType = o.transport_meta?.parcel_type || 'กล่อง';
-                        if (!channelSummary[ch]) channelSummary[ch] = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
-                        if (channelSummary[ch][pType] !== undefined) channelSummary[ch][pType]++;
-                        channelSummary[ch].total++;
+
+                        if (!nestedSummary[carrier]) nestedSummary[carrier] = {};
+                        if (!nestedSummary[carrier][ch]) {
+                            nestedSummary[carrier][ch] = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
+                        }
+                        
+                        nestedSummary[carrier][ch][pType]++;
+                        nestedSummary[carrier][ch].total++;
                     }
                 });
 
-                // วาดตารางสรุป
                 const sumTbody = document.getElementById('transport-summary-tbody');
                 if (sumTbody) {
-                    const sortedCh = Object.keys(channelSummary).sort();
+                    // กำหนดสไตล์ความกว้างคอลัมน์ให้เท่าๆ กัน
+                    // คอลัมน์แรก 25% ที่เหลือ 5 คอลัมน์แบ่งกันช่องละ 15%
+                    const colStyle = 'padding: 10px; border: 1px solid #e5e5e7; text-align: center; width: 15%;';
+                    const labelStyle = 'padding: 10px 15px; border: 1px solid #e5e5e7; text-align: left; width: 25%;';
+
                     let html = '';
                     let grandRow = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
-                    sortedCh.forEach(ch => {
-                        const s = channelSummary[ch];
-                        html += `<tr style="border-bottom: 1px solid #eee;">
-                            <td style="padding:10px; font-weight:bold;">${ch}</td>
-                            <td style="padding:10px; text-align:center;">${s["กล่อง"]}</td>
-                            <td style="padding:10px; text-align:center;">${s["ซองกระดาษ"]}</td>
-                            <td style="padding:10px; text-align:center;">${s["ซองบับเบิล"]}</td>
-                            <td style="padding:10px; text-align:center;">${s["ถุงพัสดุ"]}</td>
-                            <td style="padding:10px; text-align:center; font-weight:bold; background:#f0f7ff;">${s.total}</td>
+                    const sortedCarriers = Object.keys(nestedSummary).sort();
+
+                    sortedCarriers.forEach(carrier => {
+                        // 1. แถวหัวข้อขนส่ง (Carrier)
+                        html += `<tr style="background: #f8f9fa;">
+                            <td colspan="6" style="padding: 10px 15px; border: 1px solid #e5e5e7; font-weight: bold; color: #0071e3;">🚚 ขนส่ง: ${carrier}</td>
                         </tr>`;
-                        grandRow["กล่อง"] += s["กล่อง"]; grandRow["ซองกระดาษ"] += s["ซองกระดาษ"]; grandRow["ซองบับเบิล"] += s["ซองบับเบิล"]; grandRow["ถุงพัสดุ"] += s["ถุงพัสดุ"]; grandRow.total += s.total;
+
+                        let carrierSubTotal = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
+                        const sortedChannels = Object.keys(nestedSummary[carrier]).sort();
+
+                        sortedChannels.forEach(ch => {
+                            const s = nestedSummary[carrier][ch];
+                            html += `<tr>
+                                <td style="${labelStyle} padding-left: 30px; color: #555;">└ ${ch}</td>
+                                <td style="${colStyle}">${s["กล่อง"]}</td>
+                                <td style="${colStyle}">${s["ซองกระดาษ"]}</td>
+                                <td style="${colStyle}">${s["ซองบับเบิล"]}</td>
+                                <td style="${colStyle}">${s["ถุงพัสดุ"]}</td>
+                                <td style="${colStyle} font-weight: bold;">${s.total}</td>
+                            </tr>`;
+                            
+                            carrierSubTotal["กล่อง"] += s["กล่อง"];
+                            carrierSubTotal["ซองกระดาษ"] += s["ซองกระดาษ"];
+                            carrierSubTotal["ซองบับเบิล"] += s["ซองบับเบิล"];
+                            carrierSubTotal["ถุงพัสดุ"] += s["ถุงพัสดุ"];
+                            carrierSubTotal.total += s.total;
+                        });
+
+                        // 2. แถวรวมยอดของแต่ละขนส่ง
+                        html += `<tr style="background: #ffffff; font-weight: bold;">
+                            <td style="${labelStyle} text-align: right; color: #1d1d1f;">รวมยอด ${carrier}</td>
+                            <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["กล่อง"]}</td>
+                            <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["ซองกระดาษ"]}</td>
+                            <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["ซองบับเบิล"]}</td>
+                            <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["ถุงพัสดุ"]}</td>
+                            <td style="${colStyle} color: #0071e3; background: #f0f7ff;">${carrierSubTotal.total}</td>
+                        </tr>`;
+
+                        grandRow["กล่อง"] += carrierSubTotal["กล่อง"];
+                        grandRow["ซองกระดาษ"] += carrierSubTotal["ซองกระดาษ"];
+                        grandRow["ซองบับเบิล"] += carrierSubTotal["ซองบับเบิล"];
+                        grandRow["ถุงพัสดุ"] += carrierSubTotal["ถุงพัสดุ"];
+                        grandRow.total += carrierSubTotal.total;
                     });
-                    if (sortedCh.length) {
-                        html += `<tr style="background:#1d1d1f; color:white; font-weight:bold;">
-                            <td style="padding:10px;">รวมสุทธิ</td>
-                            <td style="padding:10px; text-align:center;">${grandRow["กล่อง"]}</td>
-                            <td style="padding:10px; text-align:center;">${grandRow["ซองกระดาษ"]}</td>
-                            <td style="padding:10px; text-align:center;">${grandRow["ซองบับเบิล"]}</td>
-                            <td style="padding:10px; text-align:center;">${grandRow["ถุงพัสดุ"]}</td>
-                            <td style="padding:10px; text-align:center; background:#0071e3;">${grandRow.total}</td>
+
+                    if (sortedCarriers.length > 0) {
+                        // 3. แถวรวมทุกขนส่ง (Grand Total)
+                        html += `<tr style="background: #1d1d1f; color: white; font-weight: bold;">
+                            <td style="padding: 12px 15px; border: 1px solid #1d1d1f; text-align: left;">ยอดรวมทุกขนส่งสุทธิ</td>
+                            <td style="padding: 12px; border: 1px solid #333; text-align: center;">${grandRow["กล่อง"]}</td>
+                            <td style="padding: 12px; border: 1px solid #333; text-align: center;">${grandRow["ซองกระดาษ"]}</td>
+                            <td style="padding: 12px; border: 1px solid #333; text-align: center;">${grandRow["ซองบับเบิล"]}</td>
+                            <td style="padding: 12px; border: 1px solid #333; text-align: center;">${grandRow["ถุงพัสดุ"]}</td>
+                            <td style="padding: 12px; border: 1px solid #333; text-align: center; background: #0071e3;">${grandRow.total}</td>
                         </tr>`;
                         sumTbody.innerHTML = html;
                     } else {
-                        sumTbody.innerHTML = '<tr><td colspan="6" style="padding:30px; text-align:center; color:#ccc;">ไม่มีข้อมูลสรุป</td></tr>';
+                        sumTbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; text-align: center; color: #ccc;">กรุณาเลือกขนส่งเพื่อดูสรุป</td></tr>';
                     }
                 }
 
-                // วาดปุ่มเลือกขนส่งและ Stats
+                // --- ส่วนอื่นๆ (ปุ่มและตารางรายการ) คงเดิม ---
                 let gTotal = 0, gVer = 0, cTotal = 0, cVer = 0;
                 relevant.forEach(o => {
                     if (o.status === 'จัดส่งแล้ว') gTotal++;
                     const isV = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
                     if (isV) gVer++;
-                    
                     if (getCarrierName(o.channel_code) === activeCarrier) {
                         if (o.status === 'จัดส่งแล้ว') cTotal++;
                         if (isV) cVer++;
@@ -5548,26 +5591,23 @@ window.patternSystem = (() => {
                     <div class="stat-box" style="border-top: 5px solid #0071e3;"><span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span><span class="stat-value" style="color:#0071e3;">${activeCarrier ? cVer + ' / ' + cTotal : '-'}</span></div>
                 `;
 
-                tabsContainer.innerHTML = carriers.map(c => {
+                tabsContainer.innerHTML = carriersList.map(c => {
                     const cCount = relevant.filter(o => getCarrierName(o.channel_code) === c && o.status === 'จัดส่งแล้ว').length;
                     return `<button class="carrier-btn ${activeCarrier === c ? 'active' : ''}" onclick="window.transportSystem.setCarrier('${c}')">${c} (${cCount})</button>`;
                 }).join('');
 
                 exportBtn.style.display = activeCarrier ? 'block' : 'none';
                 
-                // วาดตารางรายการ
                 let display = relevant.filter(o => activeCarrier ? getCarrierName(o.channel_code) === activeCarrier && o.status === 'จัดส่งแล้ว' : false);
-                
                 tbody.innerHTML = display.length ? display.map(o => {
                     const isV = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
-                    const rowId = `tr-track-${String(o.tracking_number).replace(/\s+/g, '')}`;
-                    return `<tr id="${rowId}" class="${isV ? 'tr-row-success' : ''}">
-                        <td class="col-time" style="padding:10px 15px; color:#888;">${isV ? new Date(o.transport_meta.verified_at).toLocaleTimeString().substring(0,5) : '-'}</td>
+                    return `<tr class="${isV ? 'tr-row-success' : ''}">
+                        <td style="padding:10px 15px; color:#888;">${isV ? new Date(o.transport_meta.verified_at).toLocaleTimeString().substring(0,5) : '-'}</td>
                         <td style="padding:10px 15px; font-weight:600;">${o.bill_no}</td>
                         <td style="padding:10px 15px; font-family:monospace;">${o.tracking_number}</td>
                         <td style="padding:10px 15px;"><span class="pill-type" style="background:#eee; padding:2px 8px; border-radius:5px;">${o.transport_meta?.parcel_type || '-'}</span></td>
                         <td style="padding:10px 15px;">${o.customer_name}</td>
-                        <td class="col-status" style="padding:10px 15px; text-align:center;">
+                        <td style="padding:10px 15px; text-align:center;">
                             <span class="pill-status ${isV ? 'pill-ok' : 'pill-wait'}">${isV ? '✓ ตรวจแล้ว' : '🔴 รอตรวจ'}</span>
                             ${isV ? `<span onclick="window.transportSystem.undo('${o.id}')" style="color:#0071e3; cursor:pointer; font-size:10px; margin-left:8px; text-decoration:underline;">ยกเลิก</span>` : ''}
                         </td>
