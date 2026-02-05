@@ -1883,7 +1883,8 @@ window.cartoonPatternList = cartoonPatternList;
                                 map.set(b, { 
                                     bill_no:b, channel_code:'WY', status:'ลงข้อมูลเสร็จสิ้น', 
                                     customer_name:String(r["ชื่อลูกค้า"] || ''), 
-                                    customer_address:String(r["เลขพัสดุ"]||r["ที่อยู่"] || ''), 
+                                    // แก้ไขบรรทัดด้านล่างนี้:
+                                    customer_address:String(r["ชื่อที่อยู่-เบอร์โทรผู้รับ"] || r["ที่อยู่"] || r["เลขพัสดุ"] || ''), 
                                     price:parseFloat(r["ราคา"])||0, shipping_cost:parseFloat(r["ค่าส่ง"])||0, 
                                     discount:parseFloat(r["ส่วนลด"])||0, total_amount:parseFloat(r["ยอดสุทธิ"])||0, 
                                     payment_method:"โอน", payment_date: pDate, payment_time: pTime, items:[] 
