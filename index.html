@@ -1832,7 +1832,10 @@ window.cartoonPatternList = cartoonPatternList;
                             if (!map.has(b)) {
                                 map.set(b, { bill_no:b, channel_code:'WY', status:'ลงข้อมูลเสร็จสิ้น', customer_name:String(r["ชื่อลูกค้า"]), customer_address:String(r["เลขพัสดุ"]||r["ที่อยู่"]), price:parseFloat(r["ราคา"])||0, shipping_cost:parseFloat(r["ค่าส่ง"])||0, discount:parseFloat(r["ส่วนลด"])||0, total_amount:parseFloat(r["ยอดสุทธิ"])||0, payment_method:"โอน", admin_user:loggedInUsername, items:[] });
                             }
-                            const p = fullProductList.find(x => x.product_code === String(r["รหัส"]));
+                            const p = fullProductList.find(x => 
+    String(x.product_name).trim() === String(r["รหัส"]).trim() && 
+    String(x.product_code).startsWith('22')
+);
                             map.get(b).items.push({ product_id:p?p.id:null, product_name:p?p.product_name:String(r["สินค้า"]||'รหัสไม่ตรง'), line_1:String(r["บรรทัด1"]), line_2:String(r["บรรทัด2"]), font:String(r["font"]), quantity:parseInt(r["จำนวน"])||1, notes:String(r["หมายเหตุ"]) });
                         }
                         await processAndSaveImportedOrders(Array.from(map.values()), true);
