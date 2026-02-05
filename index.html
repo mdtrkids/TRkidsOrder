@@ -1784,7 +1784,11 @@ window.cartoonPatternList = cartoonPatternList;
                                 processed.push(current);
                             }
                             if (String(r[10]).trim() && current) {
-                                const p = fullProductList.find(x => x.product_code.toLowerCase() === String(r[10]).toLowerCase() || x.product_name.toLowerCase().includes(String(r[10]).toLowerCase()));
+                                const p = fullProductList.find(x => 
+    (x.product_code.toLowerCase() === String(r[10]).toLowerCase() || 
+     x.product_name.toLowerCase().includes(String(r[10]).toLowerCase())) &&
+    !String(x.product_code).startsWith('22')
+);
                                 current.items.push({ product_id:p?p.id:null, product_name:p?p.product_name:String(r[10]), ink_color:String(r[11]), product_type:String(r[12]), cartoon_pattern:String(r[13]), line_pattern:String(r[14]), font:String(r[15]), line_1:String(r[16]), line_2:String(r[17]), line_3:String(r[18]), quantity:parseInt(r[19])||1, notes:String(r[20]) });
                             }
                         }
@@ -1794,30 +1798,60 @@ window.cartoonPatternList = cartoonPatternList;
             }
 
             // --- 3. PGTR Import (รวมบิล) ---
-            function handlePgtrImport(file) {
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    try {
-                        const json = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(e.target.result), {type:'array'}).Sheets[XLSX.read(new Uint8Array(e.target.result), {type:'array'}).SheetNames[0]], {raw:false});
-                        const map = new Map();
-                        const headers = Object.keys(json[0]);
-                        const orderH = findHeader(headers, ['เลขออร์เดอร์', 'เลขที่ออเดอร์', 'Order Number']);
-                        for (const r of json) {
-                            let rawB = String(r[orderH] || '').trim(); if (!rawB) continue;
-                            let b = rawB; const lastD = rawB.lastIndexOf('-');
-                            if (lastD > 0 && !isNaN(rawB.substring(lastD+1))) { b = rawB.substring(0, lastD); }
-                            if (!map.has(b)) {
-                                const p = parseFloat(String(r["ราคาก่อนส่วนลด"]||0).replace(/,/g,''))||0; const s = parseFloat(String(r["ค่าขนส่ง"]||0).replace(/,/g,''))||0; const d = parseFloat(String(r["ส่วนลด admin"]||0).replace(/,/g,''))||0;
-                                map.set(b, { bill_no:b, channel_code:'PGTR', status:'ลงข้อมูลเสร็จสิ้น', customer_name:String(r["ชื่อสกุลผู้รับ"]||''), customer_address:String(r["ที่อยู่เต็ม"]||''), price:p, shipping_cost:s, discount:d, total_amount:p+s-d, payment_method:"โอน", admin_user:loggedInUsername, items:[] });
-                            }
-                            const curr = map.get(b); const pCode = String(r["รหัสสินค้า"]||'').split('-')[0]; const p = fullProductList.find(x => x.product_code === pCode);
-                            curr.items.push({ product_id:p?p.id:null, product_name:p?p.product_name:String(r["ชื่อสินค้า"]||'รหัสไม่ตรง'), ink_color:(String(r["Ink"]||'')+String(r["สี"]||'')).trim(), cartoon_pattern:String(r["ชื่อสินค้า"]), line_pattern:String(r["Underline"]), font:String(r["ฟอนต์"]), line_1:String(r["Label1"]), line_2:String(r["Label2"]), line_3:String(r["Label3"]), quantity:parseInt(r["จำนวน"])||1, notes:String(r["comment"]||"") });
-                        }
-                        await processAndSaveImportedOrders(Array.from(map.values()), true);
-                    } catch (err) { alert(err.message); }
-                }; reader.readAsArrayBuffer(file);
+function handlePgtrImport(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const json = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(e.target.result), {type:'array'}).Sheets[XLSX.read(new Uint8Array(e.target.result), {type:'array'}).SheetNames[0]], {raw:false});
+            const map = new Map();
+            const headers = Object.keys(json[0]);
+            const orderH = findHeader(headers, ['เลขออร์เดอร์', 'เลขที่ออเดอร์', 'Order Number']);
+            for (const r of json) {
+                // ... (ส่วนการจัดการเลขบิลเดิม) ...
+                let rawB = String(r[orderH] || '').trim(); if (!rawB) continue;
+                let b = rawB; const lastD = rawB.lastIndexOf('-');
+                if (lastD > 0 && !isNaN(rawB.substring(lastD+1))) { b = rawB.substring(0, lastD); }
+                if (!map.has(b)) {
+                    const pVal = parseFloat(String(r["ราคาก่อนส่วนลด"]||0).replace(/,/g,''))||0; const s = parseFloat(String(r["ค่าขนส่ง"]||0).replace(/,/g,''))||0; const d = parseFloat(String(r["ส่วนลด admin"]||0).replace(/,/g,''))||0;
+                    map.set(b, { bill_no:b, channel_code:'PGTR', status:'ลงข้อมูลเสร็จสิ้น', customer_name:String(r["ชื่อสกุลผู้รับ"]||''), customer_address:String(r["ที่อยู่เต็ม"]||''), price:pVal, shipping_cost:s, discount:d, total_amount:pVal+s-d, payment_method:"โอน", admin_user:loggedInUsername, items:[] });
+                }
+                
+                const curr = map.get(b); 
+                const pCode = String(r["รหัสสินค้า"]||'').split('-')[0]; 
+                
+                // ค้นหาสินค้าในระบบ (และรักษาเงื่อนไขไม่เอาที่ขึ้นต้นด้วย 22 จากรอบที่แล้ว)
+                const p = fullProductList.find(x => x.product_code === pCode && !String(x.product_code).startsWith('22'));
+                
+                // --- จุดแก้ไขปัญหา: เช็คว่าเป็นสินค้าหมวด UV หรือไม่ ---
+                let cartoonPatternVal = "";
+                if (p && (p.product_category || "").toUpperCase().includes("UV")) {
+                    // ถ้าในระบบระบุว่าเป็นหมวด UV ให้ดึง "ชื่อสินค้า" จาก Excel มาใส่เป็น "ลายการ์ตูน"
+                    cartoonPatternVal = String(r["ชื่อสินค้า"] || "");
+                }
+                // ----------------------------------------------
+
+                curr.items.push({ 
+                    product_id: p ? p.id : null, 
+                    product_name: p ? p.product_name : String(r["ชื่อสินค้า"] || 'รหัสไม่ตรง'), 
+                    ink_color: (String(r["Ink"] || '') + String(r["สี"] || '')).trim(), 
+                    
+                    // ใช้ค่าที่ผ่านการเช็คเงื่อนไขแล้ว (ถ้าไม่ใช่ UV จะเป็นค่าว่าง)
+                    cartoon_pattern: cartoonPatternVal, 
+                    
+                    line_pattern: String(r["Underline"]), 
+                    font: String(r["ฟอนต์"]), 
+                    line_1: String(r["Label1"]), 
+                    line_2: String(r["Label2"]), 
+                    line_3: String(r["Label3"]), 
+                    quantity: parseInt(r["จำนวน"]) || 1, 
+                    notes: String(r["comment"] || "") 
+                });
             }
+            await processAndSaveImportedOrders(Array.from(map.values()), true);
+        } catch (err) { alert(err.message); }
+    }; reader.readAsArrayBuffer(file);
+}
 
             // --- 4. WY Import ---
             function handleWyImport(file) {
