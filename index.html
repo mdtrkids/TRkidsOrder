@@ -5477,14 +5477,12 @@ window.patternSystem = (() => {
                 const date = dateFilter.value;
                 const carriersList = [...new Set(channelList.map(c => (c.default_carrier || "OTHER").toUpperCase()))].sort();
 
-                // กรองออร์เดอร์ที่เกี่ยวข้องกับวันนี้
                 const relevant = allOrders.filter(o => {
                     const sDate = o.shipped_time?.substring(0, 10);
                     const vDate = o.transport_meta?.verified_at?.substring(0, 10);
                     return sDate === date || vDate === date;
                 });
 
-                // --- ส่วนคำนวณตารางสรุปแบบ Group by Carrier > Channel ---
                 const nestedSummary = {}; 
                 relevant.forEach(o => {
                     const isTodayVer = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
@@ -5505,8 +5503,6 @@ window.patternSystem = (() => {
 
                 const sumTbody = document.getElementById('transport-summary-tbody');
                 if (sumTbody) {
-                    // กำหนดสไตล์ความกว้างคอลัมน์ให้เท่าๆ กัน
-                    // คอลัมน์แรก 25% ที่เหลือ 5 คอลัมน์แบ่งกันช่องละ 15%
                     const colStyle = 'padding: 10px; border: 1px solid #e5e5e7; text-align: center; width: 15%;';
                     const labelStyle = 'padding: 10px 15px; border: 1px solid #e5e5e7; text-align: left; width: 25%;';
 
@@ -5541,14 +5537,14 @@ window.patternSystem = (() => {
                             carrierSubTotal.total += s.total;
                         });
 
-                        // 2. แถวรวมยอดของแต่ละขนส่ง
-                        html += `<tr style="background: #ffffff; font-weight: bold;">
+                        // 2. แถวรวมยอดรายขนส่ง (ปรับเป็นสีฟ้าอ่อนทั้งแถบตามวงกลมสีแดง)
+                        html += `<tr style="background: #eef7ff; font-weight: bold;">
                             <td style="${labelStyle} text-align: right; color: #1d1d1f;">รวมยอด ${carrier}</td>
                             <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["กล่อง"]}</td>
                             <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["ซองกระดาษ"]}</td>
                             <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["ซองบับเบิล"]}</td>
                             <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["ถุงพัสดุ"]}</td>
-                            <td style="${colStyle} color: #0071e3; background: #f0f7ff;">${carrierSubTotal.total}</td>
+                            <td style="${colStyle} color: #0071e3;">${carrierSubTotal.total}</td>
                         </tr>`;
 
                         grandRow["กล่อง"] += carrierSubTotal["กล่อง"];
@@ -5559,7 +5555,6 @@ window.patternSystem = (() => {
                     });
 
                     if (sortedCarriers.length > 0) {
-                        // 3. แถวรวมทุกขนส่ง (Grand Total)
                         html += `<tr style="background: #1d1d1f; color: white; font-weight: bold;">
                             <td style="padding: 12px 15px; border: 1px solid #1d1d1f; text-align: left;">ยอดรวมทุกขนส่งสุทธิ</td>
                             <td style="padding: 12px; border: 1px solid #333; text-align: center;">${grandRow["กล่อง"]}</td>
@@ -5574,7 +5569,7 @@ window.patternSystem = (() => {
                     }
                 }
 
-                // --- ส่วนอื่นๆ (ปุ่มและตารางรายการ) คงเดิม ---
+                // ส่วนจัดการปุ่มและ Stats ด้านบน (คงเดิม)
                 let gTotal = 0, gVer = 0, cTotal = 0, cVer = 0;
                 relevant.forEach(o => {
                     if (o.status === 'จัดส่งแล้ว') gTotal++;
