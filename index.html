@@ -3581,7 +3581,8 @@ itemsInWorkOrder.filter(item => {
     shipped_by: null,
     shipped_time: null,
     tracking_number: null,
-    packing_meta: null, // <--- เพิ่มบรรทัดนี้เพื่อล้างเวลาสแกนเดิมออก
+    packing_meta: null,    // ล้างข้อมูลการแสกนจัดของ
+    transport_meta: null,  // <--- เพิ่มบรรทัดนี้เพื่อล้างข้อมูลการทวนสอบขนส่ง
     created_at: new Date().toISOString(),
     entry_date: new Date().toISOString().slice(0, 10),
     admin_user: loggedInUsername,
