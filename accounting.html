@@ -293,7 +293,7 @@
             }
 
             // --- === SECTION 1: SALES REPORT (MODIFIED TO PULL ALL) === ---
-            async function generateReport() {
+             async function generateReport() {
                 salesReportTableCard.style.display = 'block';
                 salesReportTableTitle.innerHTML = '<i class="fa-solid fa-file-invoice-dollar"></i> ตารางข้อมูลยอดขาย (ทั้งหมดในช่วงวันที่เลือก)';
             
@@ -311,9 +311,6 @@
                 salesReportContainer.innerHTML = '<p>กำลังดึงข้อมูลรายงานและตรวจสอบสถานะการจับคู่...</p>';
                 summaryContainer.innerHTML = '';
 
-                // --- เพิ่มรายชื่อช่องทางที่ต้องการตัดออกตรงนี้ ---
-                const ecommerceChannels = ['SPTR', 'FSPTR', 'LZTR', 'TTTR'];
-
                 try {
                     let allFetchedOrders = [];
                     let from = 0;
@@ -325,9 +322,8 @@
                             .gte('payment_date', startDate)
                             .lte('payment_date', endDate)
                             .not('status', 'eq', 'ยกเลิก')
-                            .not('payment_date', 'is', null)
-                            // --- เพิ่มบรรทัดนี้เพื่อกรองยอดขาย Ecommerce ออก ---
-                            .not('channel_code', 'in', `(${ecommerceChannels.join(',')})`);
+                            .not('payment_date', 'is', null);
+                            // --- ลบบรรทัด .not('channel_code', 'in', ...) ออกไปแล้ว เพื่อให้ดึงมาทุกช่องทาง ---
 
                         if (customerKeyword) query = query.ilike('customer_name', `%${customerKeyword}%`);
                         if (amountKeyword) query = query.eq('total_amount', amountKeyword);
@@ -400,6 +396,7 @@ currentReportData = allFetchedOrders.map(order => {
                     return;
                 }
                 
+                // --- ส่วนนี้ปล่อยไว้เหมือนเดิม (คำนวณสรุปจากทุกช่องทาง) ---
                 const totalSales = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
                 const totalShipping = orders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0);
                 const salesByChannel = {}, salesByAccount = {}, shippingByChannel = {};
@@ -413,6 +410,7 @@ currentReportData = allFetchedOrders.map(order => {
                     shippingByChannel[channelCode] = (shippingByChannel[channelCode] || 0) + shipping;
                 });
                 
+                // แสดงผลกล่องสรุป (Summary)
                 summaryContainer.innerHTML = `
                 <div id="summary-section"> 
                     <div class="summary-box overall-summary"> <h3>สรุปภาพรวม</h3> <div class="metric"> <h4>ยอดขายรวม</h4> <div class="value">${formatCurrency(totalSales)}</div> </div> <div class="metric"> <h4>จำนวนออร์เดอร์</h4> <div class="value">${orders.length.toLocaleString('th-TH')}</div> </div> </div>
@@ -421,36 +419,36 @@ currentReportData = allFetchedOrders.map(order => {
                     <div class="summary-box"> <h3>สรุปตามบัญชี</h3> <table class="summary-table"> ${Object.entries(salesByAccount).map(([account, total]) => `<tr><td>${account}</td><td class="summary-value">${formatCurrency(total)}</td></tr>`).join('')} <tr class="total-row"><td>รวม</td><td class="summary-value">${formatCurrency(totalSales)}</td></tr> </table> </div>
                 </div>`;
 
-                // --- แก้หัวตาราง เพิ่ม "การจับคู่" ---
+                // --- ส่วนที่แก้ไข: กรองข้อมูลก่อนสร้างตารางรายละเอียด ---
+                const ecommerceChannels = ['SPTR', 'FSPTR', 'LZTR', 'TTTR'];
+                const filteredOrdersForTable = orders.filter(order => !ecommerceChannels.includes(order.channel_code));
+
                 const rawDataTableHeaders = ["วันที่ชำระ", "เวลา", "เลขบิล", "ช่องทาง", "ลูกค้า", "ยอดสุทธิ", "การจับคู่", "สถานะ"];
                 let tableHTML = `<table id="salesReportTable"><thead><tr>${rawDataTableHeaders.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>`;
                 
-                orders.forEach(order => {
-    // 1. สร้างตัวแปร Badge ตามสถานะที่คำนวณไว้ใน generateReport
-    let matchStatusBadge = '';
-    
-    if (order.match_status_type === "fully_matched") {
-        matchStatusBadge = '<span class="match-badge status-matched">✓ ครบถ้วน</span>';
-    } else if (order.match_status_type === "partial") {
-        // คำนวณยอดค้างจ่าย
-        const balance = (order.total_amount || 0) - (order.total_paid_in_statements || 0);
-        matchStatusBadge = `<span class="match-badge" style="background:#fff3cd; color:#856404; border:1px solid #ffeeba; font-size:11px;">⚠ ขาด ${formatCurrency(balance)}</span>`;
-    } else {
-        matchStatusBadge = '<span class="match-badge status-unmatched">✗ ยังไม่พบยอด</span>';
-    }
+                // ใช้ filteredOrdersForTable แทน orders เดิมในการสร้างแถวตาราง
+                filteredOrdersForTable.forEach(order => {
+                    let matchStatusBadge = '';
+                    if (order.match_status_type === "fully_matched") {
+                        matchStatusBadge = '<span class="match-badge status-matched">✓ ครบถ้วน</span>';
+                    } else if (order.match_status_type === "partial") {
+                        const balance = (order.total_amount || 0) - (order.total_paid_in_statements || 0);
+                        matchStatusBadge = `<span class="match-badge" style="background:#fff3cd; color:#856404; border:1px solid #ffeeba; font-size:11px;">⚠ ขาด ${formatCurrency(balance)}</span>`;
+                    } else {
+                        matchStatusBadge = '<span class="match-badge status-unmatched">✗ ยังไม่พบยอด</span>';
+                    }
 
-    // 2. ส่วนการสร้างแถวตาราง (ปรับคอลัมน์ "การจับคู่")
-    tableHTML += `<tr>
-        <td>${order.payment_date ? new Date(order.payment_date).toLocaleDateString('th-TH') : ''}</td>
-        <td>${order.payment_time ? order.payment_time.substring(0, 5) : ''}</td>
-        <td>${order.bill_no || ''}</td>
-        <td>${order.channel_code || ''}</td>
-        <td>${order.customer_name || ''}</td>
-        <td class="currency">${formatCurrency(order.total_amount || 0)}</td>
-        <td>${matchStatusBadge}</td> <!-- ตรงนี้คือคอลัมน์ที่แสดง Badge -->
-        <td>${order.status || ''}</td>
-    </tr>`;
-});
+                    tableHTML += `<tr>
+                        <td>${order.payment_date ? new Date(order.payment_date).toLocaleDateString('th-TH') : ''}</td>
+                        <td>${order.payment_time ? order.payment_time.substring(0, 5) : ''}</td>
+                        <td>${order.bill_no || ''}</td>
+                        <td>${order.channel_code || ''}</td>
+                        <td>${order.customer_name || ''}</td>
+                        <td class="currency">${formatCurrency(order.total_amount || 0)}</td>
+                        <td>${matchStatusBadge}</td>
+                        <td>${order.status || ''}</td>
+                    </tr>`;
+                });
                 tableHTML += `</tbody></table>`;
                 salesReportContainer.innerHTML = tableHTML;
             }
