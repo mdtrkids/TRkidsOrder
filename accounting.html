@@ -420,7 +420,7 @@ currentReportData = allFetchedOrders.map(order => {
                 </div>`;
 
                 // --- ส่วนที่แก้ไข: กรองข้อมูลก่อนสร้างตารางรายละเอียด ---
-                const ecommerceChannels = ['SPTR', 'FSPTR', 'LZTR', 'TTTR', 'WY', 'CLAIM'];
+                const ecommerceChannels = ['SPTR', 'FSPTR', 'LZTR', 'TTTR', 'WY', 'PGTR', 'CLAIM'];
                 const filteredOrdersForTable = orders.filter(order => !ecommerceChannels.includes(order.channel_code));
 
                 const rawDataTableHeaders = ["วันที่ชำระ", "เวลา", "เลขบิล", "ช่องทาง", "ลูกค้า", "ยอดสุทธิ", "การจับคู่", "สถานะ"];
@@ -841,3 +841,4 @@ function parseCSVLine(line) {
     </script>
 </body>
 </html>
+
