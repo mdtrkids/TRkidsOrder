@@ -103,6 +103,7 @@
                     <li><a href="index.html" class="nav-link"><span class="icon">📝</span><span class="nav-text">ระบบจัดการออร์เดอร์</span></a></li>
                     <li><a href="#" class="nav-link" id="nav-planner"><span class="icon">🗓️</span><span class="nav-text">ใบงาน (Export)</span></a></li>
                     <li><a href="#" class="nav-link" id="nav-packing"><span class="icon">📦</span><span class="nav-text">ระบบจัดของ</span></a></li>
+	<li><a href="#" class="nav-link" id="nav-shipping-verify"><span class="icon">🚚</span><span class="nav-text">ทวนสอบขนส่ง</span></a></li>
                     <li><a href="#" class="nav-link" id="nav-product"><span class="icon">🏷️</span><span class="nav-text">ระบบจัดการสินค้า</span></a></li>
     <li><a href="#" class="nav-link" id="nav-pattern"><span class="icon">🖼️</span><span class="nav-text">จัดการลายการ์ตูน</span></a></li>
                     <li><a href="#" class="nav-link" id="nav-sales-report"><span class="icon">📈</span><span class="nav-text">รายงานยอดขาย</span></a></li>
@@ -264,6 +265,7 @@
             }
             document.getElementById('nav-planner').addEventListener('click', (e) => { e.preventDefault(); navigateTo('planner-system-container'); });
             document.getElementById('nav-packing').addEventListener('click', (e) => { e.preventDefault(); navigateTo('packing-system-container'); });
+           document.getElementById('nav-shipping-verify').addEventListener('click', (e) => { e.preventDefault(); navigateTo('shipping-verification-system-container'); });
             document.getElementById('nav-product').addEventListener('click', (e) => { e.preventDefault(); navigateTo('product-system-container'); });
             document.getElementById('nav-sales-report').addEventListener('click', (e) => { e.preventDefault(); navigateTo('sales-report-system-container'); });
            document.getElementById('nav-pattern').addEventListener('click', (e) => { e.preventDefault(); navigateTo('pattern-system-container'); });
@@ -309,6 +311,9 @@
                 salesReportContainer.innerHTML = '<p>กำลังดึงข้อมูลรายงานและตรวจสอบสถานะการจับคู่...</p>';
                 summaryContainer.innerHTML = '';
 
+                // --- เพิ่มรายชื่อช่องทางที่ต้องการตัดออกตรงนี้ ---
+                const ecommerceChannels = ['SPTR', 'FSPTR', 'LZTR', 'TTTR'];
+
                 try {
                     let allFetchedOrders = [];
                     let from = 0;
@@ -320,7 +325,9 @@
                             .gte('payment_date', startDate)
                             .lte('payment_date', endDate)
                             .not('status', 'eq', 'ยกเลิก')
-                            .not('payment_date', 'is', null);
+                            .not('payment_date', 'is', null)
+                            // --- เพิ่มบรรทัดนี้เพื่อกรองยอดขาย Ecommerce ออก ---
+                            .not('channel_code', 'in', `(${ecommerceChannels.join(',')})`);
 
                         if (customerKeyword) query = query.ilike('customer_name', `%${customerKeyword}%`);
                         if (amountKeyword) query = query.eq('total_amount', amountKeyword);
@@ -566,41 +573,47 @@ currentReportData = allFetchedOrders.map(order => {
                     loadingOverlay.style.display = 'none'; 
                 }
             }
-            async function displayUnmatchedStatements() {
-                unmatchedContainer.innerHTML = '<p>กำลังโหลดข้อมูล...</p>';
-                
-                const { data, error } = await supabaseClient
-                    .from('bank_statements')
-                    .select('*')
-                    .eq('is_matched', false)
-                    .order('id', { ascending: true }); // UPDATED: Order by id
+            
+async function displayUnmatchedStatements() {    
+unmatchedContainer.innerHTML = '<p>กำลังโหลดข้อมูล...</p>';
+    
+    // กำหนดรายชื่อช่องทาง Ecommerce ที่ต้องการตัดออก
+    const ecommerceChannels = ['SPTR', 'FSPTR', 'LZTR', 'TTTR'];
+    
+    const { data, error } = await supabaseClient
+        .from('bank_statements')
+        .select('*')
+        .eq('is_matched', false)
+        // ใช้คำสั่ง .not(... 'in' ...) เพื่อกรองค่าในลิสต์ที่กำหนดออก
+        .not('channel', 'in', `(${ecommerceChannels.join(',')})`)
+        .order('id', { ascending: true });
 
-                if (error) {
-                    unmatchedContainer.innerHTML = `<p style="color:var(--danger-color)">เกิดข้อผิดพลาด: ${error.message}</p>`;
-                    return [];
-                }
-                if (data.length === 0) {
-                    unmatchedContainer.innerHTML = '<p>ไม่มีรายการที่ค้างอยู่</p>';
-                    return [];
-                }
+    if (error) {
+        unmatchedContainer.innerHTML = `<p style="color:var(--danger-color)">เกิดข้อผิดพลาด: ${error.message}</p>`;
+        return [];
+    }
+    if (data.length === 0) {
+        unmatchedContainer.innerHTML = '<p>ไม่มีรายการที่ค้างอยู่ (กรองรายการ Ecommerce ออกแล้ว)</p>';
+        return [];
+    }
 
-                let tableHTML = `<table id="statementTable"><thead><tr><th>เลขบิล</th><th>วันที่</th><th>เวลา</th><th>รายการ</th><th>ฝาก</th><th>ช่องทาง</th><th>รายละเอียด</th></tr></thead><tbody>`;
-                data.forEach(stmt => {
-                    tableHTML += `<tr data-statement-id="${stmt.id}">
-                        <td class="manual-match-cell"><input type="text" placeholder="เลขบิล"><button class="btn btn-success btn-sm manual-save-btn">บันทึก</button></td>
-                        <td>${new Date(stmt.statement_date).toLocaleDateString('th-TH')}</td>
-                        <td>${stmt.statement_time.substring(0, 5)}</td>
-                        <td>${stmt.description}</td>
-                        <td class="currency">${formatCurrency(stmt.deposit_amount)}</td>
-                        <td>${stmt.channel}</td>
-                        <td>${stmt.details}</td>
-                    </tr>`;
-                });
-                tableHTML += `</tbody></table>`;
-                unmatchedContainer.innerHTML = tableHTML;
-                document.querySelectorAll('.manual-save-btn').forEach(btn => btn.addEventListener('click', handleManualSave));
-                return data;
-            }
+    let tableHTML = `<table id="statementTable"><thead><tr><th>เลขบิล</th><th>วันที่</th><th>เวลา</th><th>รายการ</th><th>ฝาก</th><th>ช่องทาง</th><th>รายละเอียด</th></tr></thead><tbody>`;
+    data.forEach(stmt => {
+        tableHTML += `<tr data-statement-id="${stmt.id}">
+            <td class="manual-match-cell"><input type="text" placeholder="เลขบิล"><button class="btn btn-success btn-sm manual-save-btn">บันทึก</button></td>
+            <td>${new Date(stmt.statement_date).toLocaleDateString('th-TH')}</td>
+            <td>${stmt.statement_time.substring(0, 5)}</td>
+            <td>${stmt.description}</td>
+            <td class="currency">${formatCurrency(stmt.deposit_amount)}</td>
+            <td>${stmt.channel}</td>
+            <td>${stmt.details}</td>
+        </tr>`;
+    });
+    tableHTML += `</tbody></table>`;
+    unmatchedContainer.innerHTML = tableHTML;
+    document.querySelectorAll('.manual-save-btn').forEach(btn => btn.addEventListener('click', handleManualSave));
+    return data;
+}
 
             async function handleManualSave(e) {
                 const row = e.target.closest('tr');
