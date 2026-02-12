@@ -2304,30 +2304,92 @@ if (mode === 'edit' && order) {
                 const selectedOrders = allOrdersData.filter(o => orderIdsToProcess.includes(String(o.id)));
                 const ordersByChannel = selectedOrders.reduce((acc, order) => { const channel = order.channel_code; if (!acc[channel]) { acc[channel] = []; } acc[channel].push(order); return acc; }, {});
                 const channelGroups = Object.keys(ordersByChannel);
+                
                 let confirmationMessage = "ต้องการสร้างใบงานสำหรับ:\n";
                 channelGroups.forEach(channel => { confirmationMessage += `- ${channel}: ${ordersByChannel[channel].length} บิล\n`; });
                 if (!confirm(confirmationMessage + "\nดำเนินการต่อ?")) return;
-                loadingOverlay.style.display = 'flex'; let successMessages = []; let errorMessages = [];
-                for (const channelCode of channelGroups) { const groupSelectedIds = ordersByChannel[channelCode].map(o => o.id); try { const today = new Date(); const datePart = today.toLocaleDateString('th-TH', { year: '2-digit', month: '2-digit', day: '2-digit' }).replace(/\//g, ''); const workOrderDate = today.toISOString().slice(0, 10); const { data, error } = await supabaseClient.from('work_orders').select('batch_number').eq('channel_code', channelCode).eq('production_date', workOrderDate).order('batch_number', { ascending: false }).limit(1); if (error) throw error; const lastBatchNumber = data.length > 0 ? data[0].batch_number : 0; const batchNumber = lastBatchNumber + 1; const workOrderName = `${channelCode}-${datePart}-R${batchNumber}`; const { error: woError } = await supabaseClient.from('work_orders').insert({ work_order_name: workOrderName, channel_code: channelCode, production_date: workOrderDate, batch_number: batchNumber, order_count: groupSelectedIds.length, created_by: loggedInUsername, status: 'กำลังผลิต' }); if (woError) throw woError; const { error: updateError } = await supabaseClient.from('orders').update({ status: 'ใบงาน (กำลังผลิต)', work_order_name: workOrderName }).in('id', groupSelectedIds); if (updateError) throw updateError; const billsInWorkOrder = ordersByChannel[channelCode]; // ค้นหาโค้ดส่วนนี้ใน createWorkOrder
-const qty = { STAMP: 0, STK: 0, CTT: 0, LASER: 0, TUBE: 0, PACK: billsInWorkOrder.length };
-billsInWorkOrder.forEach(order => {
-    (order.order_items || []).forEach(item => {
-        const product = fullProductList.find(p => p.id === item.product_id);
-        if (product && product.product_category) {
-            const category = product.product_category.toUpperCase();
-            if (category.includes('STAMP')) qty.STAMP++;
-            if (category.includes('STK')) qty.STK++;
-            // --- แก้ไขบรรทัดนี้ ---
-            if (category.includes('UV') || category.includes('SUBLIMATION')) qty.CTT++; 
-            // --------------------
-            if (category.includes('LASER')) qty.LASER++;
-            if (category.includes('TUBE')) qty.TUBE++;
-        }
-    });
-}); const creationTime = new Date(); const cutTime = `${String(creationTime.getHours()).padStart(2, '0')}:${String(creationTime.getMinutes()).padStart(2, '0')}`; const { error: plannerError } = await supabaseClient.from('jobs').insert({ name: workOrderName, date: workOrderDate, cut: cutTime, qty: qty, }); if (plannerError) { console.error('Planner Sync failed:', plannerError); throw new Error(`สร้างใบงาน "${workOrderName}" สำเร็จ แต่ Sync ไป Planner ล้มเหลว`); } successMessages.push(`สร้างใบงาน "${workOrderName}" สำเร็จ`); } catch (error) { console.error(`Error for channel ${channelCode}:`, error); errorMessages.push(`พลาดกับช่องทาง ${channelCode}: ${error.message}`); } }
-                loadingOverlay.style.display = 'none'; let finalAlertMessage = successMessages.join('\n'); if(errorMessages.length > 0) { finalAlertMessage += '\n\nข้อผิดพลาด:\n' + errorMessages.join('\n'); }
-                alert(finalAlertMessage);
-	            await loadInitialData(true);
+                
+                loadingOverlay.style.display = 'flex'; 
+                let successMessages = []; 
+                let errorMessages = [];
+
+                try {
+                    // --- เพิ่มส่วนการหา Max Order Index เพื่อป้องกันเลขเกินช่วง ---
+                    const { data: maxIdxRes } = await supabaseClient.from('plan_jobs').select('order_index').order('order_index', { ascending: false }).limit(1);
+                    let currentMaxIdx = (maxIdxRes && maxIdxRes.length > 0) ? maxIdxRes[0].order_index : 0;
+
+                    for (const channelCode of channelGroups) { 
+                        const groupSelectedIds = ordersByChannel[channelCode].map(o => o.id); 
+                        try { 
+                            const today = new Date(); 
+                            const datePart = today.toLocaleDateString('th-TH', { year: '2-digit', month: '2-digit', day: '2-digit' }).replace(/\//g, ''); 
+                            const workOrderDate = today.toISOString().slice(0, 10); 
+                            
+                            const { data: woData, error: woReadError } = await supabaseClient.from('work_orders').select('batch_number').eq('channel_code', channelCode).eq('production_date', workOrderDate).order('batch_number', { ascending: false }).limit(1); 
+                            if (woReadError) throw woReadError; 
+                            const batchNumber = (woData.length > 0 ? woData[0].batch_number : 0) + 1; 
+                            const workOrderName = `${channelCode}-${datePart}-R${batchNumber}`; 
+
+                            const { error: woError } = await supabaseClient.from('work_orders').insert({ work_order_name: workOrderName, channel_code: channelCode, production_date: workOrderDate, batch_number: batchNumber, order_count: groupSelectedIds.length, created_by: loggedInUsername, status: 'กำลังผลิต' }); 
+                            if (woError) throw woError; 
+
+                            const { error: updateError } = await supabaseClient.from('orders').update({ status: 'ใบงาน (กำลังผลิต)', work_order_name: workOrderName }).in('id', groupSelectedIds); 
+                            if (updateError) throw updateError; 
+
+                            const billsInWorkOrder = ordersByChannel[channelCode];
+                            const qty = { "เบิก": 0, "STAMP": 0, "STK": 0, "CTT": 0, "LASER": 0, "TUBE": 0, "QC": billsInWorkOrder.length, "PACK": billsInWorkOrder.length };
+                            
+                            billsInWorkOrder.forEach(order => {
+                                (order.order_items || []).forEach(item => {
+                                    const product = fullProductList.find(p => p.id === item.product_id);
+                                    if (product && product.product_category) {
+                                        const cat = product.product_category.toUpperCase();
+                                        if (cat.includes('STAMP')) { qty["STAMP"]++; qty["เบิก"]++; }
+                                        if (cat.includes('STK')) qty["STK"]++;
+                                        if (cat.includes('UV') || cat.includes('SUBLIMATION')) qty["CTT"]++; 
+                                        if (cat.includes('LASER')) { qty["LASER"]++; qty["เบิก"]++; }
+                                        if (cat.includes('TUBE')) qty["TUBE"]++;
+                                    }
+                                });
+                            });
+
+                            const cutTime = new Date().toLocaleTimeString('th-TH', { hour12: false, hour: '2-digit', minute: '2-digit' }); 
+                            
+                            const tracks = {};
+                            ["เบิก","STAMP","STK","CTT","LASER","TUBE","QC","PACK"].forEach(d => {
+                                if (qty[d] > 0) tracks[d] = {};
+                            });
+
+                            // ใช้เลขลำดับถัดไป (ทีละ +1) แทน Date.now()
+                            currentMaxIdx++;
+
+                            const { error: plannerError } = await supabaseClient.from('plan_jobs').insert({ 
+                                id: 'J' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4),
+                                name: workOrderName, 
+                                date: workOrderDate, 
+                                cut: cutTime, 
+                                qty: qty,
+                                tracks: tracks,
+                                line_assignments: {},
+                                order_index: currentMaxIdx 
+                            }); 
+
+                            if (plannerError) throw plannerError; 
+                            
+                            successMessages.push(`สร้างใบงาน "${workOrderName}" สำเร็จ และส่งเข้าแผนผลิตแล้ว`); 
+                        } catch (error) { 
+                            console.error(error); 
+                            errorMessages.push(`พลาดกับช่องทาง ${channelCode}: ${error.message}`); 
+                        } 
+                    }
+                } catch (generalError) {
+                    alert('เกิดข้อผิดพลาดทั่วไป: ' + generalError.message);
+                } finally {
+                    loadingOverlay.style.display = 'none'; 
+                    if(successMessages.length > 0) alert(successMessages.join('\n'));
+                    if(errorMessages.length > 0) alert('ข้อผิดพลาด:\n' + errorMessages.join('\n'));
+                    await loadInitialData(true);
+                }
             }
 
             async function cancelSelectedOrders(tabKey) { const selectedIds = getSelectedOrderIds(container.querySelector(`#tab-${tabKey} .order-list`)); if (selectedIds.length === 0) return alert('กรุณาเลือกออร์เดอร์'); if (!confirm(`ต้องการยกเลิก ${selectedIds.length} ออร์เดอร์?`)) return; loadingOverlay.style.display = 'flex'; try { const { error } = await supabaseClient.from('orders').update({ status: 'ยกเลิก' }).in('id', selectedIds); if (error) throw error; alert('ยกเลิกสำเร็จ!'); } catch (error) { alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
@@ -2370,7 +2432,51 @@ remainingBills.forEach(order => {
 }); const { error: updateJobError } = await supabaseClient.from('jobs').update({ qty: newQty }).eq('name', workOrderName); if (updateJobError) console.error('Failed to update job qty:', updateJobError); } else { const { error: deleteJobError } = await supabaseClient.from('jobs').delete().eq('name', workOrderName); if (deleteJobError) console.error('Failed to delete job:', deleteJobError); } }
             async function revertSelectedBills(buttonElement, newStatus) { const workOrderName = buttonElement.dataset.workOrderName; const groupEl = buttonElement.closest('.work-order-group'); const selectedIds = getSelectedOrderIds(groupEl); if (selectedIds.length === 0) return alert('กรุณาเลือกบิล'); if (!confirm(`ต้องการคืน ${selectedIds.length} บิล ไปที่ "${newStatus}"?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: newStatus, work_order_name: null }).in('id', selectedIds); if (updateError) throw updateError; await updateWorkOrderCount(workOrderName); await updatePlannerJob(workOrderName, selectedIds); alert('คืนสถานะสำเร็จ!');  await loadInitialData(true);} catch (error) { console.error('Error reverting:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
             async function cancelSelectedBillsFromWorkOrder(buttonElement) { const workOrderName = buttonElement.dataset.workOrderName; const groupEl = buttonElement.closest('.work-order-group'); const selectedIds = getSelectedOrderIds(groupEl); if (selectedIds.length === 0) return alert('กรุณาเลือกบิล'); if (!confirm(`ต้องการ **ยกเลิก** ${selectedIds.length} บิล?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: 'ยกเลิก', work_order_name: null }).in('id', selectedIds); if (updateError) throw updateError; await updateWorkOrderCount(workOrderName); await updatePlannerJob(workOrderName, selectedIds); alert('ยกเลิกสำเร็จ!'); await loadInitialData(true); } catch (error) { console.error('Error cancelling:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
-            async function cancelWorkOrder(workOrderName) { if (!confirm(`ต้องการ **ยกเลิกใบงาน** "${workOrderName}"?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: 'ลงข้อมูลเสร็จสิ้น', work_order_name: null }).eq('work_order_name', workOrderName); if (updateError) throw updateError; const { error: deleteError } = await supabaseClient.from('work_orders').delete().eq('work_order_name', workOrderName); if (deleteError) throw deleteError; const { error: deleteJobError } = await supabaseClient.from('jobs').delete().eq('name', workOrderName); if (deleteJobError) console.error(`Failed to delete job ${workOrderName}:`, deleteJobError.message); alert(`ยกเลิกใบงาน "${workOrderName}" เรียบร้อย`);await loadInitialData(true); } catch (error) { console.error('Error cancelling WO:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
+            async function cancelWorkOrder(workOrderName) { 
+                if (!confirm(`ต้องการ **ยกเลิกใบงาน** "${workOrderName}"?\n(ข้อมูลจะถูกลบออกจากแผนผลิตด้วย)`)) return; 
+                loadingOverlay.style.display = 'flex'; 
+                try { 
+                    // 1. คืนสถานะบิลในตาราง orders
+                    await supabaseClient.from('orders').update({ status: 'ลงข้อมูลเสร็จสิ้น', work_order_name: null }).eq('work_order_name', workOrderName); 
+                    // 2. ลบออกจากประวัติ work_orders
+                    await supabaseClient.from('work_orders').delete().eq('work_order_name', workOrderName); 
+                    // 3. ลบออกจากแผนผลิตในตาราง plan_jobs
+                    await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
+                    
+                    alert(`ยกเลิกใบงาน "${workOrderName}" เรียบร้อย`);
+                    await loadInitialData(true); 
+                } catch (error) { 
+                    alert(`เกิดพลาด: ${error.message}`); 
+                } finally { 
+                    loadingOverlay.style.display = 'none'; 
+                } 
+            }
+
+            async function updatePlannerJob(workOrderName, selectedIds = []) { 
+                const remainingBills = allOrdersData.filter(order => order.work_order_name === workOrderName && !selectedIds.includes(String(order.id))); 
+                if (remainingBills.length > 0) { 
+                    // คำนวณจำนวนใหม่จากบิลที่เหลือ
+                    const qty = { "เบิก": 0, "STAMP": 0, "STK": 0, "CTT": 0, "LASER": 0, "TUBE": 0, "QC": remainingBills.length, "PACK": remainingBills.length };
+                    remainingBills.forEach(order => {
+                        (order.order_items || []).forEach(item => {
+                            const product = fullProductList.find(p => p.id === item.product_id);
+                            if (product && product.product_category) {
+                                const cat = product.product_category.toUpperCase();
+                                if (cat.includes('STAMP')) { qty["STAMP"]++; qty["เบิก"]++; }
+                                if (cat.includes('STK')) qty["STK"]++;
+                                if (cat.includes('UV') || cat.includes('SUBLIMATION')) qty["CTT"]++; 
+                                if (cat.includes('LASER')) { qty["LASER"]++; qty["เบิก"]++; }
+                                if (cat.includes('TUBE')) qty["TUBE"]++;
+                            }
+                        });
+                    });
+                    // อัปเดตในตาราง plan_jobs
+                    await supabaseClient.from('plan_jobs').update({ qty: qty }).eq('name', workOrderName); 
+                } else { 
+                    // ถ้าไม่เหลือบิลเลย ให้ลบใบงานทิ้งจากแผนผลิต
+                    await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
+                } 
+            }
             
             function validateOrderForCompletion(order) {
                 if (!order) return { isValid: false, reason: "ไม่พบข้อมูลออร์เดอร์" };
@@ -4932,152 +5038,148 @@ window.patternSystem = (() => {
     return { initializeApp, remove, edit };
 })();
 
-        // --- PLANNER SYSTEM MODULE (FIXED SELECT ALL & EXPORT SELECTED) ---
+       // --- PLANNER SYSTEM MODULE (OMS SUMMARY VIEW - VIEW ONLY) ---
         window.plannerSystem = (() => {
-            let isInitialized = false; let container = null; let currentUserRole = null; let state = { jobs: [] };
-            const el = (sel, context = document) => context.querySelector(sel); const cel = (tag, attrs = {}) => { const n = document.createElement(tag); for (const k in attrs) { if (k === 'text') n.textContent = attrs[k]; else n.setAttribute(k, attrs[k]); } return n; }; const sameDay = (d1, d2) => d1 === d2;
+            let state = { settings: { departments: [] }, jobs: [] };
 
-            function setupEventListeners() { 
-                el('#j_date').addEventListener('change', renderJobs); 
-                el('#j_search').addEventListener('input', renderJobs); 
-                el('#j_clear').addEventListener('click', () => { el('#j_date').value = ''; el('#j_search').value = ''; renderJobs(); }); 
-                el('#btnExportForSorting').addEventListener('click', exportJobsForSorting); 
-                el('#tableJobs').addEventListener('click', handleTableClick); 
-
-                // FIX: เพิ่ม Event สำหรับเลือกทั้งหมด
-                el('#j_selectAll').addEventListener('change', (e) => {
-                    const isChecked = e.target.checked;
-                    container.querySelectorAll('.job-checkbox').forEach(cb => {
-                        cb.checked = isChecked;
-                        const row = cb.closest('tr');
-                        if (row) row.classList.toggle('row-selected', isChecked);
-                    });
-                });
-            }
-
-            async function initializeApp(userRole) { if (isInitialized && currentUserRole === userRole) { await internal_load(); return; } container = el('#planner-system-container'); currentUserRole = userRole; loadingOverlay.style.display = 'flex'; await internal_load(); loadingOverlay.style.display = 'none'; if (!isInitialized) { setupEventListeners(); setupRealtimeSubscriptions(); } updateAccessControls(); isInitialized = true; }
-            
-            async function internal_load() { try { const { data: jobsData, error: jobsError } = await supabaseClient.from('jobs').select('*').order('created_at', { ascending: false }); if (jobsError) throw new Error('โหลดใบงานไม่ได้: ' + jobsError.message); state.jobs = jobsData || []; } catch (e) { console.error("Planner load error:", e); alert('โหลดข้อมูลไม่ได้! ' + e.message); state.jobs = []; } renderAll(); }
-            
-            function updateAccessControls() { 
-    // เพิ่มสิทธิ์ให้ manager สามารถปลดล็อคปุ่มจัดการต่างๆ ได้
-    const unlocked = currentUserRole === 'superadmin' || currentUserRole === 'production' || currentUserRole === 'manager'; 
-    
-    container.querySelectorAll('#viewJobs input, #viewJobs select, #viewJobs button').forEach(elem => { 
-        if(elem.id !== 'j_selectAll' && !elem.classList.contains('job-checkbox')) {
-            elem.disabled = !unlocked; 
-        }
-    }); 
-    renderAll(); 
-}
-
-            function renderAll() { if (!container) return; populateJobDateFilter(); renderJobs(); }
-            
-            function populateJobDateFilter() { const dateSelect = el('#j_date'); if (!dateSelect) return; const today = new Date().toISOString().slice(0, 10); const jobDates = state.jobs.map(j => j.date); const allDates = [...new Set([today, ...jobDates])].sort().reverse(); dateSelect.innerHTML = '<option value="">ทุกวัน</option>'; allDates.forEach(d => dateSelect.add(new Option(d, d))); dateSelect.value = today; }
-            
-            function renderJobs() { 
-                const tbody = el('#tableJobs tbody'); 
-                if (!tbody) return; 
-                tbody.innerHTML = ''; 
-                // Reset select all checkbox
-                if(el('#j_selectAll')) el('#j_selectAll').checked = false;
-
-                const qDate = el('#j_date').value; 
-                const qStr = (el('#j_search').value || '').toLowerCase(); 
-                const filteredJobs = state.jobs.filter(j => { const dateMatch = !qDate || sameDay(j.date, qDate); const searchMatch = !qStr || j.name.toLowerCase().includes(qStr); return dateMatch && searchMatch; }); 
-                
-                if (filteredJobs.length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;">ไม่พบใบงานสำหรับวันที่เลือก</td></tr>`; return; } 
-                
-                filteredJobs.forEach(j => { 
-                    const tr = cel('tr'); 
-                    tr.dataset.jobId = j.id; 
-                    tr.innerHTML = `<td class="checkbox-cell"><input type="checkbox" class="job-checkbox" data-id="${j.id}"></td>`; 
-                    
-                    const qtyCell = cel('td'); 
-                    const qtyContainer = cel('div', { class: 'qty-pills-container' }); 
-                    const depts = ['STAMP', 'STK', 'CTT', 'LASER', 'TUBE', 'PACK']; 
-                    depts.forEach(d => { const q = j.qty?.[d] || 0; if (q > 0) qtyContainer.appendChild(cel('span', { class: 'pill', text: `${d}: ${q}` })); }); 
-                    qtyCell.appendChild(qtyContainer); 
-                    
-                    let cutTimeText = j.cut || '-'; if (cutTimeText && cutTimeText.length > 5) cutTimeText = cutTimeText.substring(0, 5); 
-                    const nameCell = cel('td'); nameCell.innerHTML = `<strong>${j.name}</strong>`; 
-                    const dateCell = cel('td', { text: j.date }); 
-                    const cutCell = cel('td', { text: cutTimeText }); 
-                    const tdAct = cel('td', { class: 'action-cell-buttons'}); 
-                    tdAct.innerHTML = `<button class="btn btn-warning btn-sm edit-job-btn" data-job-id="${j.id}">แก้ไข</button><button class="btn btn-danger btn-sm delete-job-btn" data-job-id="${j.id}">ลบ</button>`; 
-                    tr.append(nameCell, dateCell, cutCell, qtyCell, tdAct); 
-                    tbody.appendChild(tr); 
-
-                    // Highlight row on checkbox change
-                    tr.querySelector('.job-checkbox').addEventListener('change', (e) => {
-                        tr.classList.toggle('row-selected', e.target.checked);
-                    });
-                }); 
-            }
-
-            function handleTableClick(e) { const target = e.target; if (target.classList.contains('edit-job-btn')) { const jobId = target.dataset.jobId; showJobEditor(jobId); } if (target.classList.contains('delete-job-btn')) { const jobId = target.dataset.jobId; deleteJob(jobId); } }
-            
-            async function deleteJob(jobId) { const jobToDelete = state.jobs.find(j => j.id == jobId); if(!jobToDelete) return; if (!confirm(`ต้องการลบใบงาน "${jobToDelete.name}"?`)) return; loadingOverlay.style.display = 'flex'; try { const { error } = await supabaseClient.from('jobs').delete().eq('id', jobId); if (error) throw error; alert('ลบสำเร็จ'); } catch(err) { alert('เกิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; } }
-            
-            function showJobEditor(jobId) { /* ... โค้ดส่วน Editor เหมือนเดิม ... */
-                const job = state.jobs.find(j => j.id == jobId); if (!job) return; const formContainer = document.createElement('div'); formContainer.id = 'job-editor-modal-container'; formContainer.innerHTML = `<div class="modal-overlay" style="display: flex;"><div class="modal-content" style="max-width: 600px;"><h2 id="job-editor-title">แก้ไขใบงาน: ${job.name}</h2><div id="job-editor-form"><div class="planner-form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 15px;"><div class="planner-form-group"><label for="edit_j_date">วันที่</label><input type="date" id="edit_j_date" value="${job.date}"></div><div class="planner-form-group"><label for="edit_j_cut">เวลาตัด</label><input type="time" id="edit_j_cut" value="${job.cut || ''}"></div></div><h3 class="planner-section-title">จำนวนต่อแผนก</h3><div id="edit_j_qty" class="planner-form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 10px 20px;"></div><div class="modal-actions"><button type="button" class="btn btn-secondary" id="edit_j_cancel">ยกเลิก</button><button type="button" class="btn btn-primary" id="edit_j_save">บันทึก</button></div></div></div></div>`; document.body.appendChild(formContainer); const qtyHost = formContainer.querySelector('#edit_j_qty'); const depts = ['STAMP', 'STK', 'CTT', 'LASER', 'TUBE', 'PACK']; depts.forEach(d => { const qty = job.qty?.[d] || 0; const div = cel('div', { class: 'planner-qty-group' }); div.innerHTML = `<label>${d}</label><input type="number" class="edit-qty" data-dept="${d}" value="${qty}" min="0">`; qtyHost.appendChild(div); }); const closeModal = () => document.body.removeChild(formContainer); formContainer.querySelector('#edit_j_save').onclick = async () => { const newQty = {}; qtyHost.querySelectorAll('.edit-qty').forEach(inp => { newQty[inp.dataset.dept] = parseInt(inp.value, 10) || 0; }); const updates = { date: formContainer.querySelector('#edit_j_date').value, cut: formContainer.querySelector('#edit_j_cut').value, qty: newQty, }; loadingOverlay.style.display = 'flex'; const { error } = await supabaseClient.from('jobs').update(updates).eq('id', jobId); loadingOverlay.style.display = 'none'; if (error) { alert('อัปเดตล้มเหลว: ' + error.message); } else { alert('อัปเดตสำเร็จ'); closeModal(); } }; formContainer.querySelector('#edit_j_cancel').onclick = closeModal; formContainer.querySelector('.modal-overlay').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
-            }
-
-            // MODIFIED: รองรับการ Export เฉพาะที่เลือก
-            function exportJobsForSorting() {
-                const checkedCheckboxes = container.querySelectorAll('.job-checkbox:checked');
-                const checkedIds = Array.from(checkedCheckboxes).map(cb => String(cb.dataset.id));
-
-                let jobsToExport;
-
-                if (checkedIds.length > 0) {
-                    // 1. ถ้ามีการติ๊กเลือก -> Export เฉพาะที่เลือก
-                    jobsToExport = state.jobs.filter(j => checkedIds.includes(String(j.id)));
-                } else {
-                    // 2. ถ้าไม่มีการติ๊กเลย -> Export ทั้งหมดที่กำลังแสดงอยู่ในตาราง (ตาม Filter)
-                    const qDate = el('#j_date').value;
-                    const qStr = (el('#j_search').value || '').toLowerCase();
-                    jobsToExport = state.jobs.filter(j => {
-                        const dateMatch = !qDate || sameDay(j.date, qDate);
-                        const searchMatch = !qStr || j.name.toLowerCase().includes(qStr);
-                        return dateMatch && searchMatch;
-                    });
+            async function initializeApp(role) {
+                // ผูกเหตุการณ์ Filter
+                const clearBtn = document.getElementById('j_clear');
+                if (clearBtn) {
+                    clearBtn.onclick = () => {
+                        document.getElementById('j_date').value = '';
+                        document.getElementById('j_search').value = '';
+                        renderPlannerView();
+                    };
                 }
-
-                // เรียงลำดับตามเวลาตัด
-                jobsToExport.sort((a, b) => (a.cut || "").localeCompare(b.cut || ""));
-
-                if (jobsToExport.length === 0) {
-                    alert('ไม่พบใบงานสำหรับ Export');
-                    return;
-                }
-
-                const headers = ['date', 'name', 'cut', 'STAMP', 'STK', 'CTT', 'LASER', 'TUBE', 'PACK'];
-                const dataToExport = jobsToExport.map(job => {
-                    const qty = job.qty || {};
-                    return [
-                        job.date,
-                        job.name,
-                        job.cut || '',
-                        qty.STAMP || 0,
-                        qty.STK || 0,
-                        qty.CTT || 0,
-                        qty.LASER || 0,
-                        qty.TUBE || 0,
-                        qty.PACK || 0
-                    ];
-                });
-
-                const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "Jobs");
                 
+                const dateFilter = document.getElementById('j_date');
+                if (dateFilter) dateFilter.onchange = renderPlannerView;
+                
+                const searchFilter = document.getElementById('j_search');
+                if (searchFilter) searchFilter.oninput = renderPlannerView;
+
+                await loadPlannerData();
+                
+                // Realtime Sync ติดตามการเปลี่ยนแปลงจาก Database
+                supabaseClient.channel('planner-realtime-oms-viewonly')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_jobs' }, loadPlannerData)
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'work_orders' }, loadPlannerData)
+                    .subscribe();
+            }
+
+            async function loadPlannerData() {
+                try {
+                    // ดึงข้อมูลแผนงาน และ สถานะใบงาน
+                    const [jobRes, woRes] = await Promise.all([
+                        supabaseClient.from('plan_jobs').select('*').order('order_index', { ascending: false }),
+                        supabaseClient.from('work_orders').select('work_order_name, status')
+                    ]);
+                    
+                    state.jobs = jobRes.data || [];
+                    state.workOrders = woRes.data || [];
+                    
+                    populateDateFilter(); 
+                    renderPlannerView();  
+                } catch (e) { console.error("Planner load error", e); }
+            }
+
+            function populateDateFilter() {
+                const sel = document.getElementById('j_date');
+                if (!sel) return;
+                const currentVal = sel.value;
                 const today = new Date().toISOString().slice(0, 10);
-                XLSX.writeFile(workbook, `Jobs_For_Sorting_${today}.xlsx`);
+                const dates = [...new Set(state.jobs.map(j => j.date))];
+                
+                if (today && !dates.includes(today)) dates.push(today);
+                dates.sort((a, b) => b.localeCompare(a));
+
+                sel.innerHTML = '<option value="">-- ทุกวัน --</option>';
+                dates.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d; opt.textContent = d;
+                    sel.appendChild(opt);
+                });
+
+                if (!currentVal) sel.value = today;
+                else sel.value = currentVal;
             }
 
-            function setupRealtimeSubscriptions() { const jobChannel = supabaseClient.channel('public:jobs'); jobChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, async (payload) => { await internal_load(); }).subscribe(); }
-            return { initializeApp };
+            function renderPlannerView() {
+                const tableContainer = document.getElementById('tableJobs');
+                if (!tableContainer) return;
+
+                const selectedDate = document.getElementById('j_date').value;
+                const searchTerm = document.getElementById('j_search').value.toLowerCase();
+
+                const filteredJobs = state.jobs.filter(j => {
+                    const dateMatch = !selectedDate || j.date === selectedDate;
+                    const searchMatch = !searchTerm || j.name.toLowerCase().includes(searchTerm);
+                    return dateMatch && searchMatch;
+                });
+
+                // วาดหัวตาราง (ตัดคอลัมน์ จัดการ ออก)
+                let html = `
+                <thead>
+                    <tr style="background:#f8f9fa;">
+                        <th style="border:1px solid #ddd; padding:12px; min-width:200px; text-align:left;">ชื่อใบงาน</th>
+                        <th style="border:1px solid #ddd; padding:12px; width:100px; text-align:center;">เวลาตัด</th>
+                        <th style="border:1px solid #ddd; padding:12px; width:150px; text-align:center;">สถานะ</th>
+                        <th style="border:1px solid #ddd; padding:12px; text-align:left;">จำนวนงานแยกตามแผนก</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+                if (filteredJobs.length > 0) {
+                    filteredJobs.forEach(j => {
+                        // 1. เวลาตัด (วินาทีตัดออก)
+                        const cutDisplay = (j.cut && j.cut.length >= 5) ? j.cut.substring(0, 5) : (j.cut || '-');
+
+                        // 2. ดึงสถานะจาก work_orders
+                        const wo = state.workOrders.find(w => w.work_order_name === j.name);
+                        const statusText = wo ? wo.status : 'กำลังผลิต';
+                        const statusColor = statusText === 'จัดส่งแล้ว' ? '#28a745' : '#0071e3';
+
+                        // 3. แสดงจำนวนชิ้นแยกแผนก (Qty)
+                        let qtyHtml = '';
+                        if (j.qty) {
+                            qtyHtml = Object.entries(j.qty)
+                                .filter(([dept, count]) => count > 0)
+                                .map(([dept, count]) => `
+                                    <span style="display:inline-block; background:#f0f7ff; border:1px solid #cce3ff; color:#0056b3; padding:2px 8px; border-radius:4px; margin:2px; font-size:11px; font-weight:bold;">
+                                        ${dept}: <span style="color:#d9534f;">${count}</span>
+                                    </span>
+                                `).join('');
+                        }
+
+                        html += `
+                        <tr>
+                            <td style="border:1px solid #ddd; padding:12px;">
+                                <div style="font-weight:bold; color:#1a1a1a; font-size:14px;">${j.name}</div>
+                                <div style="font-size:10px; color:#888;">วันที่ใบงาน: ${j.date}</div>
+                            </td>
+                            <td style="border:1px solid #ddd; padding:12px; text-align:center; font-size:16px; font-weight:900; color:#d9534f;">
+                                ${cutDisplay}
+                            </td>
+                            <td style="border:1px solid #ddd; padding:12px; text-align:center;">
+                                <span style="background:${statusColor}; color:white; padding:5px 12px; border-radius:15px; font-size:11px; font-weight:bold; display:inline-block; min-width:100px;">
+                                    ${statusText}
+                                </span>
+                            </td>
+                            <td style="border:1px solid #ddd; padding:12px;">
+                                ${qtyHtml || '<span style="color:#ccc;">-</span>'}
+                            </td>
+                        </tr>`;
+                    });
+                } else {
+                    html += `<tr><td colspan="4" style="padding:60px; text-align:center; color:#999; font-style:italic;">-- ไม่พบข้อมูลใบงานที่ค้นหา --</td></tr>`;
+                }
+
+                html += `</tbody>`;
+                tableContainer.innerHTML = html;
+            }
+
+            return { initializeApp, loadData: loadPlannerData };
         })();
         
         // --- SALES REPORT SYSTEM MODULE ---
