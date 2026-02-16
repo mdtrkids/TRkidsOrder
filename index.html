@@ -1887,7 +1887,7 @@ window.cartoonPatternList = cartoonPatternList;
                                     customer_name:String(r["ชื่อลูกค้า"] || ''), 
                                     // แก้ไขบรรทัดด้านล่างนี้:
                                     customer_address:String(r["ชื่อที่อยู่-เบอร์โทรผู้รับ"] || r["ที่อยู่"] || r["เลขพัสดุ"] || ''), 
-                                    price:parseFloat(r["ราคา"])||0, shipping_cost:parseFloat(r["ค่าส่ง"])||0, 
+                                    price:parseFloat(r["ราคาก่อนลด"])||0, shipping_cost:parseFloat(r["ค่าส่ง"])||0, 
                                     discount:parseFloat(r["ส่วนลด"])||0, total_amount:parseFloat(r["ยอดสุทธิ"])||0, 
                                     payment_method:"โอน", payment_date: pDate, payment_time: pTime, items:[] 
                                 });
