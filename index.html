@@ -1496,7 +1496,9 @@ window.cartoonPatternList = cartoonPatternList;
 
                     if (productsRes.error) throw new Error('Could not load products');
                     fullProductList = productsRes.data;
-                    productList = productsRes.data.filter(p => p.is_active !== false).map(p => ({ id: p.id, text: p.product_name }));
+	productList = productsRes.data
+    	.filter(p => p.is_active !== false && p.product_type === 'FINISHPRODUCT')
+    	.map(p => ({ id: p.id, text: p.product_name }));
                     
                     if (channelsRes.error) throw new Error('Could not load channels');
                     channelList = channelsRes.data; 
