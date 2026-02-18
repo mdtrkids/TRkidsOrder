@@ -802,7 +802,7 @@
         	<th>ชื่อสินค้า</th>
         	<th>หมวดหมู่</th>
         	<th>ประเภท</th>
-        	<th>รหัสยาง</th>
+        	<th>อะไหล่</th>
         	<th>ที่จัดเก็บ</th>
         	<th>จัดการ</th>
     	</tr>
@@ -3501,7 +3501,7 @@ itemsInWorkOrder.filter(item => {
                 if (item.rubber_code) {
                     const key = item.rubber_code;
                     if (!sparePartsMap[key]) {
-                        sparePartsMap[key] = { name: `หน้ายาง+โฟม ${item.rubber_code}`, qty: 0 };
+                        sparePartsMap[key] = { name: ` ${item.rubber_code}`, qty: 0 };
                     }
                     sparePartsMap[key].qty += 1;
                 }
@@ -3530,7 +3530,7 @@ itemsInWorkOrder.filter(item => {
                 html += `</tbody></table>`;
 
                 if(finalSpareList.length > 0) {
-                    html += `<h3>🔧 อะไหล่ (หน้ายาง/โฟม)</h3><table ${tableStyle}>
+                    html += `<h3>🔧 อะไหล่ </h3><table ${tableStyle}>
                         <thead><tr style="background:#f2f2f2;"><th style="${style}">รายการอะไหล่</th><th style="${style} width:20%;">จำนวน</th></tr></thead><tbody>`;
                     finalSpareList.forEach(spare => {
                         html += `<tr><td style="${style}">${spare.name}</td><td style="${style} text-align:center;">${spare.qty}</td></tr>`;
@@ -4718,12 +4718,6 @@ window.productSystem = (() => {
         if(bulkUploadBtn) bulkUploadBtn.addEventListener('click', () => bulkImageInput.click());
         if(bulkImageInput) bulkImageInput.addEventListener('change', (e) => handleBulkImageUpload(e.target.files));
         
-        if(categoryInput) {
-            categoryInput.addEventListener('input', (e) => { 
-                const isStamp = (e.target.value || '').toUpperCase().includes('STAMP'); 
-                if(rubberCodeGroup) rubberCodeGroup.style.display = isStamp ? 'block' : 'none'; 
-            });
-        }
         if (imgInput) {
             imgInput.addEventListener('change', function() {
                 const file = this.files[0];
@@ -4840,25 +4834,52 @@ window.productSystem = (() => {
 
     function showProductModal(product = null) { 
         if (!productForm) return;
+
+        // ล้างข้อมูลเดิมในฟอร์มออกก่อน
         productForm.reset(); 
+
+        // จัดการการแสดงผลรูปภาพตัวอย่าง (Preview)
         if (imgPreview) {
             imgPreview.src = (product && product.image_url) ? product.image_url : "";
             imgPreview.style.display = (product && product.image_url) ? 'inline-block' : 'none';
         }
+
         if (product) { 
+            // --- โหมดแก้ไขสินค้า ---
             modalTitle.textContent = 'แก้ไขข้อมูลสินค้า'; 
+            
+            // ใส่ข้อมูลเดิมลงใน Input ต่างๆ
             document.getElementById('product-id-input').value = product.id; 
             document.getElementById('product-code-input').value = product.product_code; 
+            
+            // ล็อกรหัสสินค้าไม่ให้แก้ไข (เพราะใช้เป็น Primary Key/Conflict target)
             document.getElementById('product-code-input').readOnly = true; 
+            
             document.getElementById('product-name-input').value = product.product_name; 
             document.getElementById('product-category-input').value = product.product_category || ''; 
             document.getElementById('product-type-input').value = product.product_type || ''; 
+            
+            // ช่องอะไหล่ (เดิมคือรหัสยาง) - แสดงค่าเดิม หรือค่าว่าง
             document.getElementById('product-rubber-code-input').value = product.rubber_code || ''; 
+            
             document.getElementById('storage-location-input').value = product.storage_location || ''; 
         } else { 
+            // --- โหมดเพิ่มสินค้าใหม่ ---
             modalTitle.textContent = 'เพิ่มสินค้าใหม่'; 
+            
+            // ล้าง ID และเปิดให้กรอกรหัสสินค้าได้
+            document.getElementById('product-id-input').value = ''; 
+            document.getElementById('product-code-input').value = ''; 
             document.getElementById('product-code-input').readOnly = false; 
+            
+            document.getElementById('product-name-input').value = ''; 
+            document.getElementById('product-category-input').value = ''; 
+            document.getElementById('product-type-input').value = ''; 
+            document.getElementById('product-rubber-code-input').value = ''; 
+            document.getElementById('storage-location-input').value = ''; 
         } 
+
+        // แสดง Modal (ใช้ display: flex เพื่อให้จัดกึ่งกลางตาม CSS)
         modal.style.display = 'flex'; 
     }
 
@@ -5791,10 +5812,10 @@ window.patternSystem = (() => {
                     <label for="product-type-input">ประเภท (product_type)</label>
                     <input type="text" id="product-type-input">
                 </div>
-                <div id="rubber-code-group" class="modal-form-group" style="display: none;">
-                    <label for="product-rubber-code-input">รหัสยาง (rubber_code)</label>
-                    <input type="text" id="product-rubber-code-input">
-                </div>
+                <div id="rubber-code-group" class="modal-form-group"> 
+               <label for="product-rubber-code-input">อะไหล่</label>
+              <input type="text" id="product-rubber-code-input" placeholder="ระบุอะไหล่ (ถ้ามี)">
+              </div>
                 <div class="modal-form-group">
                     <label for="storage-location-input">ที่จัดเก็บ (storage_location)</label>
                     <input type="text" id="storage-location-input">
