@@ -1866,8 +1866,17 @@ window.cartoonPatternList = cartoonPatternList;
                         const workbook = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates: true});
                         const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {raw:false});
                         const map = new Map();
+                        
                         for (const r of json) {
-                            const b = String(r["เลขบิล"] || '').trim(); if (!b) continue;
+                            const b = String(r["เลขบิล"] || '').trim(); 
+                            if (!b) continue;
+
+                            // ดึงค่าตัวเลขจากแถวปัจจุบัน
+                            const rowPrice = parseFloat(String(r["ราคาก่อนลด"] || 0).replace(/,/g, '')) || 0;
+                            const rowShipping = parseFloat(String(r["ค่าส่ง"] || 0).replace(/,/g, '')) || 0;
+                            const rowDiscount = parseFloat(String(r["ส่วนลด"] || 0).replace(/,/g, '')) || 0;
+                            const rowTotal = parseFloat(String(r["ยอดสุทธิ"] || 0).replace(/,/g, '')) || 0;
+
                             if (!map.has(b)) {
                                 let pDate = null; let pTime = null;
                                 let rawDate = r["วันที่สั่งซื้อ"];
@@ -1882,32 +1891,50 @@ window.cartoonPatternList = cartoonPatternList;
                                 }
                                 if (r["เวลา"]) pTime = String(r["เวลา"]).trim().substring(0, 5);
 
+                                // สร้าง Object ใหม่สำหรับบิลนี้
                                 map.set(b, { 
-                                    bill_no:b, channel_code:'WY', status:'ลงข้อมูลเสร็จสิ้น', 
-                                    customer_name:String(r["ชื่อลูกค้า"] || ''), 
-                                    // แก้ไขบรรทัดด้านล่างนี้:
-                                    customer_address:String(r["ชื่อที่อยู่-เบอร์โทรผู้รับ"] || r["ที่อยู่"] || r["เลขพัสดุ"] || ''), 
-                                    price:parseFloat(r["ราคาก่อนลด"])||0, shipping_cost:parseFloat(r["ค่าส่ง"])||0, 
-                                    discount:parseFloat(r["ส่วนลด"])||0, total_amount:parseFloat(r["ยอดสุทธิ"])||0, 
-                                    payment_method:"โอน", payment_date: pDate, payment_time: pTime, items:[] 
+                                    bill_no: b, 
+                                    channel_code: 'WY', 
+                                    status: 'ลงข้อมูลเสร็จสิ้น', 
+                                    customer_name: String(r["ชื่อลูกค้า"] || ''), 
+                                    customer_address: String(r["ชื่อที่อยู่-เบอร์โทรผู้รับ"] || r["ที่อยู่"] || r["เลขพัสดุ"] || ''), 
+                                    price: rowPrice, 
+                                    shipping_cost: rowShipping, 
+                                    discount: rowDiscount, 
+                                    total_amount: rowTotal, 
+                                    payment_method: "โอน", 
+                                    payment_date: pDate, 
+                                    payment_time: pTime, 
+                                    items: [] 
                                 });
+                            } else {
+                                // หากมีเลขบิลนี้อยู่แล้ว ให้บวกยอดเงินเพิ่ม (SUM)
+                                const existingOrder = map.get(b);
+                                existingOrder.price += rowPrice;
+                                existingOrder.shipping_cost += rowShipping;
+                                existingOrder.discount += rowDiscount;
+                                existingOrder.total_amount += rowTotal;
                             }
+
+                            // เพิ่มรายการสินค้าเข้าไปในบิล (ทำทุกรอบที่เจอบรรทัดสินค้า)
                             const p = fullProductList.find(x => String(x.product_name).trim() === String(r["รหัส"]).trim() && String(x.product_code).startsWith('22'));
                             map.get(b).items.push({ 
-                                product_id:p?p.id:null, 
-                                product_name:p?p.product_name:String(r["สินค้า"]||'รหัสไม่ตรง'), 
+                                product_id: p ? p.id : null, 
+                                product_name: p ? p.product_name : String(r["สินค้า"] || 'รหัสไม่ตรง'), 
                                 cartoon_pattern: "", 
                                 line_pattern: "",
                                 line_1: String(r["บรรทัด1"] || ""), 
                                 line_2: String(r["บรรทัด2"] || ""), 
                                 line_3: "", 
                                 font: String(r["font"] || ""), 
-                                quantity: parseInt(r["จำนวน"])||1, 
+                                quantity: parseInt(r["จำนวน"]) || 1, 
                                 notes: String(r["หมายเหตุ"] || "") 
                             });
                         }
                         await processAndSaveImportedOrders(Array.from(map.values()), true);
-                    } catch (err) { alert(err.message); }
+                    } catch (err) { 
+                        alert("เกิดข้อผิดพลาด: " + err.message); 
+                    }
                 }; reader.readAsArrayBuffer(file);
             }
 
