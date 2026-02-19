@@ -1305,7 +1305,23 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
         <td style="padding:5px 15px; text-align:center;"><button type="button" class="btn btn-danger btn-sm remove-pay-row" style="padding: 2px 8px; font-size: 12px; border-radius: 4px;">✕</button></td>
     `;
     
-    row.querySelectorAll('input').forEach(input => input.addEventListener('input', calculateTotal));
+    const amountInput = row.querySelector('.pay-amount');
+
+    // --- จุดสำคัญ: ถ้ามีข้อมูลยอดเงินเข้ามา (เป็นการโหลดบิลเก่ามาแก้) ให้ล็อคไม่ให้เลขเปลี่ยนเอง ---
+    if (data.amount > 0) {
+        amountInput.dataset.manual = "true";
+    }
+
+    // ดักจับว่าถ้าผู้ใช้มีการพิมพ์ตัวเลขเองในช่องนี้ ให้หยุดการ Auto-fill
+    amountInput.addEventListener('input', function() {
+        amountInput.dataset.manual = "true"; // ตั้งค่าว่าเราพิมพ์เองแล้วนะ
+        calculateTotal();
+    });
+
+    row.querySelectorAll('input').forEach(input => {
+        if(input !== amountInput) input.addEventListener('input', calculateTotal);
+    });
+
     row.querySelector('.remove-pay-row').addEventListener('click', function() {
         row.remove();
         calculateTotal();
@@ -2599,14 +2615,14 @@ remainingBills.forEach(order => {
                     const totalAmount = parseFloat(container.querySelector('#total_amount').value) || 0;
                     
                     const paymentRecords = [];
-                    document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
-                        const amt = parseFloat(row.querySelector('.pay-amount').value) || 0;
-                        const dt = row.querySelector('.pay-date').value;
-                        const tm = row.querySelector('.pay-time').value;
-                        if (amt > 0) {
-                            paymentRecords.push({ amount: amt, date: dt, time: tm });
-                        }
-                    });
+document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
+    const amt = parseFloat(row.querySelector('.pay-amount').value) || 0;
+    const dt = row.querySelector('.pay-date').value;
+    const tm = row.querySelector('.pay-time').value;
+    if (amt > 0) {
+        paymentRecords.push({ amount: amt, date: dt, time: tm });
+    }
+});
 
                     if (!customerName) {
                         throw new Error("กรุณากรอก 'ชื่อลูกค้า' ก่อนทำการบันทึก");
@@ -2874,55 +2890,57 @@ remainingBills.forEach(order => {
             async function generateNextBillNo(channelCode) { const today = new Date(); const year = String(today.getFullYear() + 543).slice(-2); const month = String(today.getMonth() + 1).padStart(2, '0'); const prefix = `${channelCode}${year}${month}`; const { data, error } = await supabaseClient.from('orders').select('bill_no').like('bill_no', `${prefix}%`).order('bill_no', { ascending: false }).limit(1); if (error) throw new Error(`ค้นหาบิลล่าสุดไม่ได้: ${error.message}`); let nextSequence = 1; if (data.length > 0) { const lastBillNo = data[0].bill_no; const lastSequence = parseInt(lastBillNo.slice(prefix.length), 10); if (!isNaN(lastSequence)) { nextSequence = lastSequence + 1; } } return `${prefix}${String(nextSequence).padStart(5, '0')}`; }
             
             function calculateTotal() {
-                const price = parseFloat(container.querySelector('#price').value) || 0;
-                const shipping = parseFloat(container.querySelector('#shipping_cost').value) || 0;
-                const discount = parseFloat(container.querySelector('#discount').value) || 0;
-                
-                const preTaxBase = price + shipping - discount;
-                let total = preTaxBase; 
-                let vat = 0;
+    const price = parseFloat(container.querySelector('#price').value) || 0;
+    const shipping = parseFloat(container.querySelector('#shipping_cost').value) || 0;
+    const discount = parseFloat(container.querySelector('#discount').value) || 0;
+    
+    const preTaxBase = price + shipping - discount;
+    let total = preTaxBase; 
+    let vat = 0;
 
-                if (requestTaxInvoiceCb.checked) {
-                    vat = preTaxBase * 0.07;
-                    total = preTaxBase + vat;
-                }
-                container.querySelector('#total_amount').value = total.toFixed(2);
+    if (requestTaxInvoiceCb.checked) {
+        vat = preTaxBase * 0.07;
+        total = preTaxBase + vat;
+    }
+    container.querySelector('#total_amount').value = total.toFixed(2);
 
-                // --- ส่วนที่ปรับปรุง: ให้ยอดเงินวิ่งตามยอดสุทธิตลอด จนกว่าจะมีการพิมพ์เอง ---
-                const rows = document.querySelectorAll('#payment-records-tbody tr');
-                if (rows.length > 0) {
-                    const firstPayInput = rows[0].querySelector('.pay-amount');
-                    if (firstPayInput) {
-                        // ถ้าเรายังไม่เคยไปพิมพ์แก้ที่ช่องนี้เอง (ไม่มี manual flag)
-                        // ให้ยอดเงินเปลี่ยนตามยอดสุทธิ (total) ตลอดเวลา ไม่ว่าจะพิมพ์เลขอะไรข้างบน
-                        if (firstPayInput.dataset.manual !== "true") {
-                            firstPayInput.value = total.toFixed(2);
-                        }
-                    }
-                }
-
-                // --- ส่วนคำนวณยอดโอนสะสม เดิม ---
-                let sumPaid = 0;
-                rows.forEach((row, index) => {
-                    const amt = parseFloat(row.querySelector('.pay-amount').value) || 0;
-                    sumPaid += amt;
-
-                    if (index === 0) {
-                        document.getElementById('payment_date').value = row.querySelector('.pay-date').value || '';
-                        document.getElementById('payment_time').value = row.querySelector('.pay-time').value || '';
-                    }
-                });
-
-                const balance = total - sumPaid;
-                const sumPaidEl = document.getElementById('sum-paid-display');
-                const balanceDueEl = document.getElementById('balance-due-display');
-                
-                if (sumPaidEl) sumPaidEl.textContent = sumPaid.toFixed(2);
-                if (balanceDueEl) {
-                    balanceDueEl.textContent = balance.toFixed(2);
-                    balanceDueEl.style.color = balance <= 0 ? 'green' : 'red';
-                }
+    // --- ส่วนที่ปรับปรุง: ให้ยอดเงินวิ่งตามยอดสุทธิ เฉพาะตอนสร้างบิลใหม่เท่านั้น ---
+    const rows = document.querySelectorAll('#payment-records-tbody tr');
+    if (rows.length > 0) {
+        const firstPayInput = rows[0].querySelector('.pay-amount');
+        if (firstPayInput) {
+            // เช็คว่าเป็นบิลใหม่ (ไม่มี currentEditingOrderId) และยังไม่ได้พิมพ์ตัวเลขเอง
+            const isNewOrder = !currentEditingOrderId; 
+            
+            if (isNewOrder && firstPayInput.dataset.manual !== "true") {
+                firstPayInput.value = total.toFixed(2);
             }
+        }
+    }
+
+    // --- คำนวณยอดโอนสะสม ---
+    let sumPaid = 0;
+    rows.forEach((row, index) => {
+        const amt = parseFloat(row.querySelector('.pay-amount').value) || 0;
+        sumPaid += amt;
+
+        if (index === 0) {
+            document.getElementById('payment_date').value = row.querySelector('.pay-date').value || '';
+            document.getElementById('payment_time').value = row.querySelector('.pay-time').value || '';
+        }
+    });
+
+    const balance = total - sumPaid;
+    const sumPaidEl = document.getElementById('sum-paid-display');
+    const balanceDueEl = document.getElementById('balance-due-display');
+    
+    if (sumPaidEl) sumPaidEl.textContent = sumPaid.toFixed(2);
+    if (balanceDueEl) {
+        balanceDueEl.textContent = balance.toFixed(2);
+        // ถ้าจ่ายครบ (balance <= 0) เป็นสีเขียว ถ้ายังค้างจ่ายเป็นสีแดง
+        balanceDueEl.style.color = balance <= 0 ? 'green' : 'red';
+    }
+}
 
             function exportForProduction(workOrderName) {
                 const ordersInWorkOrder = allOrdersData
