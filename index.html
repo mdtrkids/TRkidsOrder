@@ -2942,53 +2942,62 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
     }
 }
 
+            // 1. ฟังก์ชัน Export ไฟล์ผลิต (แก้ไข: รวมรายการทั้งใบงานแล้วเรียงตาม Item UID)
             function exportForProduction(workOrderName) {
-                const ordersInWorkOrder = allOrdersData
-                    .filter(order => order.work_order_name === workOrderName)
-                    .sort((a, b) => (a.bill_no || '').localeCompare(b.bill_no || ''));
+                const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
 
                 if (ordersInWorkOrder.length === 0) {
                     alert("ไม่พบข้อมูล");
                     return;
                 }
+
+                // รวบรวม Item จากทุกออร์เดอร์ในรอบนี้มาใส่ Array เดียวเพื่อเรียงลำดับใหม่ทั้งหมด
+                let allItemsInBatch = [];
+                ordersInWorkOrder.forEach(order => {
+                    if (order.order_items && order.order_items.length > 0) {
+                        order.order_items.forEach(item => {
+                            allItemsInBatch.push(item);
+                        });
+                    }
+                });
+
+                // เรียงลำดับรายการสินค้าทั้งหมดตาม Item UID แบบ Natural Sort (1, 2, 10)
+                allItemsInBatch.sort((a, b) => 
+                    (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true, sensitivity: 'base' })
+                );
+
                 const headers = ['ชื่อใบงาน', 'เลขบิล', 'Item UID', 'ชื่อสินค้า', 'สีหมึก', 'ชั้นที่', 'ลายการ์ตูน', 'ลายเส้น', 'ฟอนต์', 'บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3', 'จำนวน', 'หมายเหตุ', 'ไฟล์แนบ'];
                 const dataToExport = [];
                 
-                // ฟังก์ชันสำหรับป้องกัน Spreadsheet เปลี่ยนเป็นสูตร (ใช้ตัวอักษรล่องหน)
+                // ฟังก์ชันป้องกัน Excel เปลี่ยนเบอร์โทรหรือเครื่องหมาย + เป็นสูตร
                 const forceText = (val) => {
                     const str = String(val || '').trim();
                     if (str === '') return '';
-                    // ถ้าขึ้นต้นด้วย + หรือ 0 ให้เติม Zero Width Space (\u200B) นำหน้า
-                    // ตัวอักษรนี้จะมองไม่เห็นด้วยตาเปล่า แต่จะทำให้ Excel ไม่มองว่าเป็นสูตร
                     if (str.startsWith('+') || str.startsWith('0')) {
                         return "\u200B" + str; 
                     }
                     return str;
                 };
 
-                ordersInWorkOrder.forEach(order => {
-                    if (order.order_items && order.order_items.length > 0) {
-                        order.order_items.forEach(item => {
-                            const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
-                            dataToExport.push([
-                                workOrderName, 
-                                item.bill_no, 
-                                item.item_uid, 
-                                item.product_name,
-                                item.ink_color, 
-                                item.product_type, 
-                                item.cartoon_pattern, 
-                                item.line_pattern,
-                                item.font, 
-                                forceText(item.line_1),
-                                forceText(item.line_2),
-                                forceText(item.line_3),
-                                1,
-                                cleanNotes,
-                                item.file_attachment
-                            ]);
-                        });
-                    }
+                allItemsInBatch.forEach(item => {
+                    const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
+                    dataToExport.push([
+                        workOrderName, 
+                        item.bill_no, 
+                        item.item_uid, 
+                        item.product_name,
+                        item.ink_color, 
+                        item.product_type, 
+                        item.cartoon_pattern, 
+                        item.line_pattern,
+                        item.font, 
+                        forceText(item.line_1),
+                        forceText(item.line_2),
+                        forceText(item.line_3),
+                        1,
+                        cleanNotes,
+                        item.file_attachment
+                    ]);
                 });
 
                 if (dataToExport.length === 0) {
@@ -2998,7 +3007,7 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
 
                 const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
 
-                // บังคับประเภทเซลล์เป็น String
+                // บังคับประเภทเซลล์ใน Excel ให้เป็นข้อความ (String) ป้องกันเลขอัตโนมัติเพี้ยน
                 const range = XLSX.utils.decode_range(worksheet['!ref']);
                 for (let R = range.s.r + 1; R <= range.e.r; ++R) {
                     for (let C = 9; C <= 11; ++C) {
@@ -3013,17 +3022,28 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
                 XLSX.writeFile(workbook, `Production_${workOrderName}.xlsx`);
             }
 
+            // 2. ฟังก์ชัน Export สำหรับ QC (แก้ไข: เรียงลำดับตาม Item UID ให้ตรงกับไฟล์ผลิต)
             function exportForQC(workOrderName) {
-                const ordersInWorkOrder = allOrdersData
-                    .filter(order => order.work_order_name === workOrderName)
-                    .sort((a, b) => (a.bill_no || '').localeCompare(b.bill_no || ''));
+                const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
 
                 if (ordersInWorkOrder.length === 0) {
                     alert("ไม่พบข้อมูล");
                     return;
                 }
                 
-                // ฟังก์ชันป้องกันสูตร (ตัวอักษรล่องหน)
+                let allItemsInBatch = [];
+                ordersInWorkOrder.forEach(order => {
+                    if (order.order_items && order.order_items.length > 0) {
+                        order.order_items.forEach(item => {
+                            allItemsInBatch.push(item);
+                        });
+                    }
+                });
+
+                allItemsInBatch.sort((a, b) => 
+                    (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true })
+                );
+
                 const forceText = (val) => {
                     const str = String(val || '').trim();
                     if (str === '') return '';
@@ -3036,40 +3056,34 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
                 const headers = ['ชื่อใบงาน', 'เลขบิล', 'Item UID', 'รหัสสินค้า', 'ชื่อสินค้า', 'หมวดหมู่สินค้า', 'สีหมึก', 'ชั้นที่', 'ลายการ์ตูน', 'ลายเส้น', 'ฟอนต์', 'บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3', 'จำนวน', 'หมายเหตุ', 'ไฟล์แนบ'];
                 const dataToExport = [];
 
-                ordersInWorkOrder.forEach(order => {
-                    if (order.order_items && order.order_items.length > 0) {
-                        order.order_items.forEach(item => {
-                            const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
-                            const productDetails = fullProductList.find(p => p.id === item.product_id);
-                            const productCode = productDetails ? productDetails.product_code : 'N/A';
-                            const productCategory = productDetails ? productDetails.product_category : 'N/A';
+                allItemsInBatch.forEach(item => {
+                    const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
+                    const productDetails = fullProductList.find(p => p.id === item.product_id);
+                    const productCode = productDetails ? productDetails.product_code : 'N/A';
+                    const productCategory = productDetails ? productDetails.product_category : 'N/A';
 
-                            dataToExport.push([
-                                workOrderName, 
-                                item.bill_no, 
-                                item.item_uid, 
-                                productCode,
-                                item.product_name,
-                                productCategory,
-                                item.ink_color, 
-                                item.product_type, 
-                                item.cartoon_pattern, 
-                                item.line_pattern,
-                                item.font, 
-                                forceText(item.line_1), // บรรทัด 1
-                                forceText(item.line_2), // บรรทัด 2
-                                forceText(item.line_3), // บรรทัด 3
-                                1,
-                                cleanNotes,
-                                item.file_attachment
-                            ]);
-                        });
-                    }
+                    dataToExport.push([
+                        workOrderName, 
+                        item.bill_no, 
+                        item.item_uid, 
+                        productCode,
+                        item.product_name,
+                        productCategory,
+                        item.ink_color, 
+                        item.product_type, 
+                        item.cartoon_pattern, 
+                        item.line_pattern,
+                        item.font, 
+                        forceText(item.line_1),
+                        forceText(item.line_2),
+                        forceText(item.line_3),
+                        1,
+                        cleanNotes,
+                        item.file_attachment
+                    ]);
                 });
 
                 const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
-
-                // บังคับประเภทเซลล์คอลัมน์ บรรทัด 1, 2, 3 เป็น String (คอลัมน์ L, M, N หรือ index 11, 12, 13)
                 const range = XLSX.utils.decode_range(worksheet['!ref']);
                 for (let R = range.s.r + 1; R <= range.e.r; ++R) {
                     for (let C = 11; C <= 13; ++C) {
@@ -3084,43 +3098,42 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
                 XLSX.writeFile(workbook, `QC_${workOrderName}.xlsx`);
             }
 
-	function exportForBarcode(workOrderName) {
-                const ordersInWorkOrder = allOrdersData
-                    .filter(order => order.work_order_name === workOrderName);
+            // 3. ฟังก์ชันทำ Barcode (แก้ไข: เรียงลำดับตาม Item UID)
+            function exportForBarcode(workOrderName) {
+                const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
 
                 if (ordersInWorkOrder.length === 0) {
                     alert("ไม่พบข้อมูล");
                     return;
                 }
 
-                // ฟังก์ชันป้องกันสูตร (ตัวอักษรล่องหน)
-                const forceText = (val) => {
-                    const str = String(val || '').trim();
-                    if (str === '') return '';
-                    if (str.startsWith('+') || str.startsWith('0')) {
-                        return "\u200B" + str;
+                let allItemsInBatch = [];
+                ordersInWorkOrder.forEach(order => {
+                    if (order.order_items && order.order_items.length > 0) {
+                        order.order_items.forEach(item => {
+                            allItemsInBatch.push(item);
+                        });
                     }
-                    return str;
-                };
+                });
+
+                allItemsInBatch.sort((a, b) => 
+                    (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true })
+                );
 
                 const headers = ['Item UID', 'ชื่อสินค้า', 'สีหมึก', 'บรรทัด 1', 'หมวด'];
                 const dataToExport = [];
 
-                ordersInWorkOrder.forEach(order => {
-                    if (order.order_items && order.order_items.length > 0) {
-                        order.order_items.forEach(item => {
-                            const productDetails = fullProductList.find(p => p.id === item.product_id);
-                            const category = productDetails ? (productDetails.product_category || 'N/A') : 'N/A';
+                allItemsInBatch.forEach(item => {
+                    const productDetails = fullProductList.find(p => p.id === item.product_id);
+                    const category = productDetails ? (productDetails.product_category || 'N/A') : 'N/A';
 
-                            dataToExport.push([
-                                item.item_uid,
-                                item.product_name,
-                                item.ink_color,
-                                forceText(item.line_1), // บรรทัด 1
-                                category
-                            ]);
-                        });
-                    }
+                    dataToExport.push([
+                        item.item_uid,
+                        item.product_name,
+                        item.ink_color,
+                        item.line_1 ? "\u200B" + item.line_1 : "",
+                        category
+                    ]);
                 });
 
                 if (dataToExport.length === 0) {
@@ -3135,7 +3148,8 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
                 link.download = `Barcode_${workOrderName}.csv`;
                 link.click();
             }
-            
+
+            // 4. ฟังก์ชัน Export ข้อมูลที่ส่งแล้ว (นิยามใหม่เพื่อแก้ Error exportShippedData is not defined)
             function exportShippedData() {
                 const selectedIds = getSelectedOrderIds(container.querySelector('#tab-shipped .order-list'));
                 if (selectedIds.length === 0) {
