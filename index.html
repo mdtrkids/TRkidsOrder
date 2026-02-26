@@ -1352,44 +1352,6 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
             let productList = [], cartoonPatternList = [], fullProductList = [], channelList = [], allOrdersData = [], allWorkOrdersData = [], inkTypeList = [], promotionList = [], currentEditingOrderId = null;
             let currentUserRole = null;
 
-// --- เพิ่มฟังก์ชันสำหรับกรองสินค้าตามเงื่อนไขรหัส 22 ---
-            function getFilteredProductList(channelCode) {
-                const isWY = (channelCode === 'WY');
-                return fullProductList
-                    .filter(p => p.is_active !== false && p.product_type === 'FINISHPRODUCT')
-                    .filter(p => {
-                        const code = String(p.product_code || '');
-                        // ถ้าเป็น WY: เอาเฉพาะที่ขึ้นต้นด้วย 22
-                        // ถ้าไม่ใช่ WY: เอาเฉพาะที่ไม่ขึ้นต้นด้วย 22
-                        return isWY ? code.startsWith('22') : !code.startsWith('22');
-                    })
-                    .map(p => ({ id: p.id, text: p.product_name }));
-            }
-
-            // ฟังก์ชันสำหรับอัปเดต Dropdown สินค้าทุกแถวที่มีอยู่ในตาราง
-            function updateAllProductDropdowns(channelCode) {
-                const filteredProducts = getFilteredProductList(channelCode);
-                itemsTbody.querySelectorAll('.item-product').forEach(select => {
-                    const $select = $(select);
-                    const currentVal = $select.val(); // เก็บค่าเดิมที่เลือกไว้
-
-                    // ล้างข้อมูลเก่าและใส่ข้อมูลที่กรองใหม่เข้าไปใน Select2
-                    $select.empty().select2({ 
-                        data: filteredProducts, 
-                        placeholder: 'เลือกสินค้า', 
-                        width: '100%' 
-                    });
-
-                    // ถ้าค่าเดิมยังอยู่ในรายการที่กรองใหม่ ให้เลือกค่าเดิมไว้เหมือนเดิม
-                    if (filteredProducts.some(p => p.id == currentVal)) {
-                        $select.val(currentVal).trigger('change.select2');
-                    } else {
-                        // ถ้าไม่มี (เช่น เปลี่ยนจาก WY ไปช่องทางอื่น) ให้ล้างค่าทิ้ง
-                        $select.val(null).trigger('change.select2');
-                    }
-                });
-            }
-
             const standardFonts = ['F01','F03','F04','F12','F14','TH01','TH02','TH03'];
             const wyFonts = ['fontA', 'fontB', 'fontC', 'fontD', 'fontE', 'fontF', 'fontG', 'fontH'];
             const ecommerceChannels = ['SPTR', 'FSPTR', 'LZTR', 'TTTR', 'SHOP'];
@@ -2320,29 +2282,27 @@ if (mode === 'edit' && order) {
             function addItemRow(item = null, rowUid = null) {
                 const newUid = rowUid || 'row-' + Date.now() + Math.random(); const row = itemsTbody.insertRow(); row.dataset.rowUid = newUid;
                 const shelfOptions = ['1', '2', '3', '4', '5'].map(n => `<option value="${n}">${n}</option>`).join('');
-                
-                // ดึงค่าช่องทางปัจจุบันมาเพื่อกรองสินค้าและฟอนต์
-                const currentChannel = container.querySelector('#channel_code').value; 
-                const fontOptions = getFontOptionsForChannel(currentChannel);
-                const filteredProducts = getFilteredProductList(currentChannel);
-
+                const currentChannel = container.querySelector('#channel_code').value; const fontOptions = getFontOptionsForChannel(currentChannel);
                 row.innerHTML = `<td><select class="item-product"></select></td><td><select class="item-ink_color"><option value="">--เลือกสี--</option></select></td><td><select class="item-shelf_location"><option value="">--เลือก--</option>${shelfOptions}</select></td><td><input type="text" class="item-cartoon_pattern"></td><td><input type="text" class="item-line_pattern"></td><td><select class="item-font">${fontOptions}</select></td><td style="text-align:center;"><input type="checkbox" class="item-no-name-cb" style="width:18px;height:18px;cursor:pointer;"></td><td><input type="text" class="item-line_1"></td><td><input type="text" class="item-line_2"></td><td><input type="text" class="item-line_3"></td><td><input type="number" class="item-quantity quantity-input" value="1" min="1"></td><td><input type="text" class="item-notes"></td><td><input type="text" class="item-file_attachment"></td><td class="action-cell"><button type="button" class="btn btn-danger remove-item-btn">X</button></td>`;
                 
+                // --- ระบบล็อคบรรทัด 1, 2, 3 และเพิ่มหมายเหตุ ---
                 const noNameCb = row.querySelector('.item-no-name-cb');
                 const lineInputs = [row.querySelector('.item-line_1'), row.querySelector('.item-line_2'), row.querySelector('.item-line_3')];
                 const notesInput = row.querySelector('.item-notes');
 
                 noNameCb.addEventListener('change', function() {
                     if (this.checked) {
+                        // ล็อคและไฮไลท์เทาทั้ง 3 ช่อง
                         lineInputs.forEach(input => {
                             input.value = ""; 
                             input.disabled = true; 
-                            input.style.backgroundColor = "#e9ecef";
+                            input.style.backgroundColor = "#e9ecef"; // สีเทาไฮไลท์
                         });
                         if (!notesInput.value.includes("[ไม่รับชื่อ]")) {
                             notesInput.value = ("[ไม่รับชื่อ] " + notesInput.value).trim();
                         }
                     } else {
+                        // ปลดล็อคทั้ง 3 ช่อง
                         lineInputs.forEach(input => {
                             input.disabled = false; 
                             input.style.backgroundColor = ""; 
@@ -2351,21 +2311,8 @@ if (mode === 'edit' && order) {
                     }
                 });
 
-                // ใช้รายการสินค้าที่กรองตามช่องทางแล้ว
-                const productSelect = $(row.querySelector('.item-product')); 
-                productSelect.select2({ 
-                    data: filteredProducts, 
-                    placeholder: 'เลือกสินค้า', 
-                    width: '100%' 
-                });
-
-                const inkSelect = row.querySelector('.item-ink_color'); 
-                inkTypeList.forEach(ink => { 
-                    const opt = document.createElement('option'); 
-                    opt.value = ink.ink_name; 
-                    opt.textContent = ink.ink_name; 
-                    inkSelect.appendChild(opt); 
-                });
+                const productSelect = $(row.querySelector('.item-product')); productSelect.select2({ data: productList, placeholder: 'เลือกสินค้า', width: '100%' });
+                const inkSelect = row.querySelector('.item-ink_color'); inkTypeList.forEach(ink => { const opt = document.createElement('option'); opt.value = ink.ink_name; opt.textContent = ink.ink_name; inkSelect.appendChild(opt); });
                 
                 if (item) { 
                     productSelect.val(item.product_id).trigger('change.select2'); 
@@ -2378,6 +2325,7 @@ if (mode === 'edit' && order) {
                     row.querySelector('.item-line_2').value = item.line_2 || ''; 
                     row.querySelector('.item-line_3').value = item.line_3 || ''; 
                     
+                    // เช็คสถานะตอนโหลดข้อมูลเก่ามาแก้ไข
                     const notesValue = item.notes || '';
                     if (notesValue.includes("[ไม่รับชื่อ]")) {
                         noNameCb.checked = true;
@@ -3920,9 +3868,7 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
                     const paymentSection = document.getElementById('payment-info-section'); 
                     const claimSection = document.getElementById('claim-details-section');
 
-                    // อัปเดตฟอนต์และกรองสินค้าใหม่ทุกครั้งที่เปลี่ยนช่องทาง
                     updateAllFontDropdowns(selectedChannel); 
-                    updateAllProductDropdowns(selectedChannel); 
                     
                     if (ecommerceChannels.includes(selectedChannel)) { 
                         addressLabel.textContent = 'เลขพัสดุ'; 
