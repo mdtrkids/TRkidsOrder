@@ -1696,7 +1696,7 @@ window.cartoonPatternList = cartoonPatternList;
                     const waybillSortChannels = ['FSPTR', 'SPTR', 'TTTR', 'LZTR', 'SHOP']; 
                     const isWaybillSortChannel = waybillSortChannels.includes(wo.channel_code);
                     
-                    let actionButtonsHTML = `<button class="btn btn-success btn-sm picking-slip-btn" data-work-order-name="${wo.work_order_name}">📋 ทำใบเบิก</button><button class="btn btn-primary btn-sm export-production-btn" data-work-order-name="${wo.work_order_name}">📤 Export (ไฟล์ผลิต)</button><button class="btn btn-sm export-qc-btn" style="background-color: #6f42c1; color: white; border: none;" data-work-order-name="${wo.work_order_name}">🔍 Export for QC</button><button class="btn btn-sm export-barcode-btn" style="background-color: #3f51b5; color: white; border: none;" data-work-order-name="${wo.work_order_name}">🏷️ ทำ Barcode</button>`;
+                    let actionButtonsHTML = `<button class="btn btn-success btn-sm picking-slip-btn" data-work-order-name="${wo.work_order_name}">📋 ทำใบเบิก</button><button class="btn btn-primary btn-sm export-production-btn" data-work-order-name="${wo.work_order_name}">📤 Export (ไฟล์ผลิต)</button><button class="btn btn-info btn-sm copy-production-btn" style="background-color: #17a2b8; color: white;" data-work-order-name="${wo.work_order_name}">📋 Copy (ไฟล์ผลิต)</button> <button class="btn btn-sm export-qc-btn" style="background-color: #6f42c1; color: white; border: none;" data-work-order-name="${wo.work_order_name}">🔍 Export for QC</button><button class="btn btn-sm export-barcode-btn" style="background-color: #3f51b5; color: white; border: none;" data-work-order-name="${wo.work_order_name}">🏷️ ทำ Barcode</button>`;
                     if (isWaybillSortChannel) { 
                         actionButtonsHTML += `<button class="btn btn-warning btn-sm export-waybill-sort-btn" data-work-order-name="${wo.work_order_name}">📤 เรียงใบปะหน้า</button>`;
                     } else { 
@@ -3074,6 +3074,53 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
                 XLSX.writeFile(workbook, `Production_${workOrderName}.xlsx`);
             }
 
+function copyForProduction(workOrderName) {
+    const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
+    if (ordersInWorkOrder.length === 0) { alert("ไม่พบข้อมูล"); return; }
+
+    let allItemsInBatch = [];
+    ordersInWorkOrder.forEach(order => {
+        if (order.order_items && order.order_items.length > 0) {
+            order.order_items.forEach(item => { allItemsInBatch.push(item); });
+        }
+    });
+
+    // เรียงลำดับตาม Item UID
+    allItemsInBatch.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
+
+    const rows = []; // เริ่มต้นเป็นอาเรย์ว่าง (ไม่ใส่หัวตาราง)
+
+    allItemsInBatch.forEach(item => {
+        const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
+        rows.push([
+            workOrderName, 
+            item.bill_no, 
+            item.item_uid, 
+            item.product_name,
+            item.ink_color, 
+            item.product_type, 
+            item.cartoon_pattern, 
+            item.line_pattern,
+            item.font, 
+            String(item.line_1 || '').trim(),
+            String(item.line_2 || '').trim(),
+            String(item.line_3 || '').trim(),
+            1,
+            cleanNotes,
+            item.file_attachment
+        ]);
+    });
+
+    // แปลงเป็นข้อความคั่นด้วย Tab (\t) สำหรับวางใน Excel
+    const tsvContent = rows.map(row => row.join('\t')).join('\n');
+
+    navigator.clipboard.writeText(tsvContent).then(() => {
+        alert(`คัดลอกเฉพาะข้อมูล ${workOrderName} (ไม่มีหัวตาราง) เรียบร้อยแล้ว!`);
+    }).catch(err => {
+        alert('คัดลอกไม่สำเร็จ: ' + err);
+    });
+}
+
             // 2. ฟังก์ชัน Export สำหรับ QC (แก้ไข: เรียงลำดับตาม Item UID ให้ตรงกับไฟล์ผลิต)
             function exportForQC(workOrderName) {
                 const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
@@ -3973,6 +4020,7 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
                         const classToAction = { 
                             'picking-slip-btn': (btn) => showPickingSlipModal(btn.dataset.workOrderName), 
                             'export-production-btn': (btn) => exportForProduction(btn.dataset.workOrderName), 
+	          'copy-production-btn': (btn) => copyForProduction(btn.dataset.workOrderName),
                             'export-qc-btn': (btn) => exportForQC(btn.dataset.workOrderName), 
                             'export-barcode-btn': (btn) => exportForBarcode(btn.dataset.workOrderName), // ปุ่มใหม่
                             'prepare-waybill-btn': (btn) => prepareForWaybill(btn.dataset.workOrderName), 
