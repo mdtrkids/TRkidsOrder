@@ -5938,9 +5938,9 @@ window.patternSystem = (() => {
                 
                 let display = relevant.filter(o => activeCarrier ? getCarrierName(o.channel_code) === activeCarrier && o.status === 'จัดส่งแล้ว' : false);
                 tbody.innerHTML = display.length ? display.map(o => {
-                    const isV = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
-                    return `<tr class="${isV ? 'tr-row-success' : ''}">
-                        <td style="padding:10px 15px; color:#888;">${isV ? new Date(o.transport_meta.verified_at).toLocaleTimeString().substring(0,5) : '-'}</td>
+                    const isV = !!o.transport_meta?.verified; 
+return `<tr class="${isV ? 'tr-row-success' : ''}">
+    <td style="padding:10px 15px; color:#888;">${isV ? new Date(o.transport_meta.verified_at).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : '-'}</td>
                         <td style="padding:10px 15px; font-weight:600;">${o.bill_no}</td>
                         <td style="padding:10px 15px; font-family:monospace;">${o.tracking_number}</td>
                         <td style="padding:10px 15px;"><span class="pill-type" style="background:#eee; padding:2px 8px; border-radius:5px;">${o.transport_meta?.parcel_type || '-'}</span></td>
