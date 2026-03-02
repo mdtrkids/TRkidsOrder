@@ -1512,75 +1512,51 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
                 if (!isSilent) { loadingOverlay.style.display = 'flex'; }
                 
                 try {
-                   const [productsRes, channelsRes, workOrdersRes, inkTypesRes, promotionsRes, patternsRes] = await Promise.all([
-    supabaseClient.from('products').select('*'),
-    supabaseClient.from('channels').select('channel_code, channel_name, default_carrier'), 
-    supabaseClient.from('work_orders').select('*').eq('status', 'กำลังผลิต').order('created_at', { ascending: false }),
-    supabaseClient.from('ink_types').select('ink_name').order('id'),
-    supabaseClient.from('orders').select('promotion').neq('promotion', '').not('promotion', 'is', null),
-    supabaseClient.from('cartoon_patterns').select('*') // เพิ่มบรรทัดนี้เข้าไปใน array
-]);
-
-if (patternsRes.error) throw patternsRes.error;
-cartoonPatternList = patternsRes.data || [];
-window.cartoonPatternList = cartoonPatternList;
-                    const activeOrdersPromise = supabaseClient.from('orders')
-                        .select('*, order_items(*)')
-                        .in('status', ['รอลงข้อมูล', 'ลงข้อมูลเสร็จสิ้น', 'ใบงาน (กำลังผลิต)'])
-                        .order('created_at', { ascending: false });
-
-                    const finishedOrdersPromise = supabaseClient.from('orders')
-                        .select('*, order_items(*)')
-                        .in('status', ['จัดส่งแล้ว', 'ยกเลิก'])
-                        .order('created_at', { ascending: false })
-                        .limit(500);
-
-                    const [{ data: activeOrders, error: activeError }, { data: finishedOrders, error: finishedError }] = await Promise.all([
-                        activeOrdersPromise,
-                        finishedOrdersPromise
+                    // โหลดเฉพาะข้อมูลตั้งค่า (Metadata)
+                    const [productsRes, channelsRes, workOrdersRes, inkTypesRes, promotionsRes, patternsRes] = await Promise.all([
+                        supabaseClient.from('products').select('*'),
+                        supabaseClient.from('channels').select('channel_code, channel_name, default_carrier'), 
+                        supabaseClient.from('work_orders').select('*').eq('status', 'กำลังผลิต').order('created_at', { ascending: false }),
+                        supabaseClient.from('ink_types').select('ink_name').order('id'),
+                        supabaseClient.from('orders').select('promotion').neq('promotion', '').not('promotion', 'is', null).limit(100),
+                        supabaseClient.from('cartoon_patterns').select('*')
                     ]);
 
-                    if (activeError || finishedError) {
-                        const err = activeError || finishedError;
-						alert("พบข้อผิดพลาด: " + err.message + "\nHint: " + err.hint);
-						console.error("Detail Error:", err);
-                    }
+                    if (patternsRes.error) throw patternsRes.error;
+                    cartoonPatternList = patternsRes.data || [];
+                    window.cartoonPatternList = cartoonPatternList;
 
-                    allOrdersData = [...(activeOrders || []), ...(finishedOrders || [])];
+                    // เคลียร์ข้อมูลออร์เดอร์ในเครื่องให้ว่างไว้ก่อน (จะโหลดเมื่อคลิก Tab)
+                    allOrdersData = [];
 
                     if (productsRes.error) throw new Error('Could not load products');
                     fullProductList = productsRes.data;
-	productList = productsRes.data
-    	.filter(p => p.is_active !== false && p.product_type === 'FINISHPRODUCT')
-    	.map(p => ({ id: p.id, text: p.product_name }));
+                    productList = productsRes.data
+                        .filter(p => p.is_active !== false && p.product_type === 'FINISHPRODUCT')
+                        .map(p => ({ id: p.id, text: p.product_name }));
                     
                     if (channelsRes.error) throw new Error('Could not load channels');
                     channelList = channelsRes.data; 
                     if (!channelList.some(ch => ch.channel_code === 'CLAIM')) { channelList.push({ channel_code: 'CLAIM', channel_name: 'CLAIM' }); }
-	 if (!channelList.some(ch => ch.channel_code === 'INFU')) { channelList.push({ channel_code: 'INFU', channel_name: 'INFU' }); }
                     channelList.sort((a, b) => a.channel_code.localeCompare(b.channel_code));
                     
                     if (inkTypesRes.error) throw new Error('Could not load ink types');
                     inkTypeList = inkTypesRes.data;
 
-                    const isEditingOrder = isSilent && container.querySelector('#tab-create')?.classList.contains('active');
-                    if (!isEditingOrder) {
-                        const uniquePromotions = [...new Set(promotionsRes.data.map(p => p.promotion))];
-                        const promotionSelect = $('#promotion'); 
-                        const currentValue = promotionSelect.val();
-                        promotionSelect.empty();
-                        uniquePromotions.forEach(promo => { const option = new Option(promo, promo, false, false); promotionSelect.append(option); });
-                        promotionSelect.val(currentValue).trigger('change');
-                        populateChannelDropdowns();
-                    }
+                    const uniquePromotions = [...new Set(promotionsRes.data.map(p => p.promotion))];
+                    const promotionSelect = $('#promotion'); 
+                    promotionSelect.empty();
+                    uniquePromotions.forEach(promo => { const option = new Option(promo, promo, false, false); promotionSelect.append(option); });
+                    populateChannelDropdowns();
                     
                     if (workOrdersRes.error) throw workOrdersRes.error;
                     allWorkOrdersData = workOrdersRes.data;
                     
-                    renderAllTabs();
+                    // หลังจากโหลด Meta เสร็จ ให้โหลดข้อมูล Tab แรกอัตโนมัติ (รอลงข้อมูล)
+                    await fetchOrdersByStatus('รอลงข้อมูล');
+
                 } catch(err) { 
                     console.error(err); 
-                    alert('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + err.message); 
                 } finally { 
                     if (!isSilent) { loadingOverlay.style.display = 'none'; }
                     setTimeout(() => { window.isLoadingData = false; }, 500); 
@@ -1590,7 +1566,13 @@ window.cartoonPatternList = cartoonPatternList;
             function renderAllTabs() {
                 const globalSearchTerm = (container.querySelector('#search-complete')?.value || '').toLowerCase().trim();
                 const searchTerms = { waiting: globalSearchTerm, complete: globalSearchTerm, cancelled: globalSearchTerm, shipped: globalSearchTerm, work_orders: globalSearchTerm };
-                const filters = { waiting: container.querySelector('#filter-waiting').value, complete: container.querySelector('#filter-complete').value, cancelled: container.querySelector('#filter-cancelled').value, shipped: container.querySelector('#filter-shipped').value, work_orders: container.querySelector('#filter-work-orders').value };
+                const filters = { 
+                    waiting: container.querySelector('#filter-waiting').value || 'all', 
+                    complete: container.querySelector('#filter-complete').value || 'all', 
+                    cancelled: container.querySelector('#filter-cancelled').value || 'all', 
+                    shipped: container.querySelector('#filter-shipped').value || 'all', 
+                    work_orders: container.querySelector('#filter-work-orders').value || 'all' 
+                };
                 const lists = { 'รอลงข้อมูล': container.querySelector('#tab-waiting .order-list'), 'ลงข้อมูลเสร็จสิ้น': container.querySelector('#tab-complete .order-list'), 'ยกเลิก': container.querySelector('#tab-cancelled .order-list'), 'จัดส่งแล้ว': container.querySelector('#tab-shipped .order-list') };
                 const summaryContainer = container.querySelector('#channel-summary-container');
                 if (summaryContainer) { const completedOrders = allOrdersData.filter(order => order.status === 'ลงข้อมูลเสร็จสิ้น'); const channelCounts = completedOrders.reduce((acc, order) => { const channel = order.channel_code || 'N/A'; acc[channel] = (acc[channel] || 0) + 1; return acc; }, {}); summaryContainer.innerHTML = ''; const sortedChannels = Object.keys(channelCounts).sort(); if (sortedChannels.length > 0) { let summaryHTML = ''; for (const channel of sortedChannels) { summaryHTML += `<span class="channel-summary-item" data-channel="${channel}">${channel}: ${channelCounts[channel]} บิล</span>`; } summaryContainer.innerHTML = summaryHTML; } else { summaryContainer.innerHTML = `<span class="channel-summary-placeholder">ไม่มีบิลรอสร้างใบงาน</span>`; } }
@@ -1722,6 +1704,31 @@ window.cartoonPatternList = cartoonPatternList;
                 updateSmartWorkOrderButton();
             }
             
+async function fetchOrdersByStatus(status) {
+                loadingOverlay.style.display = 'flex';
+                try {
+                    let query = supabaseClient.from('orders').select('*, order_items(*)');
+                    
+                    if (status === 'จัดส่งแล้ว') {
+                        query = query.eq('status', 'จัดส่งแล้ว').order('shipped_time', { ascending: false }).limit(300);
+                    } else if (status === 'ใบงาน (กำลังผลิต)') {
+                        query = query.eq('status', 'ใบงาน (กำลังผลิต)').order('created_at', { ascending: false });
+                    } else {
+                        query = query.eq('status', status).order('created_at', { ascending: false });
+                    }
+
+                    const { data, error } = await query;
+                    if (error) throw error;
+                    
+                    allOrdersData = data || [];
+                    renderAllTabs(); 
+                } catch (err) {
+                    console.error("Fetch Error:", err);
+                } finally {
+                    loadingOverlay.style.display = 'none';
+                }
+            }
+
             let isOpeningWindow = false;
             function prepareForWaybill(workOrderName) { if (isOpeningWindow) return; isOpeningWindow = true; const ordersToProcess = allOrdersData.filter(order => order.work_order_name === workOrderName); if (ordersToProcess.length === 0) { alert("ไม่พบออร์เดอร์"); isOpeningWindow = false; return; } const headers = ['bill_no', 'customer_address', 'payment_method', 'total_amount']; const rows = ordersToProcess.map(order => { const escapeCsvField = (field) => { const strField = String(field || ''); if (strField.includes(',') || strField.includes('"') || strField.includes('\n')) { return `"${strField.replace(/"/g, '""')}"`; } return strField; }; const addressForExport = ecommerceChannels.includes(order.channel_code) ? '' : order.customer_address; return [escapeCsvField(order.bill_no), escapeCsvField(addressForExport), escapeCsvField(order.payment_method), escapeCsvField(order.total_amount)].join(','); }); const csvContent = [headers.join(','), ...rows].join('\n'); try { localStorage.setItem('waybillDataForFlash', csvContent); localStorage.setItem('workOrderNameForFlash', workOrderName); window.open('flash_express_tool.html', '_blank'); } catch (e) { console.error("Error:", e); alert("เกิดข้อผิดพลาด"); } finally { setTimeout(() => { isOpeningWindow = false; }, 1000); } }
             
@@ -2101,7 +2108,55 @@ window.cartoonPatternList = cartoonPatternList;
             }
             
             function toggleWorkOrder(headerElement) { const content = headerElement.nextElementSibling; if (content) { content.classList.toggle('show'); } }
-            function populateChannelDropdowns() { const dropdowns = [ container.querySelector('#channel_code'), container.querySelector('#filter-waiting'), container.querySelector('#filter-complete'), container.querySelector('#filter-cancelled'), container.querySelector('#filter-shipped'), container.querySelector('#filter-work-orders') ]; const currentFormChannel = container.querySelector('#channel_code').value; dropdowns.forEach(dropdown => { if (!dropdown) return; const isFilter = dropdown.id.startsWith('filter-'); dropdown.innerHTML = isFilter ? '<option value="all">ทั้งหมด</option>' : '<option value="">--เลือก--</option>'; channelList.forEach(ch => { const opt = document.createElement('option'); opt.value = ch.channel_code; opt.textContent = ch.channel_name; dropdown.appendChild(opt); }); }); container.querySelector('#channel_code').value = currentFormChannel; }
+            function populateChannelDropdowns() {
+                const filterIds = [
+                    'filter-waiting',
+                    'filter-complete',
+                    'filter-cancelled',
+                    'filter-shipped',
+                    'filter-work-orders'
+                ];
+
+                // 1. จัดการ Dropdown ตัวกรองในทุกแท็บ
+                filterIds.forEach(id => {
+                    const dropdown = container.querySelector(`#${id}`);
+                    if (dropdown) {
+                        dropdown.innerHTML = ''; // ล้างค่าเก่า
+                        
+                        // สร้าง Option "ทั้งหมด" แบบเขียนสด
+                        const optAll = document.createElement('option');
+                        optAll.value = 'all';
+                        optAll.text = 'ทั้งหมด';
+                        optAll.selected = true; // บังคับ Selected ในระดับ Object
+                        dropdown.add(optAll);
+
+                        // ใส่ช่องทางอื่นๆ
+                        channelList.forEach(ch => {
+                            const opt = document.createElement('option');
+                            opt.value = ch.channel_code;
+                            opt.text = ch.channel_name;
+                            dropdown.add(opt);
+                        });
+
+                        // --- จุดสำคัญ: บังคับให้ UI แสดงผลคำว่า "ทั้งหมด" ---
+                        dropdown.value = 'all'; 
+                    }
+                });
+
+                // 2. จัดการ Dropdown ในหน้า "สร้างออร์เดอร์"
+                const formDropdown = container.querySelector('#channel_code');
+                if (formDropdown) {
+                    const currentVal = formDropdown.value;
+                    formDropdown.innerHTML = '<option value="" disabled selected>-- เลือกช่องทาง --</option>';
+                    channelList.forEach(ch => {
+                        const opt = document.createElement('option');
+                        opt.value = ch.channel_code;
+                        opt.text = ch.channel_name;
+                        formDropdown.add(opt);
+                    });
+                    if (currentVal) formDropdown.value = currentVal;
+                }
+            }
             
             function updateSmartWorkOrderButton() {
                 const smartBtn = document.getElementById('create-wo-smart-btn');
@@ -2127,11 +2182,26 @@ window.cartoonPatternList = cartoonPatternList;
                 }
             }
             
-            function openTab(evt, tabName) { 
+            async function openTab(evt, tabName) { 
                 container.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active')); 
                 container.querySelectorAll('.tab-link').forEach(tl => tl.classList.remove('active')); 
                 container.querySelector(`#${tabName}`).classList.add('active'); 
                 evt.currentTarget.classList.add('active'); 
+
+                // แผนผังชื่อ Tab กับ สถานะใน Database
+                const statusMap = {
+                    'tab-waiting': 'รอลงข้อมูล',
+                    'tab-complete': 'ลงข้อมูลเสร็จสิ้น',
+                    'tab-work-orders': 'ใบงาน (กำลังผลิต)',
+                    'tab-shipped': 'จัดส่งแล้ว',
+                    'tab-cancelled': 'ยกเลิก'
+                };
+
+                // ถ้าคลิก Tab ที่มีสถานะ ให้ดึงข้อมูลใหม่ทันที
+                if (statusMap[tabName]) {
+                    await fetchOrdersByStatus(statusMap[tabName]);
+                }
+                
                 if (tabName === 'tab-create') { setFormMode('create'); }
                 if (tabName === 'tab-complete') { updateSmartWorkOrderButton(); }
             }
@@ -5606,11 +5676,12 @@ window.patternSystem = (() => {
             return { initializeApp };
         })();
 
-// --- TRANSPORT SYSTEM MODULE (FIXED DB SAVING & PARCEL TYPE) ---
+// --- TRANSPORT SYSTEM MODULE (แก้ไข: โหลดแยกตามวันที่เพื่อดูย้อนหลังได้ไม่จำกัด) ---
         window.transportSystem = (() => {
             let isInitialized = false;
             let activeCarrier = null;
             let activeParcelType = "กล่อง";
+            let currentOrdersInView = []; // เก็บข้อมูลที่ดึงมาเฉพาะวันที่เลือก
             
             const scanInput = document.getElementById('transport-scan-input');
             const dateFilter = document.getElementById('transport-date-filter');
@@ -5647,26 +5718,13 @@ window.patternSystem = (() => {
             async function initialize() {
                 injectStyles();
                 if (!dateFilter.value) dateFilter.value = new Date().toLocaleDateString('en-CA');
+                
                 if (!isInitialized) {
                     scanInput.addEventListener('change', handleScan);
                     exportBtn.addEventListener('click', exportCSV);
                     
-                    const exportPngBtn = document.getElementById('btn-export-summary-png');
-                    if (exportPngBtn) {
-                        exportPngBtn.addEventListener('click', async () => {
-                            const element = document.getElementById('transport-summary-section');
-                            if (!element) return;
-                            loadingOverlay.style.display = 'flex';
-                            try {
-                                const canvas = await html2canvas(element, { scale: 2, backgroundColor: "#ffffff" });
-                                const link = document.createElement('a');
-                                link.download = `สรุปยอดขนส่ง_${dateFilter.value}.png`;
-                                link.href = canvas.toDataURL("image/png");
-                                link.click();
-                            } catch (err) { alert("สร้างภาพไม่ได้: " + err.message); }
-                            finally { loadingOverlay.style.display = 'none'; }
-                        });
-                    }
+                    // เมื่อเปลี่ยนวันที่ ให้โหลดข้อมูลของวันนั้นใหม่จาก Database
+                    dateFilter.addEventListener('change', fetchTransportData);
 
                     document.querySelectorAll('.pt-btn').forEach(btn => {
                         btn.addEventListener('click', (e) => {
@@ -5676,11 +5734,60 @@ window.patternSystem = (() => {
                             scanInput.focus();
                         });
                     });
-                    dateFilter.addEventListener('change', async () => { await window.orderSystem.loadInitialData(true); render(); });
                     isInitialized = true;
                 }
-                await window.orderSystem.loadInitialData(true);
-                render();
+                await fetchTransportData();
+            }
+
+            // ฟังก์ชันหลัก: ดึงข้อมูลออร์เดอร์ตามวันที่เลือกจาก Database โดยตรง
+            async function fetchTransportData() {
+                const date = dateFilter.value; // "YYYY-MM-DD"
+                if (!date) return;
+                
+                loadingOverlay.style.display = 'flex';
+                statusMsg.textContent = "⌛ กำลังดึงข้อมูลวันที่ " + date;
+                statusMsg.style.color = "#666";
+
+                try {
+                    // สร้างช่วงเวลา เริ่มต้น และ สิ้นสุด ของวันที่เลือก (ISO Format)
+                    const startStr = `${date}T00:00:00Z`;
+                    const endStr = `${date}T23:59:59Z`;
+
+                    // ดึงข้อมูลโดยใช้ช่วงเวลา (gte = มากกว่าหรือเท่ากับ, lte = น้อยกว่าหรือเท่ากับ)
+                    // วิธีนี้จะใช้กับคอลัมน์วันที่ (Timestamp) ได้โดยตรง ไม่ Error
+                    const { data, error } = await supabaseClient
+                        .from('orders')
+                        .select('*')
+                        .eq('status', 'จัดส่งแล้ว')
+                        .gte('shipped_time', startStr)
+                        .lte('shipped_time', endStr);
+
+                    if (error) throw error;
+                    
+                    // กรณีพิเศษ: ดึงบิลที่มีการ "ทวนสอบขนส่ง" ในวันนี้เพิ่ม (เผื่อกรณีส่งวันอื่นแต่มาตรวจวันนี้)
+                    const { data: verData, error: verError } = await supabaseClient
+                        .from('orders')
+                        .select('*')
+                        .gte('transport_meta->>verified_at', startStr)
+                        .lte('transport_meta->>verified_at', endStr);
+                    
+                    if (verError) console.warn("Verification fetch warn:", verError);
+
+                    // รวมข้อมูลทั้ง 2 ก้อนเข้าด้วยกัน และลบรายการที่ซ้ำออก
+                    const combined = [...(data || []), ...(verData || [])];
+                    const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+
+                    currentOrdersInView = unique; 
+                    render(currentOrdersInView);
+                    
+                    statusMsg.textContent = ""; 
+                } catch (err) {
+                    console.error('Transport Fetch Error:', err);
+                    statusMsg.textContent = "❌ ดึงข้อมูลไม่สำเร็จ";
+                    statusMsg.style.color = "#dc3545";
+                } finally {
+                    loadingOverlay.style.display = 'none';
+                }
             }
 
             function getCarrierName(channelCode) {
@@ -5707,19 +5814,19 @@ window.patternSystem = (() => {
             async function handleScan() {
                 const trackingNo = scanInput.value.trim().toUpperCase();
                 scanInput.value = ""; 
-                
                 if (!trackingNo || !activeCarrier) return;
                 
                 try {
-                    const allOrders = window.orderSystem.getAllOrdersData();
-                    const orderIndex = allOrders.findIndex(o => String(o.tracking_number).toUpperCase() === trackingNo);
-                    const order = allOrders[orderIndex];
+                    // ค้นหาในข้อมูลที่ดึงมาแสดงผลอยู่
+                    const orderIndex = currentOrdersInView.findIndex(o => String(o.tracking_number).toUpperCase() === trackingNo);
+                    const order = currentOrdersInView[orderIndex];
 
-                    if (!order) throw new Error("ไม่พบเลขพัสดุ!");
-                    if (order.status !== 'จัดส่งแล้ว') throw new Error(`บิลยังแพ็คไม่เสร็จ`);
+                    if (!order) throw new Error("ไม่พบเลขพัสดุในระบบ (หรือบิลยังไม่ได้ส่ง)");
+                    if (order.status !== 'จัดส่งแล้ว') throw new Error(`บิลยังแพ็คไม่เสร็จ (สถานะ: ${order.status})`);
+                    
                     const carrier = getCarrierName(order.channel_code);
                     if (carrier !== activeCarrier) throw new Error(`❌ ผิด! ของเจ้า ${carrier}`);
-                    if (order.transport_meta?.verified) throw new Error("สแกนซ้ำ");
+                    if (order.transport_meta?.verified) throw new Error("สแกนซ้ำไปแล้ว");
 
                     const now = new Date().toISOString();
                     const transport_meta = { 
@@ -5727,27 +5834,24 @@ window.patternSystem = (() => {
                         verified_at: now, 
                         verified_by: loggedInUsername, 
                         carrier: carrier, 
-                        parcel_type: activeParcelType // บันทึกประเภทพัสดุลงใน Object
+                        parcel_type: activeParcelType 
                     };
                     
-                    // 1. บันทึกลง Database (บังคับรอให้สำเร็จ)
+                    // บันทึกลง Database
                     const { error: dbError } = await supabaseClient.from('orders').update({ 
                         transport_meta: transport_meta
                     }).eq('id', order.id);
 
-                    if (dbError) throw new Error("ไม่สามารถบันทึกลง Database ได้: " + dbError.message);
+                    if (dbError) throw dbError;
 
-                    // 2. อัปเดตข้อมูลในหน่วยความจำหลักเพื่อให้ Render ตารางสรุปได้ถูกต้อง
-                    allOrders[orderIndex].transport_meta = transport_meta;
-
-                    // 3. แสดงผล UI
+                    // อัปเดตข้อมูลในเครื่องทันทีเพื่อความเร็ว
+                    currentOrdersInView[orderIndex].transport_meta = transport_meta;
+                    
                     if (successSound) { successSound.currentTime = 0; successSound.play(); }
-
                     statusMsg.textContent = `✅ ${order.bill_no} ผ่าน [${activeParcelType}]`;
                     statusMsg.style.color = "#28a745";
                     
-                    // สั่ง Render ใหม่ทั้งหมดเพื่อให้ตารางสรุปยอดด้านล่างอัปเดตทันที
-                    render();
+                    render(currentOrdersInView);
 
                 } catch (err) {
                     statusMsg.textContent = err.message;
@@ -5758,17 +5862,12 @@ window.patternSystem = (() => {
                 }
             }
 
-            function render() {
-                const allOrders = window.orderSystem.getAllOrdersData();
-                const channelList = window.orderSystem.getChannelList();
+            function render(dataToRender = []) {
                 const date = dateFilter.value;
+                const channelList = window.orderSystem.getChannelList();
                 const carriersList = [...new Set(channelList.map(c => (c.default_carrier || "OTHER").toUpperCase()))].sort();
 
-                const relevant = allOrders.filter(o => {
-                    const sDate = o.shipped_time?.substring(0, 10);
-                    const vDate = o.transport_meta?.verified_at?.substring(0, 10);
-                    return sDate === date || vDate === date;
-                });
+                const relevant = dataToRender;
 
                 const nestedSummary = {}; 
                 relevant.forEach(o => {
@@ -5782,7 +5881,6 @@ window.patternSystem = (() => {
                         if (!nestedSummary[carrier][ch]) {
                             nestedSummary[carrier][ch] = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
                         }
-                        
                         nestedSummary[carrier][ch][pType]++;
                         nestedSummary[carrier][ch].total++;
                     }
@@ -5790,73 +5888,31 @@ window.patternSystem = (() => {
 
                 const sumTbody = document.getElementById('transport-summary-tbody');
                 if (sumTbody) {
-                    const colStyle = 'padding: 10px; border: 1px solid #e5e5e7; text-align: center; width: 15%;';
-                    const labelStyle = 'padding: 10px 15px; border: 1px solid #e5e5e7; text-align: left; width: 25%;';
-
                     let html = '';
                     let grandRow = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
                     const sortedCarriers = Object.keys(nestedSummary).sort();
 
                     sortedCarriers.forEach(carrier => {
-                        // 1. แถวหัวข้อขนส่ง (Carrier)
-                        html += `<tr style="background: #f8f9fa;">
-                            <td colspan="6" style="padding: 10px 15px; border: 1px solid #e5e5e7; font-weight: bold; color: #0071e3;">🚚 ขนส่ง: ${carrier}</td>
-                        </tr>`;
-
+                        html += `<tr style="background: #f8f9fa;"><td colspan="6" style="padding: 10px 15px; border: 1px solid #e5e5e7; font-weight: bold; color: #0071e3;">🚚 ขนส่ง: ${carrier}</td></tr>`;
                         let carrierSubTotal = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
-                        const sortedChannels = Object.keys(nestedSummary[carrier]).sort();
-
-                        sortedChannels.forEach(ch => {
+                        Object.keys(nestedSummary[carrier]).sort().forEach(ch => {
                             const s = nestedSummary[carrier][ch];
-                            html += `<tr>
-                                <td style="${labelStyle} padding-left: 30px; color: #555;">└ ${ch}</td>
-                                <td style="${colStyle}">${s["กล่อง"]}</td>
-                                <td style="${colStyle}">${s["ซองกระดาษ"]}</td>
-                                <td style="${colStyle}">${s["ซองบับเบิล"]}</td>
-                                <td style="${colStyle}">${s["ถุงพัสดุ"]}</td>
-                                <td style="${colStyle} font-weight: bold;">${s.total}</td>
-                            </tr>`;
-                            
-                            carrierSubTotal["กล่อง"] += s["กล่อง"];
-                            carrierSubTotal["ซองกระดาษ"] += s["ซองกระดาษ"];
-                            carrierSubTotal["ซองบับเบิล"] += s["ซองบับเบิล"];
-                            carrierSubTotal["ถุงพัสดุ"] += s["ถุงพัสดุ"];
-                            carrierSubTotal.total += s.total;
+                            html += `<tr><td style="padding: 10px 30px; border: 1px solid #e5e5e7; color: #555;">└ ${ch}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["กล่อง"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["ซองกระดาษ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["ซองบับเบิล"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["ถุงพัสดุ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7; font-weight: bold;">${s.total}</td></tr>`;
+                            carrierSubTotal["กล่อง"] += s["กล่อง"]; carrierSubTotal["ซองกระดาษ"] += s["ซองกระดาษ"]; carrierSubTotal["ซองบับเบิล"] += s["ซองบับเบิล"]; carrierSubTotal["ถุงพัสดุ"] += s["ถุงพัสดุ"]; carrierSubTotal.total += s.total;
                         });
-
-                        // 2. แถวรวมยอดรายขนส่ง (ปรับเป็นสีฟ้าอ่อนทั้งแถบตามวงกลมสีแดง)
-                        html += `<tr style="background: #eef7ff; font-weight: bold;">
-                            <td style="${labelStyle} text-align: right; color: #1d1d1f;">รวมยอด ${carrier}</td>
-                            <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["กล่อง"]}</td>
-                            <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["ซองกระดาษ"]}</td>
-                            <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["ซองบับเบิล"]}</td>
-                            <td style="${colStyle} color: #1d1d1f;">${carrierSubTotal["ถุงพัสดุ"]}</td>
-                            <td style="${colStyle} color: #0071e3;">${carrierSubTotal.total}</td>
-                        </tr>`;
-
-                        grandRow["กล่อง"] += carrierSubTotal["กล่อง"];
-                        grandRow["ซองกระดาษ"] += carrierSubTotal["ซองกระดาษ"];
-                        grandRow["ซองบับเบิล"] += carrierSubTotal["ซองบับเบิล"];
-                        grandRow["ถุงพัสดุ"] += carrierSubTotal["ถุงพัสดุ"];
-                        grandRow.total += carrierSubTotal.total;
+                        html += `<tr style="background: #eef7ff; font-weight: bold;"><td style="padding: 10px 15px; text-align: right; border: 1px solid #e5e5e7;">รวมยอด ${carrier}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["กล่อง"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["ซองกระดาษ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["ซองบับเบิล"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["ถุงพัสดุ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7; color: #0071e3;">${carrierSubTotal.total}</td></tr>`;
+                        grandRow["กล่อง"] += carrierSubTotal["กล่อง"]; grandRow["ซองกระดาษ"] += carrierSubTotal["ซองกระดาษ"]; grandRow["ซองบับเบิล"] += carrierSubTotal["ซองบับเบิล"]; grandRow["ถุงพัสดุ"] += carrierSubTotal["ถุงพัสดุ"]; grandRow.total += carrierSubTotal.total;
                     });
 
                     if (sortedCarriers.length > 0) {
-                        html += `<tr style="background: #1d1d1f; color: white; font-weight: bold;">
-                            <td style="padding: 12px 15px; border: 1px solid #1d1d1f; text-align: left;">ยอดรวมทุกขนส่งสุทธิ</td>
-                            <td style="padding: 12px; border: 1px solid #333; text-align: center;">${grandRow["กล่อง"]}</td>
-                            <td style="padding: 12px; border: 1px solid #333; text-align: center;">${grandRow["ซองกระดาษ"]}</td>
-                            <td style="padding: 12px; border: 1px solid #333; text-align: center;">${grandRow["ซองบับเบิล"]}</td>
-                            <td style="padding: 12px; border: 1px solid #333; text-align: center;">${grandRow["ถุงพัสดุ"]}</td>
-                            <td style="padding: 12px; border: 1px solid #333; text-align: center; background: #0071e3;">${grandRow.total}</td>
-                        </tr>`;
+                        html += `<tr style="background: #1d1d1f; color: white; font-weight: bold;"><td style="padding: 12px 15px; border: 1px solid #1d1d1f; text-align: left;">ยอดรวมทุกขนส่งสุทธิ</td><td style="text-align:center; border: 1px solid #333;">${grandRow["กล่อง"]}</td><td style="text-align:center; border: 1px solid #333;">${grandRow["ซองกระดาษ"]}</td><td style="text-align:center; border: 1px solid #333;">${grandRow["ซองบับเบิล"]}</td><td style="text-align:center; border: 1px solid #333;">${grandRow["ถุงพัสดุ"]}</td><td style="text-align:center; border: 1px solid #333; background: #0071e3;">${grandRow.total}</td></tr>`;
                         sumTbody.innerHTML = html;
                     } else {
-                        sumTbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; text-align: center; color: #ccc;">กรุณาเลือกขนส่งเพื่อดูสรุป</td></tr>';
+                        sumTbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; text-align: center; color: #ccc;">ไม่มีข้อมูลการทวนสอบในวันที่เลือก</td></tr>';
                     }
                 }
 
-                // ส่วนจัดการปุ่มและ Stats ด้านบน (คงเดิม)
+                // สรุปยอดด้านบน
                 let gTotal = 0, gVer = 0, cTotal = 0, cVer = 0;
                 relevant.forEach(o => {
                     if (o.status === 'จัดส่งแล้ว') gTotal++;
@@ -5869,7 +5925,7 @@ window.patternSystem = (() => {
                 });
 
                 statsPanel.innerHTML = `
-                    <div class="stat-box total-box"><span class="stat-label">รวมทั้งหมด</span><span class="stat-value">${gVer} / ${gTotal}</span></div>
+                    <div class="stat-box total-box"><span class="stat-label">รวมทั้งหมด (${date})</span><span class="stat-value">${gVer} / ${gTotal}</span></div>
                     <div class="stat-box" style="border-top: 5px solid #0071e3;"><span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span><span class="stat-value" style="color:#0071e3;">${activeCarrier ? cVer + ' / ' + cTotal : '-'}</span></div>
                 `;
 
@@ -5894,7 +5950,7 @@ window.patternSystem = (() => {
                             ${isV ? `<span onclick="window.transportSystem.undo('${o.id}')" style="color:#0071e3; cursor:pointer; font-size:10px; margin-left:8px; text-decoration:underline;">ยกเลิก</span>` : ''}
                         </td>
                     </tr>`;
-                }).join('') : `<tr><td colspan="6" style="text-align:center; padding:40px; color:#ccc;">กรุณาเลือกขนส่ง</td></tr>`;
+                }).join('') : `<tr><td colspan="6" style="text-align:center; padding:40px; color:#ccc;">กรุณาเลือกขนส่งด้านบน</td></tr>`;
             }
 
             function setCarrier(c) {
@@ -5903,19 +5959,18 @@ window.patternSystem = (() => {
                 targetLabel.style.background = "#eef7ff";
                 scanInput.disabled = false;
                 setTimeout(() => scanInput.focus(), 100);
-                render();
+                render(currentOrdersInView);
             }
 
             async function undo(id) {
                 if(!confirm('ยกเลิกการทวนสอบบิลนี้?')) return;
                 loadingOverlay.style.display = 'flex';
                 await supabaseClient.from('orders').update({ transport_meta: null }).eq('id', id);
-                await window.orderSystem.loadInitialData(true);
+                await fetchTransportData(); // โหลดใหม่เพื่อให้ข้อมูลตรงกับ DB
                 loadingOverlay.style.display = 'none';
-                render();
             }
 
-            return { initialize, setCarrier, undo };
+            return { initialize, setCarrier, undo, fetchTransportData };
         })();
         
         // --- INITIAL LOAD ---
