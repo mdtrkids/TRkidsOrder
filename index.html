@@ -783,15 +783,28 @@
                     <div class="container">
                         <h1>ระบบจัดการสินค้า (Products)</h1>
                         <input type="file" id="import-product-input" style="display: none;" accept=".xlsx, .xls, .csv">
-                        <div class="toolbar">
-                            <div>
+                        <div class="toolbar" style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; background: #f8f9fa; padding: 15px; border-radius: 10px; border: 1px solid #eee;">
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                                 <button id="add-product-btn" class="btn btn-success">+ เพิ่มสินค้าใหม่</button>
                                 <button id="import-product-btn" class="btn btn-info">📥 Import สินค้า</button>
-                                <button id="download-product-template-btn" class="btn btn-secondary">📋 Download Template</button>
-	             <button id="bulk-upload-images-btn" class="btn" style="background-color: #6610f2; color: white;">🖼️ Import รูปภาพ (หลายไฟล์)</button>
-	             <input type="file" id="bulk-image-input" style="display: none;" accept="image/*" multiple>
+                                <button id="download-product-template-btn" class="btn btn-secondary">📋 Template</button>
+                                <button id="bulk-upload-images-btn" class="btn" style="background-color: #6610f2; color: white;">🖼️ Import รูป</button>
                             </div>
-                            <input type="text" id="search-product-input" placeholder="ค้นหารหัสสินค้า หรือ ชื่อสินค้า..." style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; width: 300px;">
+                            
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <label style="font-size: 12px; font-weight: bold; color: #666; margin-left: 5px;">ตัวกรองสถานะ</label>
+                                    <select id="filter-status-select" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; background: white; min-width: 140px; cursor: pointer;">
+                                        <option value="all">ทั้งหมด</option>
+                                        <option value="active">🟢 เปิดการขาย</option>
+                                        <option value="inactive">🔴 ปิดการขาย</option>
+                                    </select>
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <label style="font-size: 12px; font-weight: bold; color: #666; margin-left: 5px;">ค้นหาสินค้า</label>
+                                    <input type="text" id="search-product-input" placeholder="รหัสสินค้า หรือ ชื่อสินค้า..." style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; width: 250px; font-size: 14px;">
+                                </div>
+                            </div>
                         </div>
                         <div class="table-container">
                             <table id="products-table">
@@ -4905,6 +4918,7 @@ window.productSystem = (() => {
     const imgPreview = document.getElementById('product-image-preview');
     const bulkUploadBtn = document.getElementById('bulk-upload-images-btn');
     const bulkImageInput = document.getElementById('bulk-image-input');
+    const statusFilterSelect = document.getElementById('filter-status-select')
 
     let allProductsData = [];
 
@@ -4919,6 +4933,7 @@ window.productSystem = (() => {
         if(productForm) productForm.addEventListener('submit', saveProduct); 
         if(tableBody) tableBody.addEventListener('click', handleTableClick); 
         if(searchInput) searchInput.addEventListener('input', () => renderProductTable(searchInput.value)); 
+        if(statusFilterSelect) statusFilterSelect.addEventListener('change', () => renderProductTable(searchInput.value));
         if(bulkUploadBtn) bulkUploadBtn.addEventListener('click', () => bulkImageInput.click());
         if(bulkImageInput) bulkImageInput.addEventListener('change', (e) => handleBulkImageUpload(e.target.files));
         
@@ -4949,12 +4964,29 @@ window.productSystem = (() => {
     function renderProductTable(searchTerm = '') { 
         tableBody.innerHTML = ''; 
         const lowercasedFilter = searchTerm.toLowerCase(); 
-        const filteredData = allProductsData.filter(p => (p.product_code || '').toLowerCase().includes(lowercasedFilter) || (p.product_name || '').toLowerCase().includes(lowercasedFilter)); 
+        
+        // ดึงค่าจาก Dropdown (all / active / inactive)
+        const selectedStatus = statusFilterSelect ? statusFilterSelect.value : 'all';
+
+        const filteredData = allProductsData.filter(p => {
+            // 1. กรองด้วยคำค้นหา
+            const matchesSearch = (p.product_code || '').toLowerCase().includes(lowercasedFilter) || 
+                                  (p.product_name || '').toLowerCase().includes(lowercasedFilter);
+            
+            // 2. กรองด้วยสถานะ
+            const isActive = p.is_active !== false;
+            let matchesStatus = true;
+            if (selectedStatus === 'active') matchesStatus = isActive;
+            else if (selectedStatus === 'inactive') matchesStatus = !isActive;
+
+            return matchesSearch && matchesStatus;
+        }); 
         
         filteredData.forEach(product => { 
             const isInactive = product.is_active === false;
-            const rowStyle = isInactive ? 'style="background-color: #f9f9f9; color: #bbb;"' : ''; 
-            const statusLabel = isInactive ? '🔴 ปิด' : '🟢 เปิด';
+            // ปรับสีแถวให้ดูจางลงถ้าปิดการขาย
+            const rowStyle = isInactive ? 'style="background-color: #fafafa; opacity: 0.7;"' : ''; 
+            
             const statusBtnClass = isInactive ? 'btn-success' : 'btn-warning';
             const statusBtnText = isInactive ? 'เปิด' : 'ปิด';
 
@@ -4964,15 +4996,15 @@ window.productSystem = (() => {
             
             const row = `<tr ${rowStyle}>
                 <td>${imgHTML}</td>
-                <td><b>${product.product_code || ''}</b></td>
+                <td><b style="${isInactive ? 'color: #999;' : 'color: #333;'}">${product.product_code || ''}</b></td>
                 <td>${product.product_name || ''}</td>
-                <td>${product.product_category || ''}</td>
+                <td><span style="font-size: 12px; background: #eee; padding: 2px 6px; border-radius: 4px;">${product.product_category || ''}</span></td>
                 <td>${product.product_type || ''}</td>
                 <td>${product.rubber_code || ''}</td>
                 <td>${product.storage_location || ''}</td>
                 <td>
                     <div class="action-cell-buttons">
-                        <button class="btn ${statusBtnClass} btn-sm toggle-status-btn" data-product-code="${product.product_code}" data-current-status="${!isInactive}">${statusBtnText}</button>
+                        <button class="btn ${statusBtnClass} btn-sm toggle-status-btn" data-product-code="${product.product_code}" data-current-status="${!isInactive}" style="min-width: 50px;">${statusBtnText}</button>
                         <button class="btn btn-primary btn-sm edit-product-btn" data-product-code="${product.product_code}">แก้ไข</button>
                         <button class="btn btn-danger btn-sm delete-product-btn" data-product-code="${product.product_code}">ลบ</button>
                     </div>
