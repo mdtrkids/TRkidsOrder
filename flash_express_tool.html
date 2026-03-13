@@ -293,7 +293,34 @@ const exportBtn = document.getElementById("btnExport");
 let currentRows = [];
 let inputFileName = "output";
 
-const H = ["Customer_order_number\n(เลขออเดอร์ของลูกค้า)","*Consignee_name\n(ชื่อผู้รับ)","*Address\n(ทิ่อยู่)","*Postal_code\n(รหัสไปรษณีย์)","*Phone_number\n(เบอร์โทรศัพท์)","Phone_number2\n(เบอร์โทรศัพท์)","Number of parcels \n（จำนวนพัสดุ）","COD\n(ยอดเรียกเก็บ)","Item description1(Name|Size/Weight|color|quantity)","Item description2(Name|Size/Weight|color|quantity)","Item description3(Name|Size/Weight|color|quantity)","Item description4(Name|Size/Weight|color|quantity)","Item description5(Name|Size/Weight|color|quantity)","Item_type\n(ประเภทสินค้า)","*Weight_kg\n(น้ำหนัก)","Length\n(ยาว)","Width\n(กว้าง)","Height\n(สูง)","Declared_value\n(มูลค่าสินค้าที่ระบุโดยลูกค้า)","Box_shield","Document return service\n(บริการส่งคืนเอกสาร)","*Product_type         (ประเภทสินค้า）","*Payment method\n（วิธีชำระเงิน）","Remark\n(หมายเหตุ)"];
+const H = [
+  "客户订单号\nCustomer_order_number\n(เลขออเดอร์ของลูกค้า)",
+  "收件人名称\n*Consignee_name\n(ชื่อผู้รับ)",
+  "地址\n*Address\n(ทิ่อยู่)",
+  "邮编\n*Postal_code\n(รหัสไปรษณีย์)",
+  "手机号\n*Phone_number\n(เบอร์โทรศัพท์)",
+  "手机号2\nPhone_number2\n(เบอร์โทรศัพท์)",
+  "包裹数量\nNumber of parcels \n（จำนวนพัสดุ）",
+  "COD\n(ยอดเรียกเก็บ)",
+  "商品描述1（名称|尺寸/重量|颜色|数量）\nItem description1(Name|Size/Weight|color|quantity)\nรายละเอียดสินค้า 1 (ชื่อสินค้า | ขนาด/น้ำหนัก | สี | จำนวน)",
+  "商品描述2（名称|尺寸/重量|颜色|数量）\nItem description2(Name|Size/Weight|color|quantity)\nรายละเอียดสินค้า 2 (ชื่อสินค้า | ขนาด/น้ำหนัก | สี | จำนวน)",
+  "商品描述3（名称|尺寸/重量|颜色|数量）\nItem description3(Name|Size/Weight|color|quantity)\nรายละเอียดสินค้า 3 (ชื่อสินค้า | ขนาด/น้ำหนัก | สี | จำนวน)",
+  "商品描述4（名称|尺寸/重量|颜色|数量）\nItem description4(Name|Size/Weight|color|quantity)\nรายละเอียดสินค้า 4 (ชื่อสินค้า | ขนาด/น้ำหนัก | สี | จำนวน)",
+  "商品描述5（名称|尺寸/重量|颜色|数量）\nItem description5(Name|Size/Weight|color|quantity)\nรายละเอียดสินค้า 5 (ชื่อสินค้า | ขนาด/น้ำหนัก | สี | จำนวน)",
+  "物品类型\nItem_type\n(ประเภทสินค้า)",
+  "重量\n*Weight_kg\n(น้ำหนัก)",
+  "长\nLength\n(ยาว)",
+  "宽\nWidth\n(กว้าง)",
+  "高\nHeight\n(สูง)",
+  "申报价值\nDeclared_value\n(มูลค่าสินค้าที่ระบุโดยลูกค้า)",
+  "Box_shield",
+  "文件归还服务\nDocument return service\n(บริการส่งคืนเอกสาร)",
+  "寄件产品\n*Product_type\n(ประเภทสินค้า）",
+  "付款方式\n*Payment method\n（วิธีชำระเงิน）",
+  "备注\nRemark\n(หมายเหตุ)",
+  "配送偏好地点备注\nDelivery Preference_location note \nหมายเหตุความต้องการในการจัดส่ง ",
+  "配送联系偏好备注\nDelivery Preference_contact note \nหมายเหตุการติดต่อในการจัดส่ง"
+];
 const PREVIEW_HEADERS = ["Address (ต้นฉบับ)","*Consignee_name\n(ชื่อผู้รับ)","*Address\n(ทิ่อยู่)","*Postal_code\n(รหัสไปรษณีย์)","*Phone_number\n(เบอร์โทรศัพท์)","Phone_number2\n(เบอร์โทรศัพท์)","COD\n(ยอดเรียกเก็บ)"];
 const REQUIRED_KEYS = ["*Consignee_name\n(ชื่อผู้รับ)","*Address\n(ทิ่อยู่)","*Postal_code\n(รหัสไปรษณีย์)","*Phone_number\n(เบอร์โทรศัพท์)"];
 function rowHasMissingRequired(row){ return REQUIRED_KEYS.some(k => !row[k] || String(row[k]).trim()===""); }
@@ -318,12 +345,25 @@ exportBtn.disabled = currentRows.length===0;
 }
 
 tbody.addEventListener("input",(e)=>{
-const td=e.target.closest("td"); if(!td) return;
-const tr=td.parentElement;
-const idx=[...tbody.children].indexOf(tr);
-currentRows[idx][td.dataset.key]=td.innerText.trim();
-if(rowHasMissingRequired(currentRows[idx])) tr.classList.add("missing");
-else tr.classList.remove("missing");
+    const td=e.target.closest("td"); if(!td) return;
+    const tr=td.parentElement;
+    const idx=[...tbody.children].indexOf(tr);
+    const key = td.dataset.key;
+    const val = td.innerText.trim();
+
+    // 1. อัปเดตค่าใน Key สำหรับ Preview (เพื่อใช้เช็ค missing status)
+    currentRows[idx][key] = val;
+
+    // 2. อัปเดตค่าใน Key สำหรับ Export (ตัวแปร H) โดยแมตช์ตามชื่อคอลัมน์
+    if (key === PREVIEW_HEADERS[1]) currentRows[idx][H[1]] = val; // ชื่อผู้รับ
+    if (key === PREVIEW_HEADERS[2]) currentRows[idx][H[2]] = val; // ที่อยู่
+    if (key === PREVIEW_HEADERS[3]) currentRows[idx][H[3]] = val; // รหัสไปรษณีย์
+    if (key === PREVIEW_HEADERS[4]) currentRows[idx][H[4]] = val; // เบอร์โทรศัพท์ 1
+    if (key === PREVIEW_HEADERS[5]) currentRows[idx][H[5]] = val; // เบอร์โทรศัพท์ 2
+    if (key === PREVIEW_HEADERS[6]) currentRows[idx][H[7]] = val; // COD (H[7] คือยอด COD)
+
+    if(rowHasMissingRequired(currentRows[idx])) tr.classList.add("missing");
+    else tr.classList.remove("missing");
 });
 
 function rowsFromCSVRecords(records) {
