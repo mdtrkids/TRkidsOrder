@@ -2401,15 +2401,34 @@ if (mode === 'edit' && order) {
             function updateAllFontDropdowns(channelCode) { const newFontOptionsHTML = getFontOptionsForChannel(channelCode); const fontDropdowns = itemsTbody.querySelectorAll('.item-font'); fontDropdowns.forEach(fontSelect => { const selectedValue = fontSelect.value; fontSelect.innerHTML = newFontOptionsHTML; if (fontSelect.querySelector(`option[value="${selectedValue}"]`)) { fontSelect.value = selectedValue; } else { fontSelect.value = ""; } }); }
 
             function addItemRow(item = null, rowUid = null) {
-                const newUid = rowUid || 'row-' + Date.now() + Math.random(); const row = itemsTbody.insertRow(); row.dataset.rowUid = newUid;
-                const shelfOptions = ['1', '2', '3', '4', '5'].map(n => `<option value="${n}">${n}</option>`).join('');
-                
-                // ดึงค่าช่องทางปัจจุบันมาเพื่อกรองสินค้าและฟอนต์
-                const currentChannel = container.querySelector('#channel_code').value; 
-                const fontOptions = getFontOptionsForChannel(currentChannel);
-                const filteredProducts = getFilteredProductList(currentChannel);
+    const newUid = rowUid || 'row-' + Date.now() + Math.random(); 
+    const row = itemsTbody.insertRow(); 
+    row.dataset.rowUid = newUid;
+    const shelfOptions = ['1', '2', '3', '4', '5'].map(n => `<option value="${n}">${n}</option>`).join('');
+    
+    const currentChannel = container.querySelector('#channel_code').value; 
+    const fontOptions = getFontOptionsForChannel(currentChannel);
+    
+    // ดึงรายการสินค้าที่ "เปิดการขาย" ตามปกติ
+    let filteredProducts = getFilteredProductList(currentChannel);
 
-                row.innerHTML = `<td><select class="item-product"></select></td><td><select class="item-ink_color"><option value="">--เลือกสี--</option></select></td><td><select class="item-shelf_location"><option value="">--เลือก--</option>${shelfOptions}</select></td><td><input type="text" class="item-cartoon_pattern"></td><td><input type="text" class="item-line_pattern"></td><td><select class="item-font">${fontOptions}</select></td><td style="text-align:center;"><input type="checkbox" class="item-no-name-cb" style="width:18px;height:18px;cursor:pointer;"></td><td><input type="text" class="item-line_1"></td><td><input type="text" class="item-line_2"></td><td><input type="text" class="item-line_3"></td><td><input type="number" class="item-quantity quantity-input" value="1" min="1"></td><td><input type="text" class="item-notes"></td><td><input type="text" class="item-file_attachment"></td><td class="action-cell"><button type="button" class="btn btn-danger remove-item-btn">X</button></td>`;
+    // --- ส่วนที่แก้ไข: ถ้าเป็นการโหลดรายการเก่า (item != null) ---
+    if (item && item.product_id) {
+        const isExistsInFilter = filteredProducts.some(p => p.id == item.product_id);
+        // ถ้าสินค้านี้ไม่มีในรายการที่เปิดการขาย (เพราะถูกปิดไปแล้ว) ให้แอบเพิ่มเข้าไปในลิสต์เฉพาะแถวนี้
+        if (!isExistsInFilter) {
+            const inactiveProd = fullProductList.find(p => p.id == item.product_id);
+            if (inactiveProd) {
+                filteredProducts.push({
+                    id: inactiveProd.id,
+                    text: inactiveProd.product_name + " (ปิดการขาย)"
+                });
+            }
+        }
+    }
+    // ---------------------------------------------------
+
+    row.innerHTML = `<td><select class="item-product"></select></td><td><select class="item-ink_color"><option value="">--เลือกสี--</option></select></td><td><select class="item-shelf_location"><option value="">--เลือก--</option>${shelfOptions}</select></td><td><input type="text" class="item-cartoon_pattern"></td><td><input type="text" class="item-line_pattern"></td><td><select class="item-font">${fontOptions}</select></td><td style="text-align:center;"><input type="checkbox" class="item-no-name-cb" style="width:18px;height:18px;cursor:pointer;"></td><td><input type="text" class="item-line_1"></td><td><input type="text" class="item-line_2"></td><td><input type="text" class="item-line_3"></td><td><input type="number" class="item-quantity quantity-input" value="1" min="1"></td><td><input type="text" class="item-notes"></td><td><input type="text" class="item-file_attachment"></td><td class="action-cell"><button type="button" class="btn btn-danger remove-item-btn">X</button></td>`;
                 
                 const noNameCb = row.querySelector('.item-no-name-cb');
                 const lineInputs = [row.querySelector('.item-line_1'), row.querySelector('.item-line_2'), row.querySelector('.item-line_3')];
@@ -6164,4 +6183,3 @@ return `<tr class="${isV ? 'tr-row-success' : ''}">
     </div>
 </body>
 </html>
-
