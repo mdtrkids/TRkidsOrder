@@ -3,247 +3,480 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Flash Express Tool (Exact Header Mode)</title>
-<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+<title>ตรวจสอบและ Export ใบปะหน้า</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;
+400;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--primary:#2563eb;--bg:#f7fafc;--card:#fff;--muted:#6b7280;--border:#e5e7eb;--success:#10b981}
+:root{--primary:#2563eb;--bg:#f7fafc;--card:#fff;--muted:#6b7280;--border:#e5e7eb}
 *{box-sizing:border-box}
 body{margin:0;font-family:"Sarabun",system-ui,-apple-system,Segoe UI,Roboto;background:var(--bg);color:#111827}
-header{padding:20px 16px; text-align:center}
-h1{margin:0 0 6px;font-size:22px}
+header{padding:20px 16px}
+h1{margin:0 0 6px;font-size:22px;text-align:center}
 .wrap{max-width:1200px;margin:0 auto;padding:0 16px 40px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.05);padding:20px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.05);padding:16px}
 .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
-.hint{color:var(--muted);font-size:13px;display:block;margin-top:8px;text-align:center}
-button{background:var(--primary);color:#fff;border:none;padding:12px 20px;border-radius:10px;font-weight:600;cursor:pointer;transition:0.2s}
-button[secondary]{background:#f3f4f6;color:#111827;border:1px solid var(--border)}
+.hint{color:var(--muted);font-size:13px;text-align:center}
+input[type=file]{padding:10px 12px;border:1px dashed var(--border);border-radius:12px;background:#fff}
+button{background:var(--primary);color:#fff;border:none;padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer}
+button[secondary]{background:#1118270e;color:#111827}
 button:disabled{opacity:.5;cursor:not-allowed}
-.template-status{font-size:12px;padding:8px 12px;border-radius:8px;background:#fef3c7;color:#92400e;margin-bottom:10px;display:inline-block}
-.template-status.loaded{background:#d1fae5;color:#065f46;border:1px solid #059669}
 table{width:100%;border-collapse:separate;border-spacing:0}
 th,td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:14px;white-space:pre-line}
 th{background:#f9fafb;position:sticky;top:0;z-index:1}
-.hidden{display:none}
+td[contenteditable="true"]{background:#fffdf7}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.count{color:var(--muted);font-size:13px}
+#table.wide thead th:nth-child(1),
+#table.wide tbody td:nth-child(1){min-width:200px}
+#table.wide thead th:nth-child(3),
+#table.wide tbody td:nth-child(3){min-width:200px}
+tr.missing td{ background:#ffe2e2 !important; }
 </style>
 </head>
 <body>
-
-<header>
-    <h1>Flash Express Export Tool</h1>
-    <div id="templateIndicator" class="template-status">⚠️ ยังไม่ได้โหลด Template (หัวตารางอาจไม่ตรง)</div>
+<header class="wrap">
+<h1>ตรวจสอบและ Export ใบปะหน้า</h1>
 </header>
-
 <div class="wrap">
-    <section class="card">
-        <div class="row">
-            <!-- ปุ่มโหลด Template -->
-            <input type="file" id="inputTemplate" class="hidden" accept=".xlsx,.xls,.csv">
-            <button secondary onclick="document.getElementById('inputTemplate').click()">
-                1. โหลดไฟล์ Template (เพื่อ Copy หัวตารางมาเป๊ะๆ)
-            </button>
-            <button id="btnExport" disabled>2. Export เป็น Excel (.xlsx)</button>
-        </div>
-        <span class="hint" id="status">รอรับข้อมูลจากระบบ TR Kids...</span>
-    </section>
-
-    <section class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-            <div style="font-size:14px;font-weight:bold">พรีวิวข้อมูล (แก้ไขได้)</div>
-            <div id="count" style="font-size:13px;color:var(--muted)">0 แถว</div>
-        </div>
-        <div style="overflow:auto;max-height:50vh;border:1px solid #eee">
-            <table id="table">
-                <thead id="thead"></thead>
-                <tbody id="tbody"></tbody>
-            </table>
-        </div>
-    </section>
+<section class="card">
+<div class="row">
+<button id="btnExport" disabled>Export เป็น Excel (.xlsx)</button>
+<span class="hint" id="status">กำลังรอข้อมูล...</span>
 </div>
-
+</section>
+<section class="card" style="margin-top:16px">
+<div class="topbar">
+<div class="hint">พรีวิวผลลัพธ์ (แก้ได้) • คอลัมน์แรกเป็น Address (ต้นฉบับ)</div>
+<div class="count" id="count">0 แถว</div>
+</div>
+<div style="overflow:auto;max-height:65vh">
+<table id="table" class="wide">
+<thead id="thead"></thead>
+<tbody id="tbody"></tbody>
+</table>
+</div>
+</section>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-/* ================= Config & State ================= */
+/* ================= Helpers ================= */
+function th2ar(s){ if(!s) return ""; const th="๐๑๒๓๔๕๖๗๘๙"; return s.replace(/[๐-๙]/g,ch=>String(th.indexOf(ch))); }
+function normalizeInline(s){
+if(!s) return "";
+return th2ar(s)
+.replace(/\r\n?/g,"\n")
+.replace(/[\u200B-\u200D\uFEFF]/g,"")
+.replace(/[ \t\f\v]+/g," ")
+.trim();
+}
+function escapeRe(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}
+
+function removeSpansKeepNewlines(text, spans){
+if(!spans || !spans.length) return text;
+spans.sort((a,b)=>a.start-b.start);
+const merged=[]; for(const s of spans){
+if(!merged.length || s.start>merged[merged.length-1].end) merged.push({start:s.start,end:s.end});
+else merged[merged.length-1].end = Math.max(merged[merged-1].end, s.end);
+}
+let out="", prev=0;
+for(const s of merged){
+const left=text.slice(prev,s.start);
+const mid =text.slice(s.start,s.end);
+const hasNL=/\n/.test(mid);
+const lch=left.slice(-1)||"", rch=text.slice(s.end,s.end+1)||"";
+out+=left;
+if(!hasNL){
+const isWord=(c)=>/[0-9A-Za-zก-๛]/.test(c);
+if(isWord(lch)&&isWord(rch)) out+=" ";
+}
+prev=s.end;
+}
+out+=text.slice(prev);
+return out.replace(/[ \t\f\v]{2,}/g," ").replace(/[ ,;:|\-]+$/mg,"").replace(/\n{3,}/g,"\n\n");
+}
+
+/* ================= Phone / Postcode ================= */
+function fuzzyWord(word){
+const chars=[...word]; return chars.map(ch=>ch.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("[\\s\\W_]*");
+}
+const PHONE_TOKEN_WORDS = ["โทร","เบอร์","ติดต่อ","tel","phone","mobile","mob","call"];
+const PHONE_TOKEN_START_RE = new RegExp(`^\\s*(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*`,"i");
+const PHONE_TOKEN_INLINE_RE = new RegExp(`(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*`,"ig");
+
+function normalizePhoneDigits(p){
+let d = th2ar(p).replace(/[^\d+]/g,"");
+if(d.startsWith("+66")) d = "0" + d.slice(3);
+return d.replace(/\D/g,"");
+}
+function phoneFlexRegex(d){
+const chunk=(digits)=>digits.split("").map(ch=>ch+"[\\s\\-()]*").join("");
+const local=chunk(d);
+const intl ="\\+?66[\\s\\-()]*"+chunk(d.slice(1));
+return new RegExp(`(?:${intl}|${local})`,"g");
+}
+function findFirstPhoneIndex(text){
+const s = th2ar(text);
+const re = /\+?66[\s\-()]*\d(?:[\s\-()]*\d){7,9}\b|0[\s\-()]*\d(?:[\s\-()]*\d){8}\b/g;
+const m = re.exec(s);
+return m ? m.index : -1;
+}
+
+function collectPhones(text){
+const s = th2ar(text);
+const found = new Set();
+const re = /(?<!\d)(?:0(?:[\s\-()]*\d){9,10}|\+66(?:[\s\-()]*\d){8,9})(?!\d)/g;
+let m;
+while ((m = re.exec(s))){
+let raw = m[0];
+if (raw.startsWith("+66")) raw = "0" + raw.slice(3);
+const dN = raw.replace(/\D/g,"");
+if (/^0\d{8,9}$/.test(dN)) {
+found.add(dN);
+if (found.size >= 2) break;
+}
+}
+return Array.from(found).slice(0,2);
+}
+
+function stripPhonesFromText(text, phones){
+if(!phones || !phones.length) return stripPhoneTokensResidual(text);
+let s = text;
+for(const d of phones){
+const re = phoneFlexRegex(d);
+s = s.replace(re," ");
+}
+return stripPhoneTokensResidual(s);
+}
+function stripPhoneTokensResidual(s){
+return s
+.replace(PHONE_TOKEN_INLINE_RE," ")
+.replace(/[ \t]+$/mg,"")
+.replace(/\s{2,}/g," ")
+.trim();
+}
+
+const POSTCODE_TOKENS = ["รหัสไปรษณีย์","รหัส ปณ.","รหัส ปณ","ปณ.","ปณ","ไปรษณีย์","post office","postcode","zip","zipcode","zip code"];
+function findFirstPostcodeIndex(text){
+const m = /\b\d{5}\b/.exec(th2ar(text));
+return m ? m.index : -1;
+}
+function stripPostcodeTokens(s){
+let out = s;
+for(const tok of POSTCODE_TOKENS){
+const re = new RegExp(escapeRe(tok)+"\\s*:?","ig");
+out = out.replace(re," ");
+}
+return out;
+}
+function stripSpecificPostcode(out, postcode){
+if(!postcode) return out;
+const reTail = new RegExp(`\\b${postcode}\\b(?=\\s*$)`);
+const reAny = new RegExp(`\\b${postcode}\\b(?!.*\\d)`);
+if(reTail.test(out)) return out.replace(reTail," ");
+return out.replace(reAny," ");
+}
+
+/* ================= Address Cues ================= */
+const CUE_LITERALS=["ร้าน","ห้าง","ห้างร้าน","ศูนย์การค้า","ห้างสรรพสินค้า","เดอะมอลล์","เซ็นทรัล","โรบินสัน","โลตัส","Tesco","บิ๊กซี","Big C","แม็คโคร","Makro","เทอร์มินอล 21","Terminal 21","Plaza","พลาซ่า","มอลล์","มาร์เก็ต","Market","ตลาด","ไนท์บาซาร์","Bazaar","คอนโด","คอนโดฯ","คอนโดมิเนียม","อาคารชุด","Condo","Condominium","Apartment","อพาร์ตเมนต์","อพาร์ทเม้นท์","Mansion","แมนชั่น","หอพัก","รีสอร์ท","Resort","โรงแรม","Hotel","โรงพยาบาล","รพ.","Hospital","คลินิก","Clinic","อาคาร","ตึก","บิสซิเนสเซ็นเตอร์","อาคารพาณิชย์","Office","ออฟฟิศ","ทาวเวอร์","Tower","Building","บิลดิ้ง","ศูนย์ราชการ","Government Complex","ศาลากลาง","โครงการ","หมู่บ้าน","หมู่บ้านจัดสรร","มบ.","หมู่ที่","หมู่","ม.","ชุมชน","ทาวน์โฮม","ทาวน์เฮ้าส์","บ้าน","ห้อง","Room","Unit","ยูนิต","ชั้น","Floor","Fl.","เลขที่","บ้านเลขที่","No.","House No.","บล็อก","บล๊อค","Block","แยก","ถนน","ถ.","Road","Rd.","Rama","พระราม","ศรีนครินทร์","เพชรบุรี","สุขุมวิท","วิภาวดี","งามวงศ์วาน","พหลโยธิน","รัชดา","ราชพฤกษ์","Bangna","บางนา","Sukhumvit","Ratchadaphisek","Ratchada","Srinakarin","ซอย","ซ.","Soi","ตรอก","สะพาน","วงแหวน","ทางด่วน","ด่วน","ดอนเมืองโทลล์เวย์","ด่วนศรีรัช","แขวง","เขต","ตำบล","ต.","อำเภอ","อ.","จังหวัด","จ.","กรุงเทพ","กทม","Bangkok","BKK","Province","District","Subdistrict","โรงเรียน","มหาวิทยาลัย","วิทยาลัย","คณะ","วัด","มัสยิด","โบสถ์","โกดัง","คลังสินค้า","คลัง","Warehouse","โรงงาน","Factory","นิคมอุตสาหกรรม","นิคม","Industrial Estate","สถานี","Station","ท่าเรือ","Pier","Port","สนามบิน","ท่าอากาศยาน","Airport","เทอร์มินอล","Terminal","เอสพลานาด","Esplanade","Fortune","เอ็มควอเทียร์","EmQuartier","เอ็มโพเรียม","Emporium","Iconsiam","ไอคอนสยาม","Siam Paragon","พารากอน","MBK","มาบุญครอง","Union Mall","ยูเนียนมอลล์"];
+const CUE_LITERAL_RES = CUE_LITERALS.map(lit => new RegExp(escapeRe(lit), "i"));
+const HOUSE_RE = /\b\d{1,5}(?:\s*\/\s*\d{1,5})?\b/;
+
+/* ================= Name helpers ================= */
+const COMPANY_AS_ADDRESS_RE=/^\s*(?:บ\.|บจก\.|บจ\.|หจก\.|ห้างหุ้นส่วน|บริษัท|ร้าน)\s+.+จำกัด\b/i;
+const PERSON_TITLES_RE=/^(คุณ|นาย|นาง|น\.ส\.|นางสาว|ด\.ช\.|ด\.ญ\.)\b/;
+const NAME_PREFIX_TRASH=[/^ที่อยู่\s*:?\s*/i,/^address\s*:?\s*/i,/^addr\.?\s*/i,/^add\.?\s*/i,/^จัดส่ง\s*:?\s*/i,/^โปรด\s*จัดส่ง\s*/i,/^กรุณา\s*ส่ง\s*/i,/^รบกวน\s*ส่ง.*(ที่อยู่|ตามที่อยู่)/i,/^ส่งถึง\s*:?\s*/i,/^ถึง\s*:?\s*/i,/^ส่งมาตามที่อยู่\s*/i,/^การจัดส่ง\s*/i,/^โปรด\s*ส่ง\s*/i,/^ship\s*to\s*:?\s*/i,/^deliver\s*to\s*:?\s*/i,/^to\s*:?\s*/i];
+
+function looksLikePersonName(s){
+if(!s) return false;
+if(COMPANY_AS_ADDRESS_RE.test(s)) return false;
+if(/\d/.test(s)) return /^[ก-๛A-Za-z .'\-]+$/.test(s.split(/\s+\d/)[0] || "");
+const words=s.split(/\s+/);
+if(words.length>6 && !PERSON_TITLES_RE.test(s)) return false;
+return true;
+}
+function cutAtFirstCue(line){
+if(!line) return "";
+let idx = -1;
+for(const re of CUE_LITERAL_RES){
+const m = re.exec(line);
+if(m){ idx = (idx===-1? m.index : Math.min(idx, m.index)); }
+}
+const mHouse = line.match(HOUSE_RE);
+if(mHouse) idx = (idx===-1? mHouse.index : Math.min(idx, mHouse.index));
+return idx>-1 ? line.slice(0,idx).trim() : line.trim();
+}
+function cleanName(n){
+let s=(n||"");
+for (const re of NAME_PREFIX_TRASH){ s = s.replace(re,""); }
+s = s
+.replace(new RegExp(`(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*.*$`,"i"),"")
+.replace(new RegExp(`(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*$`,"i"),"")
+.replace(/[ ,;:|\-]+$/,"")
+.trim();
+s = cutAtFirstCue(s);
+s = s.replace(/[^ก-๛A-Za-z0-9\s\.'\-]/g," ").replace(/\s{2,}/g," ").trim();
+return s;
+}
+
+/* ================= Address extraction (patched) ================= */
+function extractNameAndAddressSmart(text){
+const s = normalizeInline(text);
+let lines = s.split("\n").map(t=>t.trim()).filter(Boolean);
+if (!lines.length) return { name:"", address:"" };
+while (lines.length && cleanName(lines[0])==="") { lines.shift(); }
+let first = lines[0] || "";
+let name = "";
+let addrStart = 0;
+const cueIdxs = CUE_LITERAL_RES.map(re=>{ const m=re.exec(first); return m?m.index:-1; }).filter(i=>i>=0);
+const houseM = first.match(HOUSE_RE);
+const earliest = Math.min(...(cueIdxs.length?cueIdxs:[Infinity]), houseM?houseM.index:Infinity);
+if (earliest!==Infinity && earliest>0){
+name = cleanName(first.slice(0, earliest).trim());
+first = first.slice(earliest).trim();
+lines[0] = first;
+addrStart = 0;
+} else {
+if (looksLikePersonName(first)){ name = cleanName(first); addrStart = 1; }
+else{ addrStart = 0; }
+}
+function isPhoneOnlyLine(t){
+const st = th2ar(t);
+const hasPhone = /\+?66[\s\-()]*\d(?:[\s\-()]*\d){7,9}\b|0[\s\-()]*\d(?:[\s\-()]*\d){8}\b/.test(st);
+const noRealWords = st.replace(/[0-9+\s\-\(\)]/g,"").trim()==="" || PHONE_TOKEN_START_RE.test(st);
+return hasPhone && noRealWords;
+}
+let addrLines = lines.slice(addrStart);
+while (addrLines.length && isPhoneOnlyLine(addrLines[0])) { addrLines.shift(); }
+let address = addrLines.join("\n");
+let end = address.length;
+const pIdx = findFirstPhoneIndex(address);
+if (pIdx >= 0) end = Math.min(end, pIdx);
+const pcIdx = findFirstPostcodeIndex(address);
+if (pcIdx >= 0) end = Math.min(end, pcIdx);
+address = address.slice(0, end);
+const phones = collectPhones(s);
+address = stripPhonesFromText(address, phones);
+const all5 = [...th2ar(s).matchAll(/\b(\d{5})\b/g)];
+const postcode = all5.length? all5[all5.length-1][1] : "";
+address = stripPostcodeTokens(address);
+address = stripSpecificPostcode(address, postcode);
+address = fixDanglingAdmin(address)
+.replace(/[ ,;:|\-]+$/mg,"")
+.replace(/\n{3,}/g,"\n\n")
+.replace(/[ \t\f\v]{2,}/g," ")
+.trim();
+return { name, address, postcode };
+}
+
+function fixDanglingAdmin(address){
+const DANGLING=["ตำบล","ต.","อำเภอ","อ.","แขวง","เขต","จังหวัด","จ."];
+let lines=address.split("\n").map(s=>s.trim());
+lines=lines.filter((l,i)=> l!=="" || (i>0 && lines[i-1]!=="" ));
+for(let i=0;i<lines.length-1;i++){
+const L=lines[i];
+if(DANGLING.includes(L)){
+lines[i]=(L+" "+lines[i+1]).replace(/[ \t\f\v]+/g," ").trim();
+lines.splice(i+1,1); i=Math.max(-1,i-1);
+}
+}
+return lines.join("\n");
+}
+
+/* ================= UI & Export ================= */
+const thead = document.getElementById("thead");
+const tbody = document.getElementById("tbody");
+const countEl = document.getElementById("count");
+const statusEl= document.getElementById("status");
+const exportBtn = document.getElementById("btnExport");
+
 let currentRows = [];
-let inputFileName = "flash_export";
-let CUSTOM_H = null; // จะเก็บหัวตาราง "เป๊ะๆ" จากไฟล์ที่ผู้ใช้โหลด
+let inputFileName = "output";
 
-// หัวตารางพรีวิว (สำหรับแสดงผลในหน้าเว็บเท่านั้น)
-const PREVIEW_HEADERS = ["Address (ต้นฉบับ)","ชื่อผู้รับ","ที่อยู่","รหัสไปรษณีย์","เบอร์โทร1","เบอร์โทร2","ยอด COD"];
+const H = [
+  "客户订单号\nCustomer_order_number\n(เลขออเดอร์ของลูกค้า)",
+  "收件人名称\n*Consignee_name\n(ชื่อผู้รับ)",
+  "地址\n*Address\n(ทิ่อยู่)",
+  "邮编\n*Postal_code\n(รหัสไปรษณีย์)",
+  "手机号\n*Phone_number\n(เบอร์โทรศัพท์)",
+  "手机号2\nPhone_number2\n(เบอร์โทรศัพท์)",
+  "包裹数量\nNumber of parcels \n（จำนวนพัสดุ）",
+  "COD\n(ยอดเรียกเก็บ)",
+  "\n商品描述1（名称|尺寸/重量|颜色|数量）\nItem description1(Name|Size/Weight|color|quantity)\nรายละเอียดสินค้า 1 (ชื่อสินค้า | ขนาด/น้ำหนัก | สี | จำนวน)", // เพิ่ม \n ด้านหน้า
+  "商品描述2（名称|尺寸/重量|颜色|数量）\nItem description2(Name|Size/Weight|color|quantity)\nรายละเอียดสินค้า 2 (ชื่อสินค้า | ขนาด/น้ำหนัก | สี | จำนวน)",
+  "商品描述3（名称|尺寸/重量|颜色|数量）\nItem description3(Name|Size/Weight|color|quantity)\nรายละเอียดสินค้า 3 (ชื่อสินค้า | ขนาด/น้ำหนัก | สี | จำนวน)",
+  "商品描述4（名称|尺寸/重量|颜色|数量）\nItem description4(Name|Size/Weight|color|quantity)\nรายละเอียดสินค้า 4 (ชื่อสินค้า | ขนาด/น้ำหนัก | สี | จำนวน)",
+  "商品描述5（名称|尺寸/重量|颜色|数量）\nItem description5(Name|Size/Weight|color|quantity)\nรายละเอียดสินค้า 5 (ชื่อสินค้า | ขนาด/น้ำหนัก | สี | จำนวน)",
+  "物品类型\nItem_type\n(ประเภทสินค้า)",
+  "重量\n*Weight_kg\n(น้ำหนัก)",
+  "长\nLength\n(ยาว)",
+  "宽\nWidth\n(กว้าง)",
+  "高\nHeight\n(สูง)",
+  "申报价值\nDeclared_value\n(มูลค่าสินค้าที่ระบุโดยลูกค้า)",
+  "Box_shield",
+  "文件归还服务\nDocument return service\n(บริการส่งคืนเอกสาร)",
+  "寄件产品\n*Product_type         \n(ประเภทสินค้า）", // เพิ่มเว้นวรรคหลัง Product_type
+  "付款方式\n*Payment method\n（วิธีชำระเงิน）",
+  "备注\nRemark\n(หมายเหตุ)",
+  "配送偏好地点备注\nDelivery Preference_location note \nหมายเหตุความต้องการในการจัดส่ง ", // มีเว้นวรรคท้ายประโยค
+  "配送联系偏好备注\nDelivery Preference_contact note \nหมายเหตุการติดต่อในการจัดส่ง"
+];
+const PREVIEW_HEADERS = ["Address (ต้นฉบับ)","*Consignee_name\n(ชื่อผู้รับ)","*Address\n(ทิ่อยู่)","*Postal_code\n(รหัสไปรษณีย์)","*Phone_number\n(เบอร์โทรศัพท์)","Phone_number2\n(เบอร์โทรศัพท์)","COD\n(ยอดเรียกเก็บ)"];
+const REQUIRED_KEYS = ["*Consignee_name\n(ชื่อผู้รับ)","*Address\n(ทิ่อยู่)","*Postal_code\n(รหัสไปรษณีย์)","*Phone_number\n(เบอร์โทรศัพท์)"];
+function rowHasMissingRequired(row){ return REQUIRED_KEYS.some(k => !row[k] || String(row[k]).trim()===""); }
 
-/* ================= ฟังก์ชันโหลดหัวจาก Template (หัวใจสำคัญ) ================= */
+function renderHeader(){ thead.innerHTML = "<tr>" + PREVIEW_HEADERS.map(h=>`<th>${h}</th>`).join("") + "</tr>"; }
+function renderBody(){
+tbody.innerHTML = "";
+for(const row of currentRows){
+const tr = document.createElement("tr");
+if (rowHasMissingRequired(row)) tr.classList.add("missing");
+PREVIEW_HEADERS.forEach(h=>{
+const td=document.createElement("td");
+td.setAttribute("contenteditable","true");
+td.dataset.key=h;
+td.textContent=(row[h] ?? "").toString();
+tr.appendChild(td);
+});
+tbody.appendChild(tr);
+}
+countEl.textContent = `${currentRows.length} แถว`;
+exportBtn.disabled = currentRows.length===0;
+}
 
-document.getElementById('inputTemplate').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array', cellStyles: true});
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        // ดึงเฉพาะแถวแรก (หัวตาราง) มาเป็น Array
-        const aoa = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
-        if(aoa.length > 0) {
-            CUSTOM_H = aoa[0]; // เก็บหัวตารางแถวที่ 1 ไว้ทั้งหมด (รวมตัวอักษรพิเศษทุกอย่าง)
-            localStorage.setItem('flash_template_exact_h', JSON.stringify(CUSTOM_H));
-            updateTemplateStatus();
-            alert("บันทึกหัวตาราง 'เป๊ะๆ' จากไฟล์ของคุณเรียบร้อยแล้ว!");
-        }
-    };
-    reader.readAsArrayBuffer(file);
+tbody.addEventListener("input",(e)=>{
+    const td=e.target.closest("td"); if(!td) return;
+    const tr=td.parentElement;
+    const idx=[...tbody.children].indexOf(tr);
+    const key = td.dataset.key;
+    const val = td.innerText.trim();
+
+    // 1. อัปเดตค่าใน Key สำหรับ Preview (เพื่อใช้เช็ค missing status)
+    currentRows[idx][key] = val;
+
+    // 2. อัปเดตค่าใน Key สำหรับ Export (ตัวแปร H) โดยแมตช์ตามชื่อคอลัมน์
+    if (key === PREVIEW_HEADERS[1]) currentRows[idx][H[1]] = val; // ชื่อผู้รับ
+    if (key === PREVIEW_HEADERS[2]) currentRows[idx][H[2]] = val; // ที่อยู่
+    if (key === PREVIEW_HEADERS[3]) currentRows[idx][H[3]] = val; // รหัสไปรษณีย์
+    if (key === PREVIEW_HEADERS[4]) currentRows[idx][H[4]] = val; // เบอร์โทรศัพท์ 1
+    if (key === PREVIEW_HEADERS[5]) currentRows[idx][H[5]] = val; // เบอร์โทรศัพท์ 2
+    if (key === PREVIEW_HEADERS[6]) currentRows[idx][H[7]] = val; // COD (H[7] คือยอด COD)
+
+    if(rowHasMissingRequired(currentRows[idx])) tr.classList.add("missing");
+    else tr.classList.remove("missing");
 });
 
-function updateTemplateStatus() {
-    const el = document.getElementById('templateIndicator');
-    const stored = localStorage.getItem('flash_template_exact_h');
-    if(stored) {
-        CUSTOM_H = JSON.parse(stored);
-        el.textContent = "✓ หัวตาราง: ใช้แบบเป๊ะๆ จาก Template ที่คุณโหลดไว้";
-        el.classList.add('loaded');
-    }
+function rowsFromCSVRecords(records) {
+const out = [];
+for (const r of records) {
+const orderNo = (r["Order.No"] ?? r["bill_no"] ?? "").toString().trim();
+if (!orderNo) continue;
+
+const addressRaw = (r["Address"] ?? r["customer_address"] ?? "").toString();
+
+let codRaw = "0";
+if (r.hasOwnProperty("payment_method") && r.hasOwnProperty("total_amount")) {
+const isCod = (r["payment_method"] || '').toLowerCase().includes('cod');
+codRaw = isCod ? (r["total_amount"] || "0").toString().trim() : "0";
+} else {
+codRaw = (r["ยอด COD"] ?? r["COD"] ?? "0").toString().trim();
 }
 
-/* ================= Logic ประมวลผลที่อยู่ (เหมือนเดิม) ================= */
+const s0 = normalizeInline(addressRaw);
+const phones = collectPhones(s0);
+const phone1 = phones[0] || "", phone2 = phones[1] || "";
 
-function th2ar(s){ if(!s) return ""; const th="๐๑๒๓๔๕๖๗๘๙"; return s.replace(/[๐-๙]/g,ch=>String(th.indexOf(ch))); }
-function normalizeInline(s){ if(!s) return ""; return th2ar(s).replace(/\r\n?/g,"\n").replace(/[\u200B-\u200D\uFEFF]/g,"").replace(/[ \t\f\v]+/g," ").trim(); }
-function findFirstPostcodeIndex(text){ const m = /\b\d{5}\b/.exec(th2ar(text)); return m ? m.index : -1; }
-function collectPhones(text){ 
-    const s = th2ar(text); const found = new Set(); 
-    const re = /(?<!\d)(?:0(?:[\s\-()]*\d){9,10}|\+66(?:[\s\-()]*\d){8,9})(?!\d)/g; 
-    let m; while ((m = re.exec(s))){ 
-        let raw = m[0]; if (raw.startsWith("+66")) raw = "0" + raw.slice(3); 
-        const dN = raw.replace(/\D/g,""); if (/^0\d{8,9}$/.test(dN)) { found.add(dN); if (found.size >= 2) break; } 
-    } return Array.from(found); 
+const all5 = [...th2ar(s0).matchAll(/\b(\d{5})\b/g)];
+const postcode = all5.length ? all5[all5.length - 1][1] : "";
+
+let { name, address, postcode: _pcFromFn } = extractNameAndAddressSmart(s0);
+const finalPostcode = _pcFromFn || postcode;
+
+address = stripPhonesFromText(address, phones);
+address = stripPostcodeTokens(address);
+address = stripSpecificPostcode(address, finalPostcode);
+address = address.replace(/[ ,;:|\-]+$/mg,"").replace(/\n{3,}/g,"\n\n").trim();
+
+const paymentFixed = "payment by sender";
+const row = {};
+
+row["Address (ต้นฉบับ)"] = addressRaw;
+row["*Consignee_name\n(ชื่อผู้รับ)"] = name;
+row["*Address\n(ทิ่อยู่)"] = address;
+row["*Postal_code\n(รหัสไปรษณีย์)"] = finalPostcode || "";
+row["*Phone_number\n(เบอร์โทรศัพท์)"] = phone1;
+row["Phone_number2\n(เบอร์โทรศัพท์)"] = phone2;
+row["COD\n(ยอดเรียกเก็บ)"] = codRaw;
+
+row[H[0]] = orderNo; row[H[1]] = name; row[H[2]] = address; row[H[3]] = finalPostcode || "";
+row[H[4]] = phone1; row[H[5]] = phone2; row[H[6]] = "1"; row[H[7]] = codRaw; row[H[8]] = "";
+row[H[9]] = ""; row[H[10]] = ""; row[H[11]] = ""; row[H[12]] = "";
+row[H[13]] = "อื่นๆ"; row[H[14]] = "0.1"; row[H[15]] = "1"; row[H[16]] = "1"; row[H[17]] = "1";
+row[H[18]] = ""; row[H[19]] = ""; row[H[20]] = ""; row[H[21]] = "Standard";
+row[H[22]] = paymentFixed; row[H[23]] = orderNo;
+
+out.push(row);
 }
-function extractNameAndAddressSmart(text){
-    const s = normalizeInline(text);
-    let lines = s.split("\n").map(t=>t.trim()).filter(Boolean);
-    if (!lines.length) return { name:"", address:"", postcode:"" };
-    let name = lines[0];
-    let address = lines.slice(1).join(" ");
-    const pIdx = findFirstPostcodeIndex(s);
-    const postcode = pIdx !== -1 ? th2ar(s).substr(pIdx, 5) : "";
-    return { name, address, postcode };
-}
-
-/* ================= แสดงตาราง & Export ================= */
-
-function renderTable(){
-    const thead = document.getElementById("thead");
-    const tbody = document.getElementById("tbody");
-    thead.innerHTML = "<tr>" + PREVIEW_HEADERS.map(h=>`<th>${h}</th>`).join("") + "</tr>";
-    tbody.innerHTML = "";
-    currentRows.forEach((row, idx) => {
-        const tr = document.createElement("tr");
-        PREVIEW_HEADERS.forEach(h => {
-            const td = document.createElement("td");
-            td.contentEditable = "true";
-            td.textContent = row[h] || "";
-            td.oninput = () => { currentRows[idx][h] = td.textContent; };
-            tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
-    });
-    document.getElementById("count").textContent = `${currentRows.length} แถว`;
-    document.getElementById("btnExport").disabled = currentRows.length === 0;
+return out;
 }
 
-document.getElementById("btnExport").onclick = () => {
-    if(!CUSTOM_H) {
-        alert("กรุณาโหลดไฟล์ Template (ข้อ 1) ก่อน เพื่อให้หัวตารางตรงตามที่ Flash กำหนดเป๊ะๆ");
-        return;
-    }
+document.getElementById("btnExport").addEventListener("click", ()=>{
+if(currentRows.length===0) return;
+const aoa=[H]; for(const r of currentRows){ aoa.push(H.map(h => (r[h] ?? "").toString())); }
+const ws=XLSX.utils.aoa_to_sheet(aoa);
+ws['!cols']=H.map(h=>({wch:Math.min(45,Math.max(14,h.split("\n")[0].length+6))}));
+const range=XLSX.utils.decode_range(ws['!ref']);
+for(let C=range.s.c; C<=range.e.c; C++){
+const addr=XLSX.utils.encode_cell({r:0,c:C});
+if(!ws[addr]) continue; (ws[addr].s ||= {}).alignment={wrapText:true, vertical:"center"};
+}
+const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Export");
+XLSX.writeFile(wb, `${inputFileName||"output"}.xlsx`);
+});
 
-    const aoa = [CUSTOM_H]; // แถวแรกใช้หัวที่ก๊อปมาเป๊ะๆ
-
-    // ฟังก์ชันช่วยหา Index โดยการค้นหาข้อความบางส่วนจากหัวที่ก๊อปมา
-    const getIdx = (keywords) => {
-        return CUSTOM_H.findIndex(h => h && keywords.some(k => h.toString().includes(k)));
-    };
-
-    const idx = {
-        orderNo: getIdx(["Customer_order_number"]),
-        name:    getIdx(["Consignee_name"]),
-        addr:    getIdx(["Address"]),
-        post:    getIdx(["Postal_code"]),
-        phone1:  getIdx(["Phone_number"]),
-        phone2:  getIdx(["Phone_number2"]),
-        cod:     getIdx(["COD"]),
-        qty:     getIdx(["Number of parcels"]),
-        weight:  getIdx(["Weight"]),
-        itemType: getIdx(["Item_type"]),
-        prodType: getIdx(["Product_type"]),
-        payMethod: getIdx(["Payment method"]),
-        remark:  getIdx(["Remark"])
-    };
-
-    currentRows.forEach(row => {
-        const exportRow = new Array(CUSTOM_H.length).fill("");
-        
-        if(idx.orderNo !== -1) exportRow[idx.orderNo] = row["OrderNo"];
-        if(idx.name !== -1)    exportRow[idx.name]    = row["ชื่อผู้รับ"];
-        if(idx.addr !== -1)    exportRow[idx.addr]    = row["ที่อยู่"];
-        if(idx.post !== -1)    exportRow[idx.post]    = row["รหัสไปรษณีย์"];
-        if(idx.phone1 !== -1)  exportRow[idx.phone1]  = row["เบอร์โทร1"];
-        if(idx.phone2 !== -1)  exportRow[idx.phone2]  = row["เบอร์โทร2"];
-        if(idx.cod !== -1)     exportRow[idx.cod]     = row["ยอด COD"];
-        
-        // ค่า Default มาตรฐาน
-        if(idx.qty !== -1)     exportRow[idx.qty]     = "1";
-        if(idx.weight !== -1)  exportRow[idx.weight]  = "0.1";
-        if(idx.itemType !== -1) exportRow[idx.itemType] = "อื่นๆ";
-        if(idx.prodType !== -1) exportRow[idx.prodType] = "Standard";
-        if(idx.payMethod !== -1) exportRow[idx.payMethod] = "payment by sender";
-        if(idx.remark !== -1)  exportRow[idx.remark]  = row["OrderNo"];
-
-        aoa.push(exportRow);
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    const wb = XLSX.utils.book_new();
-    
-    // ตั้งชื่อแท็บตามที่คุณต้องการ
-    XLSX.utils.book_append_sheet(wb, ws, "Order Template");
-    
-    // บันทึกไฟล์
-    XLSX.writeFile(wb, `${inputFileName}.xlsx`);
-};
-
-/* ================= Init ================= */
+/* init */
 (function init(){
-    updateTemplateStatus();
-    
-    const data = localStorage.getItem('waybillDataForFlash');
-    if (data) {
-        inputFileName = localStorage.getItem('workOrderNameForFlash') || "flash_export";
-        Papa.parse(data, {
-            header: true,
-            complete: (res) => {
-                currentRows = res.data.map(r => {
-                    const addrRaw = r["Address"] || r["customer_address"] || "";
-                    const {name, address, postcode} = extractNameAndAddressSmart(addrRaw);
-                    const phones = collectPhones(addrRaw);
-                    const isCod = (r["payment_method"]||"").toLowerCase().includes("cod");
-                    const cod = isCod ? (r["total_amount"]||"0") : "0";
-                    
-                    return {
-                        "OrderNo": r["Order.No"] || r["bill_no"] || "",
-                        "Address (ต้นฉบับ)": addrRaw,
-                        "ชื่อผู้รับ": name,
-                        "ที่อยู่": address,
-                        "รหัสไปรษณีย์": postcode,
-                        "เบอร์โทร1": phones[0] || "",
-                        "เบอร์โทร2": phones[1] || "",
-                        "ยอด COD": cod
-                    };
-                });
-                renderTable();
-                document.getElementById("status").textContent = "ดึงข้อมูลจาก TR Kids เรียบร้อย";
-            }
-        });
-        localStorage.removeItem('waybillDataForFlash');
-    }
+renderHeader();
+renderBody();
+
+try {
+const workOrderName = localStorage.getItem('workOrderNameForFlash');
+if (workOrderName) {
+inputFileName = workOrderName;
+localStorage.removeItem('workOrderNameForFlash');
+}
+
+const dataFromTRKids = localStorage.getItem('waybillDataForFlash');
+if (dataFromTRKids) {
+statusEl.textContent = "กำลังประมวลผลข้อมูลจากระบบ TR Kids...";
+localStorage.removeItem('waybillDataForFlash');
+
+Papa.parse(dataFromTRKids, {
+header: true,
+skipEmptyLines: true,
+complete: (results) => {
+if (!results.data || results.data.length === 0) {
+statusEl.textContent = "ข้อมูลที่ส่งมาว่างเปล่า";
+return;
+}
+try {
+currentRows = rowsFromCSVRecords(results.data);
+renderBody();
+statusEl.textContent = `นำเข้าข้อมูลสำเร็จ: ${currentRows.length} แถว`;
+} catch (err) {
+console.error("Processing error:", err);
+statusEl.textContent = "เกิดข้อผิดพลาดในการประมวลผลข้อมูล";
+}
+},
+error: (err) => {
+statusEl.textContent = "ไม่สามารถอ่านข้อมูลที่ส่งมาได้: " + err.message;
+}
+});
+}
+} catch (e) {
+console.error("Could not access localStorage:", e);
+statusEl.textContent = "ไม่สามารถเข้าถึงข้อมูลที่ส่งมาได้";
+}
 })();
 </script>
 </body>
