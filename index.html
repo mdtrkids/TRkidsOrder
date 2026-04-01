@@ -1367,17 +1367,20 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
 
 // --- เพิ่มฟังก์ชันสำหรับกรองสินค้าตามเงื่อนไขรหัส 22 ---
             function getFilteredProductList(channelCode) {
-                const isWY = (channelCode === 'WY');
-                return fullProductList
-                    .filter(p => p.is_active !== false && p.product_type === 'FINISHPRODUCT')
-                    .filter(p => {
-                        const code = String(p.product_code || '');
-                        // ถ้าเป็น WY: เอาเฉพาะที่ขึ้นต้นด้วย 22
-                        // ถ้าไม่ใช่ WY: เอาเฉพาะที่ไม่ขึ้นต้นด้วย 22
-                        return isWY ? code.startsWith('22') : !code.startsWith('22');
-                    })
-                    .map(p => ({ id: p.id, text: p.product_name }));
-            }
+    // ตรวจสอบว่าเป็น WY หรือเป็นงาน CLAIM ที่มีคำว่า WY อยู่ในเลขบิล
+    const billNo = currentEditingOrderId ? allOrdersData.find(o => o.id === currentEditingOrderId)?.bill_no || "" : "";
+    const isWY = (channelCode === 'WY') || (channelCode === 'CLAIM' && billNo.includes('WY'));
+    
+    return fullProductList
+        .filter(p => p.is_active !== false && p.product_type === 'FINISHPRODUCT')
+        .filter(p => {
+            const code = String(p.product_code || '');
+            // ถ้าเป็น WY (หรือเคลม WY): เอาเฉพาะรหัสที่ขึ้นต้นด้วย 22
+            // ถ้าไม่ใช่: ห้ามเอารหัสที่ขึ้นต้นด้วย 22
+            return isWY ? code.startsWith('22') : !code.startsWith('22');
+        })
+        .map(p => ({ id: p.id, text: p.product_name }));
+}
 
             // ฟังก์ชันสำหรับอัปเดต Dropdown สินค้าทุกแถวที่มีอยู่ในตาราง
             function updateAllProductDropdowns(channelCode) {
@@ -2273,6 +2276,9 @@ if (mode === 'edit' && order) {
                 } else if (mode === 'edit' && order) {
                     container.querySelector('#form-title').textContent = `แก้ไข: ${order.bill_no}`;
                     currentEditingOrderId = order.id;
+                    updateAllFontDropdowns(order.channel_code);
+                    updateAllProductDropdowns(order.channel_code);
+
 
         // *** เพิ่มส่วนนี้: ล็อกช่องทางทันทีเมื่อกดแก้ไข ***
         container.querySelector('#channel_code').disabled = true;
@@ -2397,7 +2403,14 @@ if (mode === 'edit' && order) {
                 } 
             }
 
-            function getFontOptionsForChannel(channelCode) { const fontList = (channelCode === 'WY') ? wyFonts : standardFonts; const options = fontList.map(f => `<option value="${f}">${f}</option>`).join(''); return `<option value="">--เลือก--</option>${options}`; }
+            function getFontOptionsForChannel(channelCode) {
+    const billNo = currentEditingOrderId ? allOrdersData.find(o => o.id === currentEditingOrderId)?.bill_no || "" : "";
+    const isWY = (channelCode === 'WY') || (channelCode === 'CLAIM' && billNo.includes('WY'));
+    
+    const fontList = isWY ? wyFonts : standardFonts;
+    const options = fontList.map(f => `<option value="${f}">${f}</option>`).join('');
+    return `<option value="">--เลือก--</option>${options}`;
+}
             function updateAllFontDropdowns(channelCode) { const newFontOptionsHTML = getFontOptionsForChannel(channelCode); const fontDropdowns = itemsTbody.querySelectorAll('.item-font'); fontDropdowns.forEach(fontSelect => { const selectedValue = fontSelect.value; fontSelect.innerHTML = newFontOptionsHTML; if (fontSelect.querySelector(`option[value="${selectedValue}"]`)) { fontSelect.value = selectedValue; } else { fontSelect.value = ""; } }); }
 
             function addItemRow(item = null, rowUid = null) {
@@ -2406,12 +2419,11 @@ if (mode === 'edit' && order) {
     row.dataset.rowUid = newUid;
     const shelfOptions = ['1', '2', '3', '4', '5'].map(n => `<option value="${n}">${n}</option>`).join('');
     
-    const currentChannel = container.querySelector('#channel_code').value; 
-    const fontOptions = getFontOptionsForChannel(currentChannel);
-    
-    // ดึงรายการสินค้าที่ "เปิดการขาย" ตามปกติ
-    let filteredProducts = getFilteredProductList(currentChannel);
-
+    const currentChannel = container.querySelector('#channel_code').value;
+   const currentBillNo = currentEditingOrderId ? allOrdersData.find(o => o.id === currentEditingOrderId)?.bill_no || "" : "";
+   const effectiveChannel = (currentChannel === 'CLAIM' && currentBillNo.includes('WY')) ? 'WY' : currentChannel;
+   const fontOptions = getFontOptionsForChannel(effectiveChannel);
+   let filteredProducts = getFilteredProductList(effectiveChannel);
     // --- ส่วนที่แก้ไข: ถ้าเป็นการโหลดรายการเก่า (item != null) ---
     if (item && item.product_id) {
         const isExistsInFilter = filteredProducts.some(p => p.id == item.product_id);
