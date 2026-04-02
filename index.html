@@ -691,7 +691,9 @@
                                 <div id="form-actions" style="margin-top: 25px; text-align: right;"></div>
                             </form>
                         </div>
-                        <div id="tab-waiting" class="tab-content"><div class="tab-filter"><label for="filter-waiting">กรองตามช่องทาง:</label><select id="filter-waiting"></select><input type="text" id="search-waiting" placeholder="ค้นหาเลขบิล, ชื่อลูกค้า, พัสดุ..."></div><div class="batch-actions"><button id="select-all-waiting-btn" class="btn btn-secondary">เลือกทั้งหมด</button><button id="move-to-complete-from-waiting-btn" class="btn btn-success">ย้ายไป "ลงข้อมูลเสร็จสิ้น"</button><button id="cancel-selected-waiting-btn" class="btn btn-danger">ยกเลิกบิลที่เลือก</button></div><ul class="order-list"></ul></div>
+                        <div id="tab-waiting" class="tab-content"><div class="tab-filter"><label for="filter-waiting">กรองตามช่องทาง:</label><select id="filter-waiting"></select><input type="text" id="search-waiting" placeholder="ค้นหาเลขบิล, ชื่อลูกค้า, พัสดุ..."></div><div class="batch-actions"><button id="select-all-waiting-btn" class="btn btn-secondary">เลือกทั้งหมด</button><button id="move-to-complete-from-waiting-btn" class="btn btn-success">ย้ายไป "ลงข้อมูลเสร็จสิ้น"</button><button id="cancel-selected-waiting-btn" class="btn btn-danger">ยกเลิกบิลที่เลือก</button></div><ul class="order-list"></ul><div style="text-align: center; margin-top: 15px;">
+    <button id="load-more-waiting" class="btn btn-secondary load-more-btn" data-status="รอลงข้อมูล" style="display: none; width: 100%; border: 1px dashed #ccc;">โหลดเพิ่ม (แสดงทีละ 500)...</button>
+</div></div>
                         <div id="tab-complete" class="tab-content">
                             <div class="tab-filter">
                                 <label for="filter-complete">กรองตามช่องทาง:</label>
@@ -708,7 +710,9 @@
                                 <button id="move-to-waiting-btn" class="btn btn-warning">ย้ายไป "รอลงข้อมูล" (ที่เลือก)</button>
                                 <button id="cancel-selected-complete-btn" class="btn btn-danger">ยกเลิกบิล (ที่เลือก)</button>
                             </div>
-                            <ul class="order-list"></ul>
+                            <ul class="order-list"></ul><div style="text-align: center; margin-top: 15px;">
+    <button id="load-more-complete" class="btn btn-secondary load-more-btn" data-status="ลงข้อมูลเสร็จสิ้น" style="display: none; width: 100%; border: 1px dashed #ccc;">โหลดเพิ่ม (แสดงทีละ 500)...</button>
+</div>
                         </div>
                         <div id="tab-work-orders" class="tab-content">
                             <div class="tab-filter">
@@ -726,9 +730,13 @@
                                 <button id="export-shipped-btn" class="btn btn-success">Export ข้อมูลที่เลือก</button>
 	             <button id="export-tracking-csv-btn" class="btn" style="background-color: #6610f2; color: white;">Export CSV เลขพัสดุ</button>
                             </div>
-                            <ul class="order-list"></ul>
+                            <ul class="order-list"></ul><div style="text-align: center; margin-top: 15px;">
+    <button id="load-more-shipped" class="btn btn-secondary load-more-btn" data-status="จัดส่งแล้ว" style="display: none; width: 100%; border: 1px dashed #ccc;">โหลดเพิ่ม (แสดงทีละ 500)...</button>
+</div>
                         </div>
-                        <div id="tab-cancelled" class="tab-content"><div class="tab-filter"><label for="filter-cancelled">กรองตามช่องทาง:</label><select id="filter-cancelled"></select><input type="text" id="search-cancelled" placeholder="ค้นหาเลขบิล, ชื่อลูกค้า, พัสดุ..."></div><div class="batch-actions"><button id="select-all-cancelled-btn" class="btn btn-secondary">เลือกทั้งหมด</button><button id="restore-to-waiting-btn" class="btn btn-warning">คืนไป "รอลงข้อมูล"</button><button id="restore-to-complete-btn" class="btn btn-info">คืนไป "ลงข้อมูลเสร็จสิ้น"</button></div><ul class="order-list"></ul></div>
+                        <div id="tab-cancelled" class="tab-content"><div class="tab-filter"><label for="filter-cancelled">กรองตามช่องทาง:</label><select id="filter-cancelled"></select><input type="text" id="search-cancelled" placeholder="ค้นหาเลขบิล, ชื่อลูกค้า, พัสดุ..."></div><div class="batch-actions"><button id="select-all-cancelled-btn" class="btn btn-secondary">เลือกทั้งหมด</button><button id="restore-to-waiting-btn" class="btn btn-warning">คืนไป "รอลงข้อมูล"</button><button id="restore-to-complete-btn" class="btn btn-info">คืนไป "ลงข้อมูลเสร็จสิ้น"</button></div><ul class="order-list"></ul><div style="text-align: center; margin-top: 15px;">
+    <button id="load-more-cancelled" class="btn btn-secondary load-more-btn" data-status="ยกเลิก" style="display: none; width: 100%; border: 1px dashed #ccc;">โหลดเพิ่ม (แสดงทีละ 500)...</button>
+</div></div>
                     </div>
                 </div>
 <!-- ==================== PACKING SYSTEM ==================== -->
@@ -1340,6 +1348,13 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
         calculateTotal();
     });
 }
+let pageOffsets = { 
+    'รอลงข้อมูล': 0, 
+    'ลงข้อมูลเสร็จสิ้น': 0, 
+    'จัดส่งแล้ว': 0, 
+    'ยกเลิก': 0 
+};
+const PAGE_SIZE = 500;
             const container = document.getElementById('order-system-container');
             const adminUserInput = container.querySelector('#admin_user');
             const itemsTbody = container.querySelector('#items-tbody');
@@ -1441,24 +1456,26 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
 }
 
             async function performDatabaseSearch(searchTerm) {
-                try {
-                    const { data, error } = await supabaseClient
-                        .from('orders')
-                        .select('*, order_items(*)')
-                        .or(`bill_no.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,tracking_number.ilike.%${searchTerm}%`)
-                        .order('created_at', { ascending: false })
-                        .limit(100);
+    if (searchTerm.length < 3) return; // ค้นหาเมื่อพิมพ์ 3 ตัวขึ้นไป
 
-                    if (error) throw error;
+    try {
+        const selectFields = 'id,bill_no,customer_name,status,tracking_number,work_order_name,order_items!order_id(id,packing_status)';
+        const { data, error } = await supabaseClient
+            .from('orders')
+            .select(selectFields)
+            .or(`bill_no.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,tracking_number.ilike.%${searchTerm}%`)
+            .order('created_at', { ascending: false })
+            .limit(100);
 
-                    if (data && data.length > 0) {
-                        allOrdersData = data;
-                        renderAllTabs();
-                    }
-                } catch (err) {
-                    console.error('Search Error:', err);
-                }
-            }
+        if (error) throw error;
+        if (data) {
+            allOrdersData = data;
+            renderAllTabs();
+        }
+    } catch (err) {
+        console.error('Search Error:', err);
+    }
+}
 
             async function initializeApp(username, role) {
                 adminUserInput.value = username;
@@ -1720,30 +1737,61 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
                 updateSmartWorkOrderButton();
             }
             
-async function fetchOrdersByStatus(status) {
-                loadingOverlay.style.display = 'flex';
-                try {
-                    let query = supabaseClient.from('orders').select('*, order_items(*)');
-                    
-                    if (status === 'จัดส่งแล้ว') {
-                        query = query.eq('status', 'จัดส่งแล้ว').order('shipped_time', { ascending: false }).limit(300);
-                    } else if (status === 'ใบงาน (กำลังผลิต)') {
-                        query = query.eq('status', 'ใบงาน (กำลังผลิต)').order('created_at', { ascending: false });
-                    } else {
-                        query = query.eq('status', status).order('created_at', { ascending: false });
-                    }
+async function fetchOrdersByStatus(status, isAppend = false) {
+    if (window.isLoadingData) return;
+    window.isLoadingData = true;
+    loadingOverlay.style.display = 'flex';
 
-                    const { data, error } = await query;
-                    if (error) throw error;
-                    
-                    allOrdersData = data || [];
-                    renderAllTabs(); 
-                } catch (err) {
-                    console.error("Fetch Error:", err);
-                } finally {
-                    loadingOverlay.style.display = 'none';
-                }
-            }
+    if (!isAppend) {
+        pageOffsets[status] = 0;
+        allOrdersData = allOrdersData.filter(o => o.status !== status);
+    } else {
+        pageOffsets[status] += 1;
+    }
+
+    const from = pageOffsets[status] * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    try {
+        // ดึงเฉพาะข้อมูลหัวบิล ไม่ต้อง Join order_items ในหน้านี้ (จะเร็วขึ้น 10 เท่าและไม่ Error)
+        const selectFields = 'channel_code,id,bill_no,customer_name,customer_address,status,tracking_number,work_order_name,shipped_time,shipped_by,claim_type,claim_details,billing_details,created_at';
+        
+        let query = supabaseClient.from('orders')
+            .select(selectFields)
+            .eq('status', status);
+
+        if (status === 'จัดส่งแล้ว') {
+            query = query.order('shipped_time', { ascending: false });
+        } else {
+            query = query.order('created_at', { ascending: false });
+        }
+
+        const { data, error } = await query.range(from, to);
+
+        if (error) throw error;
+
+        allOrdersData = [...allOrdersData, ...(data || [])];
+
+        const btnMap = { 
+            'รอลงข้อมูล': 'load-more-waiting', 
+            'ลงข้อมูลเสร็จสิ้น': 'load-more-complete', 
+            'จัดส่งแล้ว': 'load-more-shipped', 
+            'ยกเลิก': 'load-more-cancelled' 
+        };
+        const loadMoreBtn = document.getElementById(btnMap[status]);
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = (data && data.length === PAGE_SIZE) ? 'inline-block' : 'none';
+        }
+
+        renderAllTabs(); 
+    } catch (err) {
+        console.error("Fetch Error:", err);
+        alert("ดึงข้อมูลไม่สำเร็จ: " + err.message);
+    } finally {
+        loadingOverlay.style.display = 'none';
+        window.isLoadingData = false;
+    }
+}
 
             let isOpeningWindow = false;
             function prepareForWaybill(workOrderName) { if (isOpeningWindow) return; isOpeningWindow = true; const ordersToProcess = allOrdersData.filter(order => order.work_order_name === workOrderName); if (ordersToProcess.length === 0) { alert("ไม่พบออร์เดอร์"); isOpeningWindow = false; return; } const headers = ['bill_no', 'customer_address', 'payment_method', 'total_amount']; const rows = ordersToProcess.map(order => { const escapeCsvField = (field) => { const strField = String(field || ''); if (strField.includes(',') || strField.includes('"') || strField.includes('\n')) { return `"${strField.replace(/"/g, '""')}"`; } return strField; }; const addressForExport = ecommerceChannels.includes(order.channel_code) ? '' : order.customer_address; return [escapeCsvField(order.bill_no), escapeCsvField(addressForExport), escapeCsvField(order.payment_method), escapeCsvField(order.total_amount)].join(','); }); const csvContent = [headers.join(','), ...rows].join('\n'); try { localStorage.setItem('waybillDataForFlash', csvContent); localStorage.setItem('workOrderNameForFlash', workOrderName); window.open('flash_express_tool.html', '_blank'); } catch (e) { console.error("Error:", e); alert("เกิดข้อผิดพลาด"); } finally { setTimeout(() => { isOpeningWindow = false; }, 1000); } }
@@ -2378,15 +2426,26 @@ if (mode === 'edit' && order) {
             }
 
             async function loadOrderForEditing(orderId) { 
-                const orderData = allOrdersData.find(o => o.id == orderId);
-                loadingOverlay.style.display = 'flex'; 
-                try { 
-                    if(!orderData) throw new Error('ไม่พบข้อมูล'); 
-                    openTab({ currentTarget: container.querySelector('.tab-link[data-tab="tab-create"]') }, 'tab-create'); 
-                    setFormMode('edit', orderData); 
-                } catch (error) { alert('โหลดข้อมูลไม่ได้: ' + error.message); } 
-                finally { loadingOverlay.style.display = 'none'; } 
-            }
+    loadingOverlay.style.display = 'flex'; 
+    try { 
+        // ระบุ !order_id เพื่อป้องกัน Ambiguous error
+        const { data: fullOrder, error } = await supabaseClient
+            .from('orders')
+            .select('*, order_items!order_id(*)')
+            .eq('id', orderId)
+            .single();
+
+        if (error) throw error; 
+
+        openTab({ currentTarget: container.querySelector('.tab-link[data-tab="tab-create"]') }, 'tab-create'); 
+        setFormMode('edit', fullOrder); 
+    } catch (error) { 
+        console.error("Load Edit Error:", error);
+        alert('โหลดข้อมูลไม่ได้: ' + error.message); 
+    } finally { 
+        loadingOverlay.style.display = 'none'; 
+    } 
+}
             
             async function moveOrder(orderId, newStatus) { 
                 if (!confirm(`ต้องการย้ายบิลไป "${newStatus}"?`)) return; 
@@ -4352,6 +4411,12 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
 	if (addPayRowBtn) {
 	addPayRowBtn.addEventListener('click', () => addPaymentRecordRow());
 }
+document.querySelectorAll('.load-more-btn').forEach(btn => {
+    btn.onclick = (e) => {
+        const status = e.target.dataset.status;
+        fetchOrdersByStatus(status, true); // พารามิเตอร์ true หมายถึงการโหลดมาต่อท้าย (Append)
+    };
+});
 	            eventListenersInitialized = true;
             }
 
