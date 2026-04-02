@@ -2703,24 +2703,43 @@ remainingBills.forEach(order => {
             async function revertSelectedBills(buttonElement, newStatus) { const workOrderName = buttonElement.dataset.workOrderName; const groupEl = buttonElement.closest('.work-order-group'); const selectedIds = getSelectedOrderIds(groupEl); if (selectedIds.length === 0) return alert('กรุณาเลือกบิล'); if (!confirm(`ต้องการคืน ${selectedIds.length} บิล ไปที่ "${newStatus}"?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: newStatus, work_order_name: null }).in('id', selectedIds); if (updateError) throw updateError; await updateWorkOrderCount(workOrderName); await updatePlannerJob(workOrderName, selectedIds); alert('คืนสถานะสำเร็จ!');  await loadInitialData(true);} catch (error) { console.error('Error reverting:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
             async function cancelSelectedBillsFromWorkOrder(buttonElement) { const workOrderName = buttonElement.dataset.workOrderName; const groupEl = buttonElement.closest('.work-order-group'); const selectedIds = getSelectedOrderIds(groupEl); if (selectedIds.length === 0) return alert('กรุณาเลือกบิล'); if (!confirm(`ต้องการ **ยกเลิก** ${selectedIds.length} บิล?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: 'ยกเลิก', work_order_name: null }).in('id', selectedIds); if (updateError) throw updateError; await updateWorkOrderCount(workOrderName); await updatePlannerJob(workOrderName, selectedIds); alert('ยกเลิกสำเร็จ!'); await loadInitialData(true); } catch (error) { console.error('Error cancelling:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
             async function cancelWorkOrder(workOrderName) { 
-                if (!confirm(`ต้องการ **ยกเลิกใบงาน** "${workOrderName}"?\n(ข้อมูลจะถูกลบออกจากแผนผลิตด้วย)`)) return; 
-                loadingOverlay.style.display = 'flex'; 
-                try { 
-                    // 1. คืนสถานะบิลในตาราง orders
-                    await supabaseClient.from('orders').update({ status: 'ลงข้อมูลเสร็จสิ้น', work_order_name: null }).eq('work_order_name', workOrderName); 
-                    // 2. ลบออกจากประวัติ work_orders
-                    await supabaseClient.from('work_orders').delete().eq('work_order_name', workOrderName); 
-                    // 3. ลบออกจากแผนผลิตในตาราง plan_jobs
-                    await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
-                    
-                    alert(`ยกเลิกใบงาน "${workOrderName}" เรียบร้อย`);
-                    await loadInitialData(true); 
-                } catch (error) { 
-                    alert(`เกิดพลาด: ${error.message}`); 
-                } finally { 
-                    loadingOverlay.style.display = 'none'; 
-                } 
-            }
+    if (!confirm(`ต้องการ **ยกเลิกใบงาน** "${workOrderName}"?\n(ข้อมูลจะถูกลบออกจากแผนผลิตด้วย)`)) return; 
+    loadingOverlay.style.display = 'flex'; 
+    try { 
+        // 1. คืนสถานะบิลในตาราง orders ให้กลับไปเป็น "ลงข้อมูลเสร็จสิ้น"
+        const { error: err1 } = await supabaseClient.from('orders').update({ status: 'ลงข้อมูลเสร็จสิ้น', work_order_name: null }).eq('work_order_name', workOrderName); 
+        if (err1) throw err1;
+
+        // 2. ลบออกจากประวัติ work_orders
+        const { error: err2 } = await supabaseClient.from('work_orders').delete().eq('work_order_name', workOrderName); 
+        if (err2) throw err2;
+
+        // 3. ลบออกจากแผนผลิตในตาราง plan_jobs
+        const { error: err3 } = await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
+        if (err3) throw err3;
+        
+        alert(`ยกเลิกใบงาน "${workOrderName}" เรียบร้อย`);
+
+        // --- ส่วนที่แก้ไข: สั่ง Refresh ข้อมูลในหน้าจอให้ครบทุกส่วนที่เกี่ยวข้อง ---
+        
+        // ก. ดึงรายชื่อใบงานใหม่ (เพื่อให้ชื่อใบงานหายไปจากหน้าลิสต์)
+        const { data: woRes } = await supabaseClient.from('work_orders').select('*').eq('status', 'กำลังผลิต').order('created_at', { ascending: false });
+        allWorkOrdersData = woRes || [];
+
+        // ข. ดึงข้อมูล Orders ของแท็บ "ลงข้อมูลเสร็จสิ้น" ใหม่ (เพื่อให้บิลที่ยกเลิกเด้งกลับมา)
+        await fetchOrdersByStatus('ลงข้อมูลเสร็จสิ้น');
+
+        // ค. ดึงข้อมูล Orders ของแท็บ "ใบงาน" ใหม่ (เพื่อให้บิลหายไปจากกลุ่มใบงาน)
+        // หมายเหตุ: fetchOrdersByStatus จะทำการ renderAllTabs() ให้โดยอัตโนมัติอยู่แล้ว
+        await fetchOrdersByStatus('ใบงาน (กำลังผลิต)');
+
+    } catch (error) { 
+        console.error("Cancel WO Error:", error);
+        alert(`เกิดพลาด: ${error.message}`); 
+    } finally { 
+        loadingOverlay.style.display = 'none'; 
+    } 
+}
 
             async function updatePlannerJob(workOrderName, selectedIds = []) { 
                 const remainingBills = allOrdersData.filter(order => order.work_order_name === workOrderName && !selectedIds.includes(String(order.id))); 
