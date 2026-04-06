@@ -449,6 +449,31 @@
         }
         /* บังคับตารางจัดกึ่งกลางและตัดคำ */
         #packing-main-view td { word-wrap: break-word; white-space: normal !important; }
+/* สไตล์สำหรับตัวแจ้งเตือนการ Copy/Export (หล่นจากบนลงล่าง) */
+        .copy-toast {
+            position: fixed;
+            top: 20px; 
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0071e3; 
+            color: #fff;
+            padding: 14px 28px;
+            border-radius: 50px; 
+            z-index: 12000; 
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideDownIn 0.4s ease-out forwards;
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        @keyframes slideDownIn {
+            from { top: -100px; opacity: 0; }
+            to { top: 20px; opacity: 1; }
+        }
 
     </style>
 </head>
@@ -691,7 +716,9 @@
                                 <div id="form-actions" style="margin-top: 25px; text-align: right;"></div>
                             </form>
                         </div>
-                        <div id="tab-waiting" class="tab-content"><div class="tab-filter"><label for="filter-waiting">กรองตามช่องทาง:</label><select id="filter-waiting"></select><input type="text" id="search-waiting" placeholder="ค้นหาเลขบิล, ชื่อลูกค้า, พัสดุ..."></div><div class="batch-actions"><button id="select-all-waiting-btn" class="btn btn-secondary">เลือกทั้งหมด</button><button id="move-to-complete-from-waiting-btn" class="btn btn-success">ย้ายไป "ลงข้อมูลเสร็จสิ้น"</button><button id="cancel-selected-waiting-btn" class="btn btn-danger">ยกเลิกบิลที่เลือก</button></div><ul class="order-list"></ul></div>
+                        <div id="tab-waiting" class="tab-content"><div class="tab-filter"><label for="filter-waiting">กรองตามช่องทาง:</label><select id="filter-waiting"></select><input type="text" id="search-waiting" placeholder="ค้นหาเลขบิล, ชื่อลูกค้า, พัสดุ..."></div><div class="batch-actions"><button id="select-all-waiting-btn" class="btn btn-secondary">เลือกทั้งหมด</button><button id="move-to-complete-from-waiting-btn" class="btn btn-success">ย้ายไป "ลงข้อมูลเสร็จสิ้น"</button><button id="cancel-selected-waiting-btn" class="btn btn-danger">ยกเลิกบิลที่เลือก</button></div><ul class="order-list"></ul><div style="text-align: center; margin-top: 15px;">
+    <button id="load-more-waiting" class="btn btn-secondary load-more-btn" data-status="รอลงข้อมูล" style="display: none; width: 100%; border: 1px dashed #ccc;">โหลดเพิ่ม (แสดงทีละ 500)...</button>
+</div></div>
                         <div id="tab-complete" class="tab-content">
                             <div class="tab-filter">
                                 <label for="filter-complete">กรองตามช่องทาง:</label>
@@ -708,7 +735,9 @@
                                 <button id="move-to-waiting-btn" class="btn btn-warning">ย้ายไป "รอลงข้อมูล" (ที่เลือก)</button>
                                 <button id="cancel-selected-complete-btn" class="btn btn-danger">ยกเลิกบิล (ที่เลือก)</button>
                             </div>
-                            <ul class="order-list"></ul>
+                            <ul class="order-list"></ul><div style="text-align: center; margin-top: 15px;">
+    <button id="load-more-complete" class="btn btn-secondary load-more-btn" data-status="ลงข้อมูลเสร็จสิ้น" style="display: none; width: 100%; border: 1px dashed #ccc;">โหลดเพิ่ม (แสดงทีละ 500)...</button>
+</div>
                         </div>
                         <div id="tab-work-orders" class="tab-content">
                             <div class="tab-filter">
@@ -726,9 +755,13 @@
                                 <button id="export-shipped-btn" class="btn btn-success">Export ข้อมูลที่เลือก</button>
 	             <button id="export-tracking-csv-btn" class="btn" style="background-color: #6610f2; color: white;">Export CSV เลขพัสดุ</button>
                             </div>
-                            <ul class="order-list"></ul>
+                            <ul class="order-list"></ul><div style="text-align: center; margin-top: 15px;">
+    <button id="load-more-shipped" class="btn btn-secondary load-more-btn" data-status="จัดส่งแล้ว" style="display: none; width: 100%; border: 1px dashed #ccc;">โหลดเพิ่ม (แสดงทีละ 500)...</button>
+</div>
                         </div>
-                        <div id="tab-cancelled" class="tab-content"><div class="tab-filter"><label for="filter-cancelled">กรองตามช่องทาง:</label><select id="filter-cancelled"></select><input type="text" id="search-cancelled" placeholder="ค้นหาเลขบิล, ชื่อลูกค้า, พัสดุ..."></div><div class="batch-actions"><button id="select-all-cancelled-btn" class="btn btn-secondary">เลือกทั้งหมด</button><button id="restore-to-waiting-btn" class="btn btn-warning">คืนไป "รอลงข้อมูล"</button><button id="restore-to-complete-btn" class="btn btn-info">คืนไป "ลงข้อมูลเสร็จสิ้น"</button></div><ul class="order-list"></ul></div>
+                        <div id="tab-cancelled" class="tab-content"><div class="tab-filter"><label for="filter-cancelled">กรองตามช่องทาง:</label><select id="filter-cancelled"></select><input type="text" id="search-cancelled" placeholder="ค้นหาเลขบิล, ชื่อลูกค้า, พัสดุ..."></div><div class="batch-actions"><button id="select-all-cancelled-btn" class="btn btn-secondary">เลือกทั้งหมด</button><button id="restore-to-waiting-btn" class="btn btn-warning">คืนไป "รอลงข้อมูล"</button><button id="restore-to-complete-btn" class="btn btn-info">คืนไป "ลงข้อมูลเสร็จสิ้น"</button></div><ul class="order-list"></ul><div style="text-align: center; margin-top: 15px;">
+    <button id="load-more-cancelled" class="btn btn-secondary load-more-btn" data-status="ยกเลิก" style="display: none; width: 100%; border: 1px dashed #ccc;">โหลดเพิ่ม (แสดงทีละ 500)...</button>
+</div></div>
                     </div>
                 </div>
 <!-- ==================== PACKING SYSTEM ==================== -->
@@ -1340,6 +1373,13 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
         calculateTotal();
     });
 }
+let pageOffsets = { 
+    'รอลงข้อมูล': 0, 
+    'ลงข้อมูลเสร็จสิ้น': 0, 
+    'จัดส่งแล้ว': 0, 
+    'ยกเลิก': 0 
+};
+const PAGE_SIZE = 500;
             const container = document.getElementById('order-system-container');
             const adminUserInput = container.querySelector('#admin_user');
             const itemsTbody = container.querySelector('#items-tbody');
@@ -1441,24 +1481,26 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
 }
 
             async function performDatabaseSearch(searchTerm) {
-                try {
-                    const { data, error } = await supabaseClient
-                        .from('orders')
-                        .select('*, order_items(*)')
-                        .or(`bill_no.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,tracking_number.ilike.%${searchTerm}%`)
-                        .order('created_at', { ascending: false })
-                        .limit(100);
+    if (searchTerm.length < 3) return; // ค้นหาเมื่อพิมพ์ 3 ตัวขึ้นไป
 
-                    if (error) throw error;
+    try {
+        const selectFields = 'id,bill_no,customer_name,status,tracking_number,work_order_name,order_items!order_id(id,packing_status)';
+        const { data, error } = await supabaseClient
+            .from('orders')
+            .select(selectFields)
+            .or(`bill_no.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,tracking_number.ilike.%${searchTerm}%`)
+            .order('created_at', { ascending: false })
+            .limit(100);
 
-                    if (data && data.length > 0) {
-                        allOrdersData = data;
-                        renderAllTabs();
-                    }
-                } catch (err) {
-                    console.error('Search Error:', err);
-                }
-            }
+        if (error) throw error;
+        if (data) {
+            allOrdersData = data;
+            renderAllTabs();
+        }
+    } catch (err) {
+        console.error('Search Error:', err);
+    }
+}
 
             async function initializeApp(username, role) {
                 adminUserInput.value = username;
@@ -1720,30 +1762,77 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
                 updateSmartWorkOrderButton();
             }
             
-async function fetchOrdersByStatus(status) {
-                loadingOverlay.style.display = 'flex';
-                try {
-                    let query = supabaseClient.from('orders').select('*, order_items(*)');
-                    
-                    if (status === 'จัดส่งแล้ว') {
-                        query = query.eq('status', 'จัดส่งแล้ว').order('shipped_time', { ascending: false }).limit(300);
-                    } else if (status === 'ใบงาน (กำลังผลิต)') {
-                        query = query.eq('status', 'ใบงาน (กำลังผลิต)').order('created_at', { ascending: false });
-                    } else {
-                        query = query.eq('status', status).order('created_at', { ascending: false });
-                    }
+// --- ฟังก์ชันดึงข้อมูลสินค้าตัวเต็มของใบงาน (เพิ่มตรงนี้) ---
+async function getFullWorkOrderData(workOrderName) {
+    try {
+        const { data, error } = await supabaseClient
+            .from('orders')
+            .select('*, order_items!order_id(*)') 
+            .eq('work_order_name', workOrderName);
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error("Fetch Error:", err);
+        return [];
+    }
+}
 
-                    const { data, error } = await query;
-                    if (error) throw error;
-                    
-                    allOrdersData = data || [];
-                    renderAllTabs(); 
-                } catch (err) {
-                    console.error("Fetch Error:", err);
-                } finally {
-                    loadingOverlay.style.display = 'none';
-                }
-            }
+
+async function fetchOrdersByStatus(status, isAppend = false) {
+    if (window.isLoadingData) return;
+    window.isLoadingData = true;
+    loadingOverlay.style.display = 'flex';
+
+    if (!isAppend) {
+        pageOffsets[status] = 0;
+        allOrdersData = allOrdersData.filter(o => o.status !== status);
+    } else {
+        pageOffsets[status] += 1;
+    }
+
+    const from = pageOffsets[status] * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    try {
+        // ดึงเฉพาะข้อมูลหัวบิล ไม่ต้อง Join order_items ในหน้านี้ (จะเร็วขึ้น 10 เท่าและไม่ Error)
+        const selectFields = 'channel_code,id,bill_no,customer_name,customer_address,status,tracking_number,work_order_name,shipped_time,shipped_by,claim_type,claim_details,billing_details,created_at';
+        
+        let query = supabaseClient.from('orders')
+            .select(selectFields)
+            .eq('status', status);
+
+        if (status === 'จัดส่งแล้ว') {
+            query = query.order('shipped_time', { ascending: false });
+        } else {
+            query = query.order('created_at', { ascending: false });
+        }
+
+        const { data, error } = await query.range(from, to);
+
+        if (error) throw error;
+
+        allOrdersData = [...allOrdersData, ...(data || [])];
+
+        const btnMap = { 
+            'รอลงข้อมูล': 'load-more-waiting', 
+            'ลงข้อมูลเสร็จสิ้น': 'load-more-complete', 
+            'จัดส่งแล้ว': 'load-more-shipped', 
+            'ยกเลิก': 'load-more-cancelled' 
+        };
+        const loadMoreBtn = document.getElementById(btnMap[status]);
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = (data && data.length === PAGE_SIZE) ? 'inline-block' : 'none';
+        }
+
+        renderAllTabs(); 
+    } catch (err) {
+        console.error("Fetch Error:", err);
+        alert("ดึงข้อมูลไม่สำเร็จ: " + err.message);
+    } finally {
+        loadingOverlay.style.display = 'none';
+        window.isLoadingData = false;
+    }
+}
 
             let isOpeningWindow = false;
             function prepareForWaybill(workOrderName) { if (isOpeningWindow) return; isOpeningWindow = true; const ordersToProcess = allOrdersData.filter(order => order.work_order_name === workOrderName); if (ordersToProcess.length === 0) { alert("ไม่พบออร์เดอร์"); isOpeningWindow = false; return; } const headers = ['bill_no', 'customer_address', 'payment_method', 'total_amount']; const rows = ordersToProcess.map(order => { const escapeCsvField = (field) => { const strField = String(field || ''); if (strField.includes(',') || strField.includes('"') || strField.includes('\n')) { return `"${strField.replace(/"/g, '""')}"`; } return strField; }; const addressForExport = ecommerceChannels.includes(order.channel_code) ? '' : order.customer_address; return [escapeCsvField(order.bill_no), escapeCsvField(addressForExport), escapeCsvField(order.payment_method), escapeCsvField(order.total_amount)].join(','); }); const csvContent = [headers.join(','), ...rows].join('\n'); try { localStorage.setItem('waybillDataForFlash', csvContent); localStorage.setItem('workOrderNameForFlash', workOrderName); window.open('flash_express_tool.html', '_blank'); } catch (e) { console.error("Error:", e); alert("เกิดข้อผิดพลาด"); } finally { setTimeout(() => { isOpeningWindow = false; }, 1000); } }
@@ -2378,15 +2467,26 @@ if (mode === 'edit' && order) {
             }
 
             async function loadOrderForEditing(orderId) { 
-                const orderData = allOrdersData.find(o => o.id == orderId);
-                loadingOverlay.style.display = 'flex'; 
-                try { 
-                    if(!orderData) throw new Error('ไม่พบข้อมูล'); 
-                    openTab({ currentTarget: container.querySelector('.tab-link[data-tab="tab-create"]') }, 'tab-create'); 
-                    setFormMode('edit', orderData); 
-                } catch (error) { alert('โหลดข้อมูลไม่ได้: ' + error.message); } 
-                finally { loadingOverlay.style.display = 'none'; } 
-            }
+    loadingOverlay.style.display = 'flex'; 
+    try { 
+        // ระบุ !order_id เพื่อป้องกัน Ambiguous error
+        const { data: fullOrder, error } = await supabaseClient
+            .from('orders')
+            .select('*, order_items!order_id(*)')
+            .eq('id', orderId)
+            .single();
+
+        if (error) throw error; 
+
+        openTab({ currentTarget: container.querySelector('.tab-link[data-tab="tab-create"]') }, 'tab-create'); 
+        setFormMode('edit', fullOrder); 
+    } catch (error) { 
+        console.error("Load Edit Error:", error);
+        alert('โหลดข้อมูลไม่ได้: ' + error.message); 
+    } finally { 
+        loadingOverlay.style.display = 'none'; 
+    } 
+}
             
             async function moveOrder(orderId, newStatus) { 
                 if (!confirm(`ต้องการย้ายบิลไป "${newStatus}"?`)) return; 
@@ -2644,24 +2744,43 @@ remainingBills.forEach(order => {
             async function revertSelectedBills(buttonElement, newStatus) { const workOrderName = buttonElement.dataset.workOrderName; const groupEl = buttonElement.closest('.work-order-group'); const selectedIds = getSelectedOrderIds(groupEl); if (selectedIds.length === 0) return alert('กรุณาเลือกบิล'); if (!confirm(`ต้องการคืน ${selectedIds.length} บิล ไปที่ "${newStatus}"?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: newStatus, work_order_name: null }).in('id', selectedIds); if (updateError) throw updateError; await updateWorkOrderCount(workOrderName); await updatePlannerJob(workOrderName, selectedIds); alert('คืนสถานะสำเร็จ!');  await loadInitialData(true);} catch (error) { console.error('Error reverting:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
             async function cancelSelectedBillsFromWorkOrder(buttonElement) { const workOrderName = buttonElement.dataset.workOrderName; const groupEl = buttonElement.closest('.work-order-group'); const selectedIds = getSelectedOrderIds(groupEl); if (selectedIds.length === 0) return alert('กรุณาเลือกบิล'); if (!confirm(`ต้องการ **ยกเลิก** ${selectedIds.length} บิล?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: 'ยกเลิก', work_order_name: null }).in('id', selectedIds); if (updateError) throw updateError; await updateWorkOrderCount(workOrderName); await updatePlannerJob(workOrderName, selectedIds); alert('ยกเลิกสำเร็จ!'); await loadInitialData(true); } catch (error) { console.error('Error cancelling:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
             async function cancelWorkOrder(workOrderName) { 
-                if (!confirm(`ต้องการ **ยกเลิกใบงาน** "${workOrderName}"?\n(ข้อมูลจะถูกลบออกจากแผนผลิตด้วย)`)) return; 
-                loadingOverlay.style.display = 'flex'; 
-                try { 
-                    // 1. คืนสถานะบิลในตาราง orders
-                    await supabaseClient.from('orders').update({ status: 'ลงข้อมูลเสร็จสิ้น', work_order_name: null }).eq('work_order_name', workOrderName); 
-                    // 2. ลบออกจากประวัติ work_orders
-                    await supabaseClient.from('work_orders').delete().eq('work_order_name', workOrderName); 
-                    // 3. ลบออกจากแผนผลิตในตาราง plan_jobs
-                    await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
-                    
-                    alert(`ยกเลิกใบงาน "${workOrderName}" เรียบร้อย`);
-                    await loadInitialData(true); 
-                } catch (error) { 
-                    alert(`เกิดพลาด: ${error.message}`); 
-                } finally { 
-                    loadingOverlay.style.display = 'none'; 
-                } 
-            }
+    if (!confirm(`ต้องการ **ยกเลิกใบงาน** "${workOrderName}"?\n(ข้อมูลจะถูกลบออกจากแผนผลิตด้วย)`)) return; 
+    loadingOverlay.style.display = 'flex'; 
+    try { 
+        // 1. คืนสถานะบิลในตาราง orders ให้กลับไปเป็น "ลงข้อมูลเสร็จสิ้น"
+        const { error: err1 } = await supabaseClient.from('orders').update({ status: 'ลงข้อมูลเสร็จสิ้น', work_order_name: null }).eq('work_order_name', workOrderName); 
+        if (err1) throw err1;
+
+        // 2. ลบออกจากประวัติ work_orders
+        const { error: err2 } = await supabaseClient.from('work_orders').delete().eq('work_order_name', workOrderName); 
+        if (err2) throw err2;
+
+        // 3. ลบออกจากแผนผลิตในตาราง plan_jobs
+        const { error: err3 } = await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
+        if (err3) throw err3;
+        
+        alert(`ยกเลิกใบงาน "${workOrderName}" เรียบร้อย`);
+
+        // --- ส่วนที่แก้ไข: สั่ง Refresh ข้อมูลในหน้าจอให้ครบทุกส่วนที่เกี่ยวข้อง ---
+        
+        // ก. ดึงรายชื่อใบงานใหม่ (เพื่อให้ชื่อใบงานหายไปจากหน้าลิสต์)
+        const { data: woRes } = await supabaseClient.from('work_orders').select('*').eq('status', 'กำลังผลิต').order('created_at', { ascending: false });
+        allWorkOrdersData = woRes || [];
+
+        // ข. ดึงข้อมูล Orders ของแท็บ "ลงข้อมูลเสร็จสิ้น" ใหม่ (เพื่อให้บิลที่ยกเลิกเด้งกลับมา)
+        await fetchOrdersByStatus('ลงข้อมูลเสร็จสิ้น');
+
+        // ค. ดึงข้อมูล Orders ของแท็บ "ใบงาน" ใหม่ (เพื่อให้บิลหายไปจากกลุ่มใบงาน)
+        // หมายเหตุ: fetchOrdersByStatus จะทำการ renderAllTabs() ให้โดยอัตโนมัติอยู่แล้ว
+        await fetchOrdersByStatus('ใบงาน (กำลังผลิต)');
+
+    } catch (error) { 
+        console.error("Cancel WO Error:", error);
+        alert(`เกิดพลาด: ${error.message}`); 
+    } finally { 
+        loadingOverlay.style.display = 'none'; 
+    } 
+}
 
             async function updatePlannerJob(workOrderName, selectedIds = []) { 
                 const remainingBills = allOrdersData.filter(order => order.work_order_name === workOrderName && !selectedIds.includes(String(order.id))); 
@@ -3108,290 +3227,182 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
     }
 }
 
-            // 1. ฟังก์ชัน Export ไฟล์ผลิต (แก้ไข: รวมรายการทั้งใบงานแล้วเรียงตาม Item UID)
-            function exportForProduction(workOrderName) {
-                const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
+// ==========================================
+// ส่วนฟังก์ชันแจ้งเตือนและระบบ EXPORT ปรับปรุงใหม่ (FAST & STABLE)
+// ==========================================
 
-                if (ordersInWorkOrder.length === 0) {
-                    alert("ไม่พบข้อมูล");
-                    return;
-                }
-
-                // รวบรวม Item จากทุกออร์เดอร์ในรอบนี้มาใส่ Array เดียวเพื่อเรียงลำดับใหม่ทั้งหมด
-                let allItemsInBatch = [];
-                ordersInWorkOrder.forEach(order => {
-                    if (order.order_items && order.order_items.length > 0) {
-                        order.order_items.forEach(item => {
-                            allItemsInBatch.push(item);
-                        });
-                    }
-                });
-
-                // เรียงลำดับรายการสินค้าทั้งหมดตาม Item UID แบบ Natural Sort (1, 2, 10)
-                allItemsInBatch.sort((a, b) => 
-                    (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true, sensitivity: 'base' })
-                );
-
-                const headers = ['ชื่อใบงาน', 'เลขบิล', 'Item UID', 'ชื่อสินค้า', 'สีหมึก', 'ชั้นที่', 'ลายการ์ตูน', 'ลายเส้น', 'ฟอนต์', 'บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3', 'จำนวน', 'หมายเหตุ', 'ไฟล์แนบ'];
-                const dataToExport = [];
-                
-                // ฟังก์ชันป้องกัน Excel เปลี่ยนเบอร์โทรหรือเครื่องหมาย + เป็นสูตร
-                const forceText = (val) => {
-                    const str = String(val || '').trim();
-                    if (str === '') return '';
-                    if (str.startsWith('+') || str.startsWith('0')) {
-                        return "\u200B" + str; 
-                    }
-                    return str;
-                };
-
-                allItemsInBatch.forEach(item => {
-                    const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
-                    dataToExport.push([
-                        workOrderName, 
-                        item.bill_no, 
-                        item.item_uid, 
-                        item.product_name,
-                        item.ink_color, 
-                        item.product_type, 
-                        item.cartoon_pattern, 
-                        item.line_pattern,
-                        item.font, 
-                        forceText(item.line_1),
-                        forceText(item.line_2),
-                        forceText(item.line_3),
-                        1,
-                        cleanNotes,
-                        item.file_attachment
-                    ]);
-                });
-
-                if (dataToExport.length === 0) {
-                    alert("ไม่พบรายการสินค้า");
-                    return;
-                }
-
-                const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
-
-                // บังคับประเภทเซลล์ใน Excel ให้เป็นข้อความ (String) ป้องกันเลขอัตโนมัติเพี้ยน
-                const range = XLSX.utils.decode_range(worksheet['!ref']);
-                for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-                    for (let C = 9; C <= 11; ++C) {
-                        const cell_address = XLSX.utils.encode_cell({r: R, c: C});
-                        if (!worksheet[cell_address]) continue;
-                        worksheet[cell_address].t = 's';
-                    }
-                }
-
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "ProductionData");
-                XLSX.writeFile(workbook, `Production_${workOrderName}.xlsx`);
-            }
-
-function copyForProduction(workOrderName) {
-    const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
-    if (ordersInWorkOrder.length === 0) { alert("ไม่พบข้อมูล"); return; }
-
-    let allItemsInBatch = [];
-    ordersInWorkOrder.forEach(order => {
-        if (order.order_items && order.order_items.length > 0) {
-            order.order_items.forEach(item => { allItemsInBatch.push(item); });
-        }
-    });
-
-    // เรียงลำดับตาม Item UID
-    allItemsInBatch.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
-
-    const rows = []; // เริ่มต้นเป็นอาเรย์ว่าง (ไม่ใส่หัวตาราง)
-
-    allItemsInBatch.forEach(item => {
-        const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
-        rows.push([
-            workOrderName, 
-            item.bill_no, 
-            item.item_uid, 
-            item.product_name,
-            item.ink_color, 
-            item.product_type, 
-            item.cartoon_pattern, 
-            item.line_pattern,
-            item.font, 
-            String(item.line_1 || '').trim(),
-            String(item.line_2 || '').trim(),
-            String(item.line_3 || '').trim(),
-            1,
-            cleanNotes,
-            item.file_attachment
-        ]);
-    });
-
-    // แปลงเป็นข้อความคั่นด้วย Tab (\t) สำหรับวางใน Excel
-    const tsvContent = rows.map(row => row.join('\t')).join('\n');
-
-    navigator.clipboard.writeText(tsvContent).then(() => {
-        alert(`คัดลอกเฉพาะข้อมูล ${workOrderName} (ไม่มีหัวตาราง) เรียบร้อยแล้ว!`);
-    }).catch(err => {
-        alert('คัดลอกไม่สำเร็จ: ' + err);
-    });
+function showCopyToast(message) {
+    const oldToast = document.querySelector('.copy-toast');
+    if (oldToast) oldToast.remove();
+    const toast = document.createElement('div');
+    toast.className = 'copy-toast';
+    toast.innerHTML = `<span style="font-size:20px;">✅</span> <span>${message}</span>`;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.transition = 'all 0.5s ease-in';
+        toast.style.top = '-100px'; 
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 500);
+    }, 2500);
 }
 
-            // 2. ฟังก์ชัน Export สำหรับ QC (แก้ไข: เรียงลำดับตาม Item UID ให้ตรงกับไฟล์ผลิต)
-            function exportForQC(workOrderName) {
-                const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
+function fallbackCopyText(text) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed"; textArea.style.left = "-9999px"; textArea.style.top = "0";
+    document.body.appendChild(textArea);
+    textArea.focus(); textArea.select();
+    const success = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return success;
+}
 
-                if (ordersInWorkOrder.length === 0) {
-                    alert("ไม่พบข้อมูล");
-                    return;
-                }
-                
-                let allItemsInBatch = [];
-                ordersInWorkOrder.forEach(order => {
-                    if (order.order_items && order.order_items.length > 0) {
-                        order.order_items.forEach(item => {
-                            allItemsInBatch.push(item);
-                        });
-                    }
-                });
+// 1. Export ไฟล์ผลิต (เด้งทันที)
+async function exportForProduction(workOrderName) {
+    const orders = await getFullWorkOrderData(workOrderName);
+    if (!orders.length) return;
+    let items = [];
+    orders.forEach(o => o.order_items && o.order_items.forEach(i => items.push(i)));
+    items.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
 
-                allItemsInBatch.sort((a, b) => 
-                    (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true })
-                );
+    const headers = ['ชื่อใบงาน', 'เลขบิล', 'Item UID', 'ชื่อสินค้า', 'สีหมึก', 'ชั้นที่', 'ลายการ์ตูน', 'ลายเส้น', 'ฟอนต์', 'บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3', 'จำนวน', 'หมายเหตุ', 'ไฟล์แนบ'];
+    const rows = items.map(item => {
+        const forceT = (v) => (String(v||'').startsWith('0') ? "\u200B"+v : v);
+        const notes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
+        return [workOrderName, item.bill_no, item.item_uid, item.product_name, item.ink_color, item.product_type, item.cartoon_pattern, item.line_pattern, item.font, forceT(item.line_1), forceT(item.line_2), forceT(item.line_3), 1, notes, item.file_attachment];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "ProductionData");
+    XLSX.writeFile(wb, `Production_${workOrderName}.xlsx`);
+    showCopyToast(`โหลดไฟล์ผลิต ${workOrderName} สำเร็จ`);
+}
 
-                const forceText = (val) => {
-                    const str = String(val || '').trim();
-                    if (str === '') return '';
-                    if (str.startsWith('+') || str.startsWith('0')) {
-                        return "\u200B" + str;
-                    }
-                    return str;
-                };
+// 2. Copy ไฟล์ผลิต (ชัวร์ 100% + แจ้งเตือน)
+async function copyForProduction(workOrderName) {
+    const orders = await getFullWorkOrderData(workOrderName);
+    if (!orders.length) return;
+    let items = [];
+    orders.forEach(o => o.order_items && o.order_items.forEach(i => items.push(i)));
+    items.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
 
-                const headers = ['ชื่อใบงาน', 'เลขบิล', 'Item UID', 'รหัสสินค้า', 'ชื่อสินค้า', 'หมวดหมู่สินค้า', 'สีหมึก', 'ชั้นที่', 'ลายการ์ตูน', 'ลายเส้น', 'ฟอนต์', 'บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3', 'จำนวน', 'หมายเหตุ', 'ไฟล์แนบ'];
-                const dataToExport = [];
+    const text = items.map(item => {
+        const notes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
+        return [workOrderName, item.bill_no, item.item_uid, item.product_name, item.ink_color, item.product_type, item.cartoon_pattern, item.line_pattern, item.font, String(item.line_1||''), String(item.line_2||''), String(item.line_3||''), 1, notes, item.file_attachment].join('\t');
+    }).join('\n');
 
-                allItemsInBatch.forEach(item => {
-                    const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
-                    const productDetails = fullProductList.find(p => p.id === item.product_id);
-                    const productCode = productDetails ? productDetails.product_code : 'N/A';
-                    const productCategory = productDetails ? productDetails.product_category : 'N/A';
+    let ok = false;
+    if (navigator.clipboard && window.isSecureContext) {
+        try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = fallbackCopyText(text); }
+    } else { ok = fallbackCopyText(text); }
+    if (ok) showCopyToast(`Copy ข้อมูล ${workOrderName} เรียบร้อย (${items.length} รายการ)`);
+}
 
-                    dataToExport.push([
-                        workOrderName, 
-                        item.bill_no, 
-                        item.item_uid, 
-                        productCode,
-                        item.product_name,
-                        productCategory,
-                        item.ink_color, 
-                        item.product_type, 
-                        item.cartoon_pattern, 
-                        item.line_pattern,
-                        item.font, 
-                        forceText(item.line_1),
-                        forceText(item.line_2),
-                        forceText(item.line_3),
-                        1,
-                        cleanNotes,
-                        item.file_attachment
-                    ]);
-                });
+// 3. Export สำหรับ QC
+async function exportForQC(workOrderName) {
+    const orders = await getFullWorkOrderData(workOrderName);
+    if (!orders.length) return;
+    let items = [];
+    orders.forEach(o => o.order_items && o.order_items.forEach(i => items.push(i)));
+    items.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
 
-                const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
-                const range = XLSX.utils.decode_range(worksheet['!ref']);
-                for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-                    for (let C = 11; C <= 13; ++C) {
-                        const cell_address = XLSX.utils.encode_cell({r: R, c: C});
-                        if (!worksheet[cell_address]) continue;
-                        worksheet[cell_address].t = 's';
-                    }
-                }
+    const headers = ['ชื่อใบงาน', 'เลขบิล', 'Item UID', 'รหัสสินค้า', 'ชื่อสินค้า', 'หมวดหมู่', 'สีหมึก', 'ชั้นที่', 'ลายการ์ตูน', 'ลายเส้น', 'ฟอนต์', 'บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3', 'จำนวน', 'หมายเหตุ', 'ไฟล์แนบ'];
+    const rows = items.map(item => {
+        const p = fullProductList.find(x => x.id === item.product_id);
+        const notes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
+        return [workOrderName, item.bill_no, item.item_uid, p?.product_code||'N/A', item.product_name, p?.product_category||'N/A', item.ink_color, item.product_type, item.cartoon_pattern, item.line_pattern, item.font, item.line_1, item.line_2, item.line_3, 1, notes, item.file_attachment];
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), "QC");
+    XLSX.writeFile(wb, `QC_${workOrderName}.xlsx`);
+    showCopyToast(`โหลดไฟล์ QC แล้ว`);
+}
 
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "QC_Data");
-                XLSX.writeFile(workbook, `QC_${workOrderName}.xlsx`);
-            }
+// 4. ทำ Barcode (เด้งทันที)
+async function exportForBarcode(workOrderName) {
+    const orders = await getFullWorkOrderData(workOrderName);
+    if (!orders.length) return;
+    let items = [];
+    orders.forEach(o => o.order_items && o.order_items.forEach(i => items.push(i)));
+    items.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
 
-            // 3. ฟังก์ชันทำ Barcode (แก้ไข: เรียงลำดับตาม Item UID)
-            function exportForBarcode(workOrderName) {
-                const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
+    const headers = ['Item UID', 'ชื่อสินค้า', 'สีหมึก', 'บรรทัด 1', 'หมวด'];
+    const rows = items.map(item => {
+        const p = fullProductList.find(x => x.id === item.product_id);
+        const l1 = item.line_1 ? "\u200B" + item.line_1 : "";
+        return [`"${item.item_uid}"`, `"${item.product_name}"`, `"${item.ink_color}"`, `"${l1}"`, `"${p?.product_category || 'N/A'}"`].join(",");
+    });
+    const blob = new Blob(["\uFEFF" + [headers.join(","), ...rows].join("\n")], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Barcode_${workOrderName}.csv`;
+    link.click();
+    showCopyToast(`โหลดไฟล์ Barcode แล้ว`);
+}
+ 
+// ฟังก์ชัน Export ข้อมูลบิลที่จัดส่งแล้ว (แก้ไขให้ดึงข้อมูลตัวเต็มใหม่)
+async function exportShippedData() {
+    const selectedIds = getSelectedOrderIds(container.querySelector('#tab-shipped .order-list'));
+    if (selectedIds.length === 0) {
+        return alert('กรุณาเลือกออร์เดอร์ที่ต้องการ Export');
+    }
 
-                if (ordersInWorkOrder.length === 0) {
-                    alert("ไม่พบข้อมูล");
-                    return;
-                }
+    loadingOverlay.style.display = 'flex';
+    try {
+        // ดึงข้อมูลตัวเต็มพร้อมรายการสินค้าเฉพาะ ID ที่เลือก (ป้องกันข้อมูลว่าง)
+        const { data: ordersToExport, error } = await supabaseClient
+            .from('orders')
+            .select('*, order_items!order_id(*)')
+            .in('id', selectedIds);
 
-                let allItemsInBatch = [];
-                ordersInWorkOrder.forEach(order => {
-                    if (order.order_items && order.order_items.length > 0) {
-                        order.order_items.forEach(item => {
-                            allItemsInBatch.push(item);
-                        });
-                    }
-                });
+        if (error) throw error;
 
-                allItemsInBatch.sort((a, b) => 
-                    (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true })
-                );
+        const headers = ['เลขบิล', 'ลูกค้า', 'เลขพัสดุ', 'ผู้จัดส่ง', 'เวลาจัดส่ง', 'Item UID', 'ชื่อสินค้า', 'รายละเอียดสินค้า', 'ประเภทเคลม', 'รายละเอียดเคลม'];
+        const dataToExport = [];
 
-                const headers = ['Item UID', 'ชื่อสินค้า', 'สีหมึก', 'บรรทัด 1', 'หมวด'];
-                const dataToExport = [];
-
-                allItemsInBatch.forEach(item => {
-                    const productDetails = fullProductList.find(p => p.id === item.product_id);
-                    const category = productDetails ? (productDetails.product_category || 'N/A') : 'N/A';
-
-                    dataToExport.push([
-                        item.item_uid,
-                        item.product_name,
-                        item.ink_color,
-                        item.line_1 ? "\u200B" + item.line_1 : "",
-                        category
-                    ]);
-                });
-
-                if (dataToExport.length === 0) {
-                    alert("ไม่พบรายการสินค้า");
-                    return;
-                }
-
-                const csvContent = "\uFEFF" + [headers, ...dataToExport].map(e => e.map(val => `"${String(val || '').replace(/"/g, '""')}"`).join(",")).join("\n");
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement("a");
-                link.href = URL.createObjectURL(blob);
-                link.download = `Barcode_${workOrderName}.csv`;
-                link.click();
-            }
-
-            // 4. ฟังก์ชัน Export ข้อมูลที่ส่งแล้ว (นิยามใหม่เพื่อแก้ Error exportShippedData is not defined)
-            function exportShippedData() {
-                const selectedIds = getSelectedOrderIds(container.querySelector('#tab-shipped .order-list'));
-                if (selectedIds.length === 0) {
-                    return alert('กรุณาเลือกออร์เดอร์ที่ต้องการ Export');
-                }
-                const ordersToExport = allOrdersData.filter(order => selectedIds.includes(String(order.id)));
-                
-                const headers = ['เลขบิล', 'ลูกค้า', 'เลขพัสดุ', 'ผู้จัดส่ง', 'เวลาจัดส่ง', 'Item UID', 'ชื่อสินค้า', 'รายละเอียดสินค้า', 'ประเภทเคลม', 'รายละเอียดเคลม'];
-
-                const dataToExport = [];
-                ordersToExport.forEach(order => {
-                    const shippedTime = order.shipped_time ? new Date(order.shipped_time).toLocaleString('th-TH') : 'N/A';
-                    if (order.order_items && order.order_items.length > 0) {
-                        order.order_items.forEach(item => {
-                            const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
-                            const details = [item.line_1, item.line_2, item.line_3, item.font, item.ink_color, cleanNotes].filter(Boolean).join(" | ");
-                            
-                            dataToExport.push([ order.bill_no, order.customer_name, order.tracking_number, order.shipped_by, shippedTime, item.item_uid, item.product_name, details, order.claim_type || '', order.claim_details || '' ]);
-                        });
-                    } else {
-                        dataToExport.push([ order.bill_no, order.customer_name, order.tracking_number, order.shipped_by, shippedTime, 'N/A', 'N/A', 'N/A', order.claim_type || '', order.claim_details || '' ]);
-                    }
-                });
-                const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "Shipped Data");
-                XLSX.writeFile(workbook, `ShippedData_${new Date().toISOString().slice(0,10)}.xlsx`);
-            }
+        ordersToExport.forEach(order => {
+            const shippedTime = order.shipped_time ? new Date(order.shipped_time).toLocaleString('th-TH') : 'N/A';
             
+            if (order.order_items && order.order_items.length > 0) {
+                // เรียง Item UID ให้สวยงามก่อน Export
+                order.order_items.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, {numeric: true}));
+                
+                order.order_items.forEach(item => {
+                    const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
+                    const details = [item.line_1, item.line_2, item.line_3, item.font, item.ink_color, cleanNotes].filter(Boolean).join(" | ");
+                    
+                    dataToExport.push([ 
+                        order.bill_no, 
+                        order.customer_name, 
+                        order.tracking_number, 
+                        order.shipped_by, 
+                        shippedTime, 
+                        item.item_uid, 
+                        item.product_name, 
+                        details, 
+                        order.claim_type || '', 
+                        order.claim_details || '' 
+                    ]);
+                });
+            } else {
+                // กรณีไม่มีรายการสินค้าข้างใน (กันเหนียว)
+                dataToExport.push([ order.bill_no, order.customer_name, order.tracking_number, order.shipped_by, shippedTime, 'N/A', 'N/A', 'N/A', order.claim_type || '', order.claim_details || '' ]);
+            }
+        });
+
+        const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Shipped Data");
+        XLSX.writeFile(workbook, `ShippedData_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+    } catch (err) {
+        console.error("Export Shipped Error:", err);
+        alert("Export ไม่สำเร็จ: " + err.message);
+    } finally {
+        loadingOverlay.style.display = 'none';
+    }
+}
+           
             function openCarrierSelection() {
                 const selectedIds = getSelectedOrderIds(container.querySelector('#tab-shipped .order-list'));
                 if (selectedIds.length === 0) return alert('กรุณาเลือกออร์เดอร์ที่ต้องการ Export');
@@ -3685,132 +3696,107 @@ function exportMasterStatusReport() {
             }
 
 
-            function showPickingSlipModal(workOrderName) {
-            const modal = document.getElementById('picking-slip-modal');
-            const modalTitle = document.getElementById('picking-slip-modal-title');
-            const previewContainer = document.getElementById('picking-slip-preview');
-            const pngContainer = document.getElementById('picking-slip-png-container');
-            modalTitle.textContent = `ใบเบิก: ${workOrderName}`;
+            async function showPickingSlipModal(workOrderName) {
+                const modal = document.getElementById('picking-slip-modal');
+                const modalTitle = document.getElementById('picking-slip-modal-title');
+                const previewContainer = document.getElementById('picking-slip-preview');
+                const pngContainer = document.getElementById('picking-slip-png-container');
+                modalTitle.textContent = `ใบเบิก: ${workOrderName}`;
 
-            const itemsInWorkOrder = [];
-            allOrdersData.forEach(order => {
-                if (order.work_order_name === workOrderName && order.order_items) {
-                    order.order_items.forEach(item => {
-                        const fullProduct = fullProductList.find(p => p.id === item.product_id);
-                        itemsInWorkOrder.push({ ...item, ...fullProduct });
-                    });
-                }
-            });
-
-            if (itemsInWorkOrder.length === 0) { alert('ไม่พบสินค้า'); return; }
-
-            const mainItemsMap = {};
-            const excludedCategories = ['UV', 'STK', 'TUBE']; 
-
-itemsInWorkOrder.filter(item => {
-    const cat = (item.product_category || '').toUpperCase();
-    const productName = (item.product_name || '').trim();
-    
-    // เงื่อนไขข้อยกเว้น: ถ้าชื่อสินค้าคือ "RLC ไม้บรรทัดใส 18cm" ให้ผ่านเงื่อนไข (คืนค่า true)
-    if (productName === "RLC ไม้บรรทัดใส 18cm") {
-        return true;
-    }
-    
-    // ถ้าไม่ใช่สินค้าข้อยกเว้น ให้เช็คตามหมวดที่ถูกสั่งห้าม (Excluded) ปกติ
-    return !excludedCategories.some(ex => cat.includes(ex));
-}).forEach(item => {
-                const key = item.product_id;
-                if (!mainItemsMap[key]) {
-                    mainItemsMap[key] = {
-                        woName: workOrderName,
-                        code: item.product_code || 'N/A',
-                        name: item.product_name,
-                        location: item.storage_location || 'N/A',
-                        category: (item.product_category || '').toUpperCase(),
-                        qty: 0
-                    };
-                }
-                mainItemsMap[key].qty += 1;
-            });
-
-            const finalMainList = Object.values(mainItemsMap).map(item => {
-                let displayQty = item.qty;
-                if (item.category.includes('CONDO STAMP')) {
-                    displayQty = Math.ceil(item.qty / 5);
-                }
-                return { ...item, finalQty: displayQty };
-            }).sort((a, b) => a.location.localeCompare(b.location));
-
-            const sparePartsMap = {};
-            itemsInWorkOrder.forEach(item => {
-                if (item.rubber_code) {
-                    const key = item.rubber_code;
-                    if (!sparePartsMap[key]) {
-                        sparePartsMap[key] = { name: ` ${item.rubber_code}`, qty: 0 };
+                // ดึงข้อมูลสินค้าตัวเต็มจาก Database
+                const ordersInWorkOrder = await getFullWorkOrderData(workOrderName);
+                const itemsInWorkOrder = [];
+                ordersInWorkOrder.forEach(order => {
+                    if (order.order_items) {
+                        order.order_items.forEach(item => {
+                            const fullProduct = fullProductList.find(p => p.id === item.product_id);
+                            itemsInWorkOrder.push({ ...item, ...fullProduct });
+                        });
                     }
-                    sparePartsMap[key].qty += 1;
-                }
-            });
-            const finalSpareList = Object.values(sparePartsMap);
-
-            const today = new Date().toLocaleDateString('th-TH');
-            const renderHtmlTables = (isForPNG = false) => {
-                const style = isForPNG ? '' : 'border: 1px solid #ddd; padding: 6px; font-size: 12px;';
-                const tableStyle = isForPNG ? '' : 'style="width: 100%; border-collapse: collapse; margin-bottom: 20px;"';
-                
-                let html = `<div>`;
-                if(isForPNG) {
-                    html += `<div style="display:flex; justify-content:space-between; border-bottom:2px solid black; padding-bottom:5px; margin-bottom:15px; font-size: 13px;">
-                                <b>ใบเบิกใบงาน: ${workOrderName}</b> <b>วันที่: ${today}</b>
-                             </div>`;
-                }
-
-                html += `<h3 style="margin-top:0;">📦 สินค้าหลัก</h3><table ${tableStyle}>
-                    <thead><tr style="background:#f2f2f2;">
-                        <th style="${style} width:25%;">จุดเก็บ</th><th style="${style} width:20%;">รหัส</th><th style="${style} width:40%;">รายการ</th><th style="${style} width:15%;">จำนวน</th>
-                    </tr></thead><tbody>`;
-                finalMainList.forEach(item => {
-                    html += `<tr><td style="${style}">${item.location}</td><td style="${style}">${item.code}</td><td style="${style}">${item.name}</td><td style="${style} text-align:center;">${item.finalQty}</td></tr>`;
                 });
-                html += `</tbody></table>`;
 
-                if(finalSpareList.length > 0) {
-                    html += `<h3>🔧 อะไหล่ </h3><table ${tableStyle}>
-                        <thead><tr style="background:#f2f2f2;"><th style="${style}">รายการอะไหล่</th><th style="${style} width:20%;">จำนวน</th></tr></thead><tbody>`;
-                    finalSpareList.forEach(spare => {
-                        html += `<tr><td style="${style}">${spare.name}</td><td style="${style} text-align:center;">${spare.qty}</td></tr>`;
-                    });
+                if (itemsInWorkOrder.length === 0) { alert('ไม่พบสินค้าในใบงานนี้'); return; }
+
+                const excludedCategories = ['UV', 'STK', 'TUBE']; 
+
+                // --- ชุดที่ 1: สำหรับแสดงผลหน้าจอ, PNG และ XLSX (มีการตัดหมวดออก) ---
+                const mainItemsMap = {};
+                itemsInWorkOrder.filter(item => {
+                    const cat = (item.product_category || '').toUpperCase();
+                    const productName = (item.product_name || '').trim();
+                    if (productName === "RLC ไม้บรรทัดใส 18cm") return true;
+                    return !excludedCategories.some(ex => cat.includes(ex));
+                }).forEach(item => {
+                    const key = item.product_id;
+                    if (!mainItemsMap[key]) {
+                        mainItemsMap[key] = { woName: workOrderName, code: item.product_code || 'N/A', name: item.product_name, location: item.storage_location || 'N/A', category: (item.product_category || '').toUpperCase(), qty: 0 };
+                    }
+                    mainItemsMap[key].qty += 1;
+                });
+
+                const finalMainList = Object.values(mainItemsMap).map(item => {
+                    let displayQty = item.qty;
+                    if (item.category.includes('CONDO STAMP')) displayQty = Math.ceil(item.qty / 5);
+                    return { ...item, finalQty: displayQty };
+                }).sort((a, b) => a.location.localeCompare(b.location));
+
+                // --- ชุดที่ 2: สำหรับ CSV เท่านั้น (ไม่ตัดหมวดใดๆ ออกเลย) ---
+                const csvItemsMap = {};
+                itemsInWorkOrder.forEach(item => {
+                    const key = item.product_id;
+                    if (!csvItemsMap[key]) {
+                        csvItemsMap[key] = { woName: workOrderName, code: item.product_code || 'N/A', name: item.product_name, location: item.storage_location || 'N/A', category: (item.product_category || '').toUpperCase(), qty: 0 };
+                    }
+                    csvItemsMap[key].qty += 1;
+                });
+
+                const finalCsvList = Object.values(csvItemsMap).map(item => {
+                    let displayQty = item.qty;
+                    if (item.category.includes('CONDO STAMP')) displayQty = Math.ceil(item.qty / 5);
+                    return { ...item, finalQty: displayQty };
+                }).sort((a, b) => a.location.localeCompare(b.location));
+
+                const sparePartsMap = {};
+                itemsInWorkOrder.forEach(item => {
+                    if (item.rubber_code) {
+                        const key = item.rubber_code;
+                        if (!sparePartsMap[key]) sparePartsMap[key] = { name: ` ${item.rubber_code}`, qty: 0 };
+                        sparePartsMap[key].qty += 1;
+                    }
+                });
+                const finalSpareList = Object.values(sparePartsMap);
+
+                const today = new Date().toLocaleDateString('th-TH');
+                const renderHtmlTables = (isForPNG = false) => {
+                    const style = isForPNG ? '' : 'border: 1px solid #ddd; padding: 6px; font-size: 12px;';
+                    const tableStyle = isForPNG ? '' : 'style="width: 100%; border-collapse: collapse; margin-bottom: 20px;"';
+                    let html = `<div>`;
+                    if(isForPNG) { html += `<div style="display:flex; justify-content:space-between; border-bottom:2px solid black; padding-bottom:5px; margin-bottom:15px; font-size: 13px;"><b>ใบเบิกใบงาน: ${workOrderName}</b> <b>วันที่: ${today}</b></div>`; }
+                    html += `<h3 style="margin-top:0;">📦 สินค้าหลัก</h3><table ${tableStyle}><thead><tr style="background:#f2f2f2;"><th style="${style} width:25%;">จุดเก็บ</th><th style="${style} width:20%;">รหัส</th><th style="${style} width:40%;">รายการ</th><th style="${style} width:15%;">จำนวน</th></tr></thead><tbody>`;
+                    finalMainList.forEach(item => { html += `<tr><td style="${style}">${item.location}</td><td style="${style}">${item.code}</td><td style="${style}">${item.name}</td><td style="${style} text-align:center;">${item.finalQty}</td></tr>`; });
                     html += `</tbody></table>`;
-                }
-
-                if(isForPNG) {
-                    html += `<div style="display:flex; justify-content:space-between; margin-top:auto; padding-top:10px;">
-                                <div style="border:1px solid black; width:48%; height:65px; display:flex; flex-direction:column; justify-content:space-between; padding:5px;">
-                                    <div style="text-align:center; font-size:12px; font-weight:bold;">ผู้เบิก (Requester)</div>
-                                    <div style="border-bottom:1px dotted black; margin: 0 10px 5px 10px; height: 30px;"></div>
-                                </div>
-                                <div style="border:1px solid black; width:48%; height:65px; display:flex; flex-direction:column; justify-content:space-between; padding:5px;">
-                                    <div style="text-align:center; font-size:12px; font-weight:bold;">ผู้จ่าย (Issuer)</div>
-                                    <div style="border-bottom:1px dotted black; margin: 0 10px 5px 10px; height: 30px;"></div>
-                                </div>
-                             </div>`;
-                }
-                html += `</div>`;
-                return html;
-            };
-            previewContainer.innerHTML = renderHtmlTables(false);
-            pngContainer.innerHTML = renderHtmlTables(true);
-
-            document.getElementById('export-all-picking-btn').onclick = () => {
-                exportAllPickingFinal(finalMainList, finalSpareList, workOrderName);
-            };
-
-            modal.style.display = 'flex';
-        }
+                    if(finalSpareList.length > 0) {
+                        html += `<h3>🔧 อะไหล่ </h3><table ${tableStyle}><thead><tr style="background:#f2f2f2;"><th style="${style}">รายการอะไหล่</th><th style="${style} width:20%;">จำนวน</th></tr></thead><tbody>`;
+                        finalSpareList.forEach(spare => { html += `<tr><td style="${style}">${spare.name}</td><td style="${style} text-align:center;">${spare.qty}</td></tr>`; });
+                        html += `</tbody></table>`;
+                    }
+                    if(isForPNG) { html += `<div style="display:flex; justify-content:space-between; margin-top:auto; padding-top:10px;"><div style="border:1px solid black; width:48%; height:65px; display:flex; flex-direction:column; justify-content:space-between; padding:5px;"><div style="text-align:center; font-size:12px; font-weight:bold;">ผู้เบิก (Requester)</div><div style="border-bottom:1px dotted black; margin: 0 10px 5px 10px; height: 30px;"></div></div><div style="border:1px solid black; width:48%; height:65px; display:flex; flex-direction:column; justify-content:space-between; padding:5px;"><div style="text-align:center; font-size:12px; font-weight:bold;">ผู้จ่าย (Issuer)</div><div style="border-bottom:1px dotted black; margin: 0 10px 5px 10px; height: 30px;"></div></div></div>`; }
+                    html += `</div>`;
+                    return html;
+                };
+                previewContainer.innerHTML = renderHtmlTables(false);
+                pngContainer.innerHTML = renderHtmlTables(true);
+                
+                // ส่งข้อมูลเข้าฟังก์ชัน Export โดยเพิ่มพารามิเตอร์ตัวที่ 4 คือ finalCsvList
+                document.getElementById('export-all-picking-btn').onclick = () => { 
+                    exportAllPickingFinal(finalMainList, finalSpareList, workOrderName, finalCsvList); 
+                };
+                modal.style.display = 'flex';
+            }
 
         function hidePickingSlipModal() { document.getElementById('picking-slip-modal').style.display = 'none'; }
 
-        async function exportAllPickingFinal(mainData, spareData, workOrderName) {
+        async function exportAllPickingFinal(mainData, spareData, workOrderName, csvData) {
             loadingOverlay.style.display = 'flex';
             try {
                 const canvas = await html2canvas(document.getElementById("picking-slip-png-container"), { scale: 3 });
@@ -3821,6 +3807,7 @@ itemsInWorkOrder.filter(item => {
 
                 const wb = XLSX.utils.book_new();
                 
+                // XLSX ใช้ mainData (ข้อมูลที่ตัดหมวดออกแล้ว)
                 const ws1Headers = [['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก']];
                 const ws1Rows = mainData.map(item => [item.woName, item.code, item.name, item.location, item.finalQty]);
                 const ws1 = XLSX.utils.aoa_to_sheet(ws1Headers.concat(ws1Rows));
@@ -3833,9 +3820,14 @@ itemsInWorkOrder.filter(item => {
 
                 XLSX.writeFile(wb, `ใบเบิก_${workOrderName}.xlsx`);
 
+                // CSV ใช้ csvData (ข้อมูลตัวเต็ม ไม่ตัดหมวดออก)
                 const csvHeaders = ['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก'];
                 const csvRows = [csvHeaders.join(',')];
-                mainData.forEach(item => {
+                
+                // ใช้ข้อมูลจาก csvData ที่เราส่งเข้ามาใหม่
+                const targetCsvData = csvData || mainData; // fallback กรณีไม่มีข้อมูลส่งมา
+                
+                targetCsvData.forEach(item => {
                     const row = [
                         `"${item.woName}"`, 
                         `"${item.code}"`, 
@@ -4352,6 +4344,12 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
 	if (addPayRowBtn) {
 	addPayRowBtn.addEventListener('click', () => addPaymentRecordRow());
 }
+document.querySelectorAll('.load-more-btn').forEach(btn => {
+    btn.onclick = (e) => {
+        const status = e.target.dataset.status;
+        fetchOrdersByStatus(status, true); // พารามิเตอร์ true หมายถึงการโหลดมาต่อท้าย (Append)
+    };
+});
 	            eventListenersInitialized = true;
             }
 
@@ -4513,23 +4511,30 @@ window.packingSystem = (() => {
         });
     }
 
-    // MODIFIED: Added skipReset parameter
     async function loadPackingData(workOrderName, skipReset = false) {
-        // --- ADDED: Check and reset when loading a NEW WO ---
-        if (workOrderName !== currentWorkOrderName && !skipReset) {
-            await checkAndResetCurrentIncompleteOrder();
-        }
+    if (workOrderName !== currentWorkOrderName && !skipReset) {
+        await checkAndResetCurrentIncompleteOrder();
+    }
 
-        loadingOverlay.style.display = "flex";
-        currentWorkOrderName = workOrderName;
-        // 1. Clear inactivity timer
-        clearTimeout(inactivityTimer);
+    loadingOverlay.style.display = "flex";
+    currentWorkOrderName = workOrderName;
+    clearTimeout(inactivityTimer);
 
-        const { data, error } = await supabaseClient.from("orders").select("*, order_items(*)").eq("work_order_name", workOrderName).order('bill_no', { ascending: true });
-        loadingOverlay.style.display = "none";
-        if (error) { alert("ดึงข้อมูลไม่ได้: " + error.message); return; }
+    try {
+        // แก้ไข Select ให้เจาะจงความสัมพันธ์ !order_id
+        const fields = '*, order_items!order_id(*)';
+        
+        const { data, error } = await supabaseClient
+            .from("orders")
+            .select(fields)
+            .eq("work_order_name", workOrderName)
+            .order('bill_no', { ascending: true });
+
+        if (error) throw error;
+        
         const ordersWithTracking = data.filter(order => order.tracking_number && order.tracking_number.trim() !== "");
         prepareDataForPacking(ordersWithTracking);
+        
         if (aggregatedData.length > 0) {
             headerTitle.textContent = `จัดของ: ${workOrderName}`;
             showPackingView("main");
@@ -4537,98 +4542,79 @@ window.packingSystem = (() => {
             const nextIndex = aggregatedData.findIndex((_, i) => !completedIndices.has(i) && !aggregatedData[i][0].isOrderComplete);
             displayOrder(nextIndex !== -1 ? nextIndex : 0);
         }
+    } catch (err) {
+        alert("ดึงข้อมูลหน้าแพ็คไม่ได้: " + err.message);
+        console.error(err);
+    } finally {
+        loadingOverlay.style.display = "none";
     }
+}
 
-    function prepareDataForPacking(orders) {
-        let flatData = [];
-        completedIndices.clear();
+function prepareDataForPacking(orders) {
+    let flatData = [];
+    completedIndices.clear();
 
-        // ดึงรายการสินค้าทั้งหมดจากระบบ Product มาไว้เทียบข้อมูล
-        const allProducts = orderSystem.getFullProductList();
+    // สร้าง Map (สารบัญ) เพื่อให้ค้นหารูปได้ไวที่สุด
+    const allProducts = orderSystem.getFullProductList();
+    const productMap = new Map(allProducts.map(p => [p.id, p.image_url]));
+    const patternMap = new Map((window.cartoonPatternList || []).map(p => [String(p.pattern_name).trim().toLowerCase(), p.image_url]));
 
-        orders.forEach(order => {
-            const isOrderShipped = order.status === 'จัดส่งแล้ว';
-            const isParcelScanned = order.packing_meta?.parcelScanned || false;
-            
-            if (order.order_items) {
-                order.order_items.forEach(item => {
-                    // 1. เริ่มต้นด้วยรูปสินค้าหลัก
-                    const productInfo = allProducts.find(p => p.id === item.product_id);
-                    let finalImageUrl = productInfo ? productInfo.image_url : null;
+    orders.forEach(order => {
+        const isOrderShipped = order.status === 'จัดส่งแล้ว';
+        const isParcelScanned = order.packing_meta?.parcelScanned || false;
+        
+        if (order.order_items) {
+            order.order_items.forEach(item => {
+                // 1. เอารูปสินค้าเป็นฐาน
+                let finalImageUrl = productMap.get(item.product_id);
 
-                    // 2. ตรวจสอบ "ลายการ์ตูน" ก่อน
-                    if (item.cartoon_pattern && window.cartoonPatternList) {
-                        const searchName = String(item.cartoon_pattern).trim().toLowerCase();
-                        const foundPattern = window.cartoonPatternList.find(p => 
-                            String(p.pattern_name).trim().toLowerCase() === searchName
-                        );
-                        if (foundPattern && foundPattern.image_url) {
-                            finalImageUrl = foundPattern.image_url;
-                        }
-                    }
+                // 2. ถ้านามแฝงลายการ์ตูนตรงกับรูปในระบบ ให้ใช้รูปนั้นแทน
+                const cp = String(item.cartoon_pattern || "").trim().toLowerCase();
+                if (cp && patternMap.has(cp)) finalImageUrl = patternMap.get(cp);
 
-                    // 3. ตรวจสอบ "ลายเส้น" (line_pattern) ตามที่ผู้ใช้ต้องการ
-                    // หากมีการระบุลายเส้น และพบรูปในฐานข้อมูลลาย จะใช้รูปนี้แทน (Override)
-                    if (item.line_pattern && window.cartoonPatternList) {
-                        const searchLineName = String(item.line_pattern).trim().toLowerCase();
-                        const foundLinePattern = window.cartoonPatternList.find(p => 
-                            String(p.pattern_name).trim().toLowerCase() === searchLineName
-                        );
-                        // ถ้าเจอรูปในชื่อที่ตรงกับช่องลายเส้น ให้ใช้รูปนั้นแทน
-                        if (foundLinePattern && foundLinePattern.image_url) {
-                            finalImageUrl = foundLinePattern.image_url;
-                        }
-                    }
+                // 3. ถ้านามแฝงลายเส้นตรงกับรูปในระบบ ให้ใช้รูปนั้นแทน (ลำดับความสำคัญสูงสุด)
+                const lp = String(item.line_pattern || "").trim().toLowerCase();
+                if (lp && patternMap.has(lp)) finalImageUrl = patternMap.get(lp);
 
-                    // 4. รวมข้อมูลเข้าสู่ Flat Array
-                    flatData.push({
-                        'tracking_number': order.tracking_number,
-                        'customer_name': order.customer_name,
-                        'order_id': order.id,
-                        'product_name': item.product_name,
-                        'image_url': finalImageUrl, 
-                        'details': [item.line_1, item.line_2, item.line_3].filter(Boolean).join(" // "),
-                        'ink_color': item.ink_color,
-                        'notes': item.notes,
-                        'shelf_location': item.product_type,
-                        'cartoon_pattern': item.cartoon_pattern,
-                        'line_pattern': item.line_pattern,
-                        'font': item.font,
-                        'item_uid': item.item_uid,
-                        'scanned': item.packing_status === 'สแกนแล้ว',
-                        'parcelScanned': isParcelScanned,
-                        'isOrderComplete': isOrderShipped,
-                        'needsTaxInvoice': order.billing_details?.request_tax_invoice || false,
-                        'needsCashBill': order.billing_details?.request_cash_bill || false,
-                        'claim_type': order.claim_type,
-                        'claim_details': order.claim_details,
-                        'file_attachment': item.file_attachment
-                    });
+                flatData.push({
+                    'tracking_number': order.tracking_number,
+                    'customer_name': order.customer_name,
+                    'order_id': order.id,
+                    'product_name': item.product_name,
+                    'image_url': finalImageUrl, 
+                    'details': [item.line_1, item.line_2, item.line_3].filter(Boolean).join(" // "),
+                    'ink_color': item.ink_color,
+                    'notes': item.notes,
+                    'shelf_location': item.product_type,
+                    'cartoon_pattern': item.cartoon_pattern,
+                    'line_pattern': item.line_pattern,
+                    'font': item.font,
+                    'item_uid': item.item_uid,
+                    'scanned': item.packing_status === 'สแกนแล้ว',
+                    'parcelScanned': isParcelScanned,
+                    'isOrderComplete': isOrderShipped,
+                    'needsTaxInvoice': order.billing_details?.request_tax_invoice || false,
+                    'needsCashBill': order.billing_details?.request_cash_bill || false,
+                    'claim_type': order.claim_type,
+                    'claim_details': order.claim_details,
+                    'file_attachment': item.file_attachment
                 });
-            }
-        });
+            });
+        }
+    });
 
-        const grouped = {}; 
-        const tOrder = [];
-        flatData.forEach(item => {
-            if (!grouped[item.tracking_number]) { 
-                grouped[item.tracking_number] = []; 
-                tOrder.push(item.tracking_number); 
-            }
-            grouped[item.tracking_number].push(item);
-        });
+    const grouped = {}; 
+    const tOrder = [];
+    flatData.forEach(item => {
+        if (!grouped[item.tracking_number]) { grouped[item.tracking_number] = []; tOrder.push(item.tracking_number); }
+        grouped[item.tracking_number].push(item);
+    });
 
-        aggregatedData = tOrder.map(t => grouped[t]);
-
-        aggregatedData.forEach((group, index) => {
-            if (group.every(i => i.scanned)) {
-                completedIndices.add(index);
-            }
-        });
-
-        currentIndex = -1;
-        updateFinalizeButtonVisibility();
-    }
+    aggregatedData = tOrder.map(t => grouped[t]);
+    aggregatedData.forEach((group, index) => { if (group.every(i => i.scanned)) completedIndices.add(index); });
+    currentIndex = -1;
+    updateFinalizeButtonVisibility();
+}
 
     function renderOrderNav() {
         orderList.innerHTML = "";
@@ -4703,9 +4689,10 @@ window.packingSystem = (() => {
             const rowClass = item.scanned ? 'item-scanned' : '';
             
             // สร้างรูปสินค้าแบบมีคลาสขยาย (Zoom)
-            const productImageHtml = item.image_url 
-                ? `<img src="${item.image_url}" class="packing-product-img" style="width: 80px; height: 80px; object-fit: cover; border-radius: 6px; display: block; margin: 0 auto 5px auto; border: 1px solid #eee;">`
-                : `<div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc; margin: 0 auto 5px auto; border: 1px solid #eee;">No Pic</div>`;
+            // แก้ไขบรรทัด imgHTML ในฟังก์ชัน displayOrder
+const productImageHtml = item.image_url 
+    ? `<img src="${item.image_url}" loading="lazy" class="packing-product-img" style="width: 80px; height: 80px; object-fit: cover; border-radius: 6px; display: block; margin: 0 auto 5px auto; border: 1px solid #eee;">`
+    : `<div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc; margin: 0 auto 5px auto; border: 1px solid #eee;">No Pic</div>`;
 
             tableHTML += `<tr class="${rowClass}" data-item-uid="${item.item_uid}">
                 <td style="text-align: center; vertical-align: middle; padding: 10px 5px;">
