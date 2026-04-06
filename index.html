@@ -1051,29 +1051,12 @@
         </div>
     </div>
 <script>
-
     document.addEventListener('DOMContentLoaded', () => {
         // --- CONFIG & GLOBAL STATE ---
         const SUPABASE_URL = 'https://scxcuwjhjbkxvqmpywqs.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjeGN1d2poamJreHZxbXB5d3FzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyODM4NTMsImV4cCI6MjA3NDg1OTg1M30.UqcmQUxCkOxgDxjtUa8Sbb0cLHT26qOuHfdbtdilkI8';
         const { createClient } = supabase;
         const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        const globalImageCache = new Map();
-function getOptimizedImageUrl(url, width = 400) { // ปรับเป็น 400 เพื่อความคมชัด
-    if (!url) return null;
-    
-    if (url.includes('supabase.co/storage/v1/object/public/')) {
-        // เปลี่ยนเป็น URL สำหรับย่อรูป (Pro Plan)
-        let optimizedUrl = url.replace('/object/public/', '/render/image/public/');
-        
-        // width=400: ชัดกำลังดีสำหรับ Thumbnail ใหญ่
-        // quality=85: ภาพจะคมชัดเกือบเท่าต้นฉบับแต่ไฟล์เล็กลงมาก
-        // format=origin: ใช้ฟอร์แมตเดิม หรือเปลี่ยนเป็น format=webp ถ้าอยากให้เล็กลงอีก
-        return `${optimizedUrl}?width=${width}&quality=85&resize=contain`;
-    }
-    
-    return url;
-}
         let loggedInUsername = null;
         let loggedInUserRole = null;
 
@@ -1458,51 +1441,24 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
 }
 
             async function performDatabaseSearch(searchTerm) {
-    if (!searchTerm || searchTerm.length < 2) return;
-    
-    // แสดงสถานะการโหลดเฉพาะจุด
-    const searchStatusHTML = '<div style="padding: 20px; text-align: center; color: #0071e3;">🔍 กำลังค้นหาในฐานข้อมูล...</div>';
-    document.querySelectorAll('.order-list').forEach(list => {
-        if (list.innerHTML === '') list.innerHTML = searchStatusHTML;
-    });
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('orders')
+                        .select('*, order_items(*)')
+                        .or(`bill_no.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,tracking_number.ilike.%${searchTerm}%`)
+                        .order('created_at', { ascending: false })
+                        .limit(100);
 
-    try {
-        // 1. ค้นหา ID จากตาราง order_items ก่อน (เผื่อค้นหาด้วย Item UID หรือชื่อสินค้า)
-        const { data: itemMatches } = await supabaseClient
-            .from('order_items')
-            .select('order_id')
-            .or(`item_uid.ilike.%${searchTerm}%,product_name.ilike.%${searchTerm}%,line_1.ilike.%${searchTerm}%`)
-            .limit(50);
+                    if (error) throw error;
 
-        const orderIdsFromItems = itemMatches ? itemMatches.map(m => m.order_id) : [];
-
-        // 2. ค้นหาในตาราง orders หลัก
-        let query = supabaseClient
-            .from('orders')
-            .select('*, order_items(*)');
-
-        // สร้างเงื่อนไขการค้นหา: หาจากเลขบิล, ชื่อ, ที่อยู่, เลขพัสดุ OR หาจาก ID ที่ได้จากรายการสินค้า
-        let orCondition = `bill_no.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,customer_address.ilike.%${searchTerm}%,tracking_number.ilike.%${searchTerm}%`;
-        
-        if (orderIdsFromItems.length > 0) {
-            orCondition += `,id.in.(${orderIdsFromItems.join(',')})`;
-        }
-
-        const { data, error } = await query
-            .or(orCondition)
-            .order('created_at', { ascending: false })
-            .limit(100);
-
-        if (error) throw error;
-
-        if (data) {
-            allOrdersData = data; // อัปเดตข้อมูลในเครื่องด้วยผลลัพธ์จาก DB
-            renderAllTabs();     // แสดงผลใหม่
-        }
-    } catch (err) {
-        console.error('Database Search Error:', err);
-    }
-}
+                    if (data && data.length > 0) {
+                        allOrdersData = data;
+                        renderAllTabs();
+                    }
+                } catch (err) {
+                    console.error('Search Error:', err);
+                }
+            }
 
             async function initializeApp(username, role) {
                 adminUserInput.value = username;
@@ -1638,61 +1594,42 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
                 if (summaryContainer) { const completedOrders = allOrdersData.filter(order => order.status === 'ลงข้อมูลเสร็จสิ้น'); const channelCounts = completedOrders.reduce((acc, order) => { const channel = order.channel_code || 'N/A'; acc[channel] = (acc[channel] || 0) + 1; return acc; }, {}); summaryContainer.innerHTML = ''; const sortedChannels = Object.keys(channelCounts).sort(); if (sortedChannels.length > 0) { let summaryHTML = ''; for (const channel of sortedChannels) { summaryHTML += `<span class="channel-summary-item" data-channel="${channel}">${channel}: ${channelCounts[channel]} บิล</span>`; } summaryContainer.innerHTML = summaryHTML; } else { summaryContainer.innerHTML = `<span class="channel-summary-placeholder">ไม่มีบิลรอสร้างใบงาน</span>`; } }
                 workOrdersListContainer.innerHTML = ''; Object.values(lists).forEach(list => { if(list) list.innerHTML = ''; });
                 
-                // ค้นหาบรรทัดที่มีการเช็ค matchesSearch ใน renderAllTabs แล้วแทนที่ด้วยชุดนี้
-const renderOrderListItems = (orders, listElement, filterValue, searchTerm) => {
-    let htmlContent = '';
-    
-    // แยกคำค้นหาเป็น Array เพื่อรองรับการค้นหาหลายคำ (Multi-word search)
-    const searchTokens = searchTerm ? searchTerm.toLowerCase().split(' ').filter(t => t.length > 0) : [];
+                const renderOrderListItems = (orders, listElement, filterValue, searchTerm) => {
+                    let htmlContent = '';
+                    orders.forEach(order => {
+                        const matchesSearch = !searchTerm || (order.bill_no && order.bill_no.toLowerCase().includes(searchTerm)) || (order.customer_name && order.customer_name.toLowerCase().includes(searchTerm)) || (order.tracking_number && order.tracking_number.toLowerCase().includes(searchTerm));
+                        if ((filterValue === 'all' || filterValue === order.channel_code) && matchesSearch) {
+                            const trackingHTML = `<span class="order-tracking">
+    <span class="tracking-text" style="${order.tracking_number ? '' : 'color: #ccc;'}">${order.tracking_number || 'ยังไม่มีเลขพัสดุ'}</span> 
+    <button class="btn btn-sm btn-edit-tracking" title="${order.tracking_number ? 'แก้ไขเลขพัสดุ' : 'เพิ่มเลขพัสดุ'}">✏️</button>
+</span>`;
+                            
+                            let billingIndicator = '';
+                            if (order.billing_details) {
+                                if (order.billing_details.request_tax_invoice) {
+                                    billingIndicator = ` <span style="font-size: 0.8em; color: #c82333; background-color: #fdd; border: 1px solid #c82333; padding: 2px 6px; border-radius: 4px; font-weight: bold;">📄 ใบกำกับภาษี</span>`;
+                                } else if (order.billing_details.request_cash_bill) {
+                                    billingIndicator = ` <span style="font-size: 0.8em; color: #007bff; background-color: #e7f3ff; border: 1px solid #007bff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">💵 บิลเงินสด</span>`;
+                                }
+                            }
+                            let infoHTML = `<div><strong data-order-id="${order.id}">${order.bill_no || 'N/A'}</strong> <span class="customer-info">${order.customer_name || 'N/A'}${billingIndicator}</span></div>`;
 
-    orders.forEach(order => {
-        // 1. กรองตามช่องทาง (Channel Filter)
-        if (filterValue !== 'all' && order.channel_code !== filterValue) return;
+                            if (order.channel_code === 'CLAIM' && (order.claim_type || order.claim_details)) {
+                                const claimType = order.claim_type ? `<strong>${order.claim_type}</strong>` : '';
+                                const claimDetails = order.claim_details || '';
+                                const separator = claimType && claimDetails ? ': ' : '';
+                                infoHTML += `<div class="shipping-details" style="color: #c82333; font-size: 0.8em; white-space: normal;">เคลม: ${claimType}${separator}${claimDetails}</div>`;
+                            }
 
-        // 2. กรองตามคำค้นหา (Smart Search)
-        let isMatch = true;
-        if (searchTokens.length > 0) {
-            // รวมข้อมูลทุกอย่างที่ต้องการให้ค้นหาได้ไว้ใน String เดียว
-            const searchString = [
-                order.bill_no,
-                order.customer_name,
-                order.customer_address,
-                order.tracking_number,
-                order.work_order_name,
-                // รวมชื่อสินค้าในบิลเข้าไปด้วยเพื่อให้ค้นหาตามชื่อสินค้าได้
-                ...(order.order_items || []).map(item => item.product_name + ' ' + item.item_uid + ' ' + item.line_1)
-            ].join(' ').toLowerCase();
-
-            // ทุก Token (คำ) ที่พิมพ์ต้องมีอยู่ใน searchString (Logic แบบ AND)
-            isMatch = searchTokens.every(token => searchString.includes(token));
-        }
-
-        if (isMatch) {
-            // ... (โค้ดการสร้าง HTML content เดิมของคุณ) ...
-            const trackingHTML = `<span class="order-tracking">
-                <span class="tracking-text" style="${order.tracking_number ? '' : 'color: #ccc;'}">${order.tracking_number || 'ยังไม่มีเลขพัสดุ'}</span> 
-                <button class="btn btn-sm btn-edit-tracking" title="${order.tracking_number ? 'แก้ไขเลขพัสดุ' : 'เพิ่มเลขพัสดุ'}">✏️</button>
-            </span>`;
-            
-            let billingIndicator = '';
-            if (order.billing_details) {
-                if (order.billing_details.request_tax_invoice) {
-                    billingIndicator = ` <span style="font-size: 0.8em; color: #c82333; background-color: #fdd; border: 1px solid #c82333; padding: 2px 6px; border-radius: 4px; font-weight: bold;">📄 ใบกำกับภาษี</span>`;
-                } else if (order.billing_details.request_cash_bill) {
-                    billingIndicator = ` <span style="font-size: 0.8em; color: #007bff; background-color: #e7f3ff; border: 1px solid #007bff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">💵 บิลเงินสด</span>`;
-                }
-            }
-            let infoHTML = `<div><strong data-order-id="${order.id}">${order.bill_no || 'N/A'}</strong> <span class="customer-info">${order.customer_name || 'N/A'}${billingIndicator}</span></div>`;
-
-            if (order.channel_code === 'CLAIM' && (order.claim_type || order.claim_details)) {
-                infoHTML += `<div class="shipping-details" style="color: #c82333; font-size: 0.8em;">เคลม: ${order.claim_type || ''}</div>`;
-            }
-
-            htmlContent += `<li class="order-list-item" data-order-id="${order.id}"><input type="checkbox" class="order-checkbox"><div class="order-info">${infoHTML}</div>${trackingHTML}</li>`;
-        }
-    });
-    listElement.innerHTML = htmlContent;
-};
+                            if (order.status === 'จัดส่งแล้ว' && order.shipped_by) {
+                                const shippedTime = new Date(order.shipped_time).toLocaleString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+                                infoHTML += `<div class="shipping-details">โดย: ${order.shipped_by} (${shippedTime})</div>`;
+                            }
+                            htmlContent += `<li class="order-list-item" data-order-id="${order.id}"><input type="checkbox" class="order-checkbox"><div class="order-info">${infoHTML}</div>${trackingHTML}</li>`;
+                        }
+                    });
+                    listElement.innerHTML = htmlContent;
+                };
 
                 const shippedOrders = allOrdersData
                     .filter(o => o.status === 'จัดส่งแล้ว')
@@ -3767,59 +3704,55 @@ function exportMasterStatusReport() {
 
             if (itemsInWorkOrder.length === 0) { alert('ไม่พบสินค้า'); return; }
 
-            // --- เตรียมข้อมูล 2 ชุด ---
-            const fullMainMap = {};      // สำหรับ CSV (รวมทุกอย่าง)
-            const filteredMainMap = {};  // สำหรับ PNG/Xlsx (ตัดหมวดที่ระบุออก)
-            const excludedCategories = ['UV', 'STK', 'TUBE'];
+            const mainItemsMap = {};
+            const excludedCategories = ['UV', 'STK', 'TUBE']; 
 
-            itemsInWorkOrder.forEach(item => {
+itemsInWorkOrder.filter(item => {
+    const cat = (item.product_category || '').toUpperCase();
+    const productName = (item.product_name || '').trim();
+    
+    // เงื่อนไขข้อยกเว้น: ถ้าชื่อสินค้าคือ "RLC ไม้บรรทัดใส 18cm" ให้ผ่านเงื่อนไข (คืนค่า true)
+    if (productName === "RLC ไม้บรรทัดใส 18cm") {
+        return true;
+    }
+    
+    // ถ้าไม่ใช่สินค้าข้อยกเว้น ให้เช็คตามหมวดที่ถูกสั่งห้าม (Excluded) ปกติ
+    return !excludedCategories.some(ex => cat.includes(ex));
+}).forEach(item => {
                 const key = item.product_id;
-                const cat = (item.product_category || '').toUpperCase();
-                const productName = (item.product_name || '').trim();
-                
-                const baseData = {
-                    woName: workOrderName,
-                    code: item.product_code || 'N/A',
-                    name: item.product_name,
-                    location: item.storage_location || 'N/A',
-                    category: cat,
-                    qty: 0
-                };
-
-                // 1. เก็บเข้า Full Map (สำหรับ CSV)
-                if (!fullMainMap[key]) fullMainMap[key] = { ...baseData };
-                fullMainMap[key].qty += 1;
-
-                // 2. เก็บเข้า Filtered Map (สำหรับ Xlsx/PNG) - มีการตัดหมวดหมู่
-                const isExcluded = excludedCategories.some(ex => cat.includes(ex)) && productName !== "RLC ไม้บรรทัดใส 18cm";
-                if (!isExcluded) {
-                    if (!filteredMainMap[key]) filteredMainMap[key] = { ...baseData };
-                    filteredMainMap[key].qty += 1;
+                if (!mainItemsMap[key]) {
+                    mainItemsMap[key] = {
+                        woName: workOrderName,
+                        code: item.product_code || 'N/A',
+                        name: item.product_name,
+                        location: item.storage_location || 'N/A',
+                        category: (item.product_category || '').toUpperCase(),
+                        qty: 0
+                    };
                 }
+                mainItemsMap[key].qty += 1;
             });
 
-            // แปลงเป็น Array และจัดการจำนวน Condo Stamp
-            const processList = (map) => Object.values(map).map(item => {
+            const finalMainList = Object.values(mainItemsMap).map(item => {
                 let displayQty = item.qty;
-                if (item.category.includes('CONDO STAMP')) displayQty = Math.ceil(item.qty / 5);
+                if (item.category.includes('CONDO STAMP')) {
+                    displayQty = Math.ceil(item.qty / 5);
+                }
                 return { ...item, finalQty: displayQty };
             }).sort((a, b) => a.location.localeCompare(b.location));
 
-            const finalFullList = processList(fullMainMap);      // ข้อมูลสำหรับ CSV
-            const finalFilteredList = processList(filteredMainMap); // ข้อมูลสำหรับ PNG/Xlsx/Preview
-
-            // เตรียมข้อมูลอะไหล่ (Spare Parts)
             const sparePartsMap = {};
             itemsInWorkOrder.forEach(item => {
                 if (item.rubber_code) {
                     const key = item.rubber_code;
-                    if (!sparePartsMap[key]) sparePartsMap[key] = { name: ` ${item.rubber_code}`, qty: 0 };
+                    if (!sparePartsMap[key]) {
+                        sparePartsMap[key] = { name: ` ${item.rubber_code}`, qty: 0 };
+                    }
                     sparePartsMap[key].qty += 1;
                 }
             });
             const finalSpareList = Object.values(sparePartsMap);
 
-            // การแสดงผลในหน้าจอและ PNG ให้ใช้ finalFilteredList (แบบที่ตัดหมวดออกแล้ว)
             const today = new Date().toLocaleDateString('th-TH');
             const renderHtmlTables = (isForPNG = false) => {
                 const style = isForPNG ? '' : 'border: 1px solid #ddd; padding: 6px; font-size: 12px;';
@@ -3836,8 +3769,7 @@ function exportMasterStatusReport() {
                     <thead><tr style="background:#f2f2f2;">
                         <th style="${style} width:25%;">จุดเก็บ</th><th style="${style} width:20%;">รหัส</th><th style="${style} width:40%;">รายการ</th><th style="${style} width:15%;">จำนวน</th>
                     </tr></thead><tbody>`;
-                // ใช้ข้อมูลแบบ Filtered
-                finalFilteredList.forEach(item => {
+                finalMainList.forEach(item => {
                     html += `<tr><td style="${style}">${item.location}</td><td style="${style}">${item.code}</td><td style="${style}">${item.name}</td><td style="${style} text-align:center;">${item.finalQty}</td></tr>`;
                 });
                 html += `</tbody></table>`;
@@ -3850,7 +3782,7 @@ function exportMasterStatusReport() {
                     });
                     html += `</tbody></table>`;
                 }
-                // ... (ส่วนท้ายเหมือนเดิม)
+
                 if(isForPNG) {
                     html += `<div style="display:flex; justify-content:space-between; margin-top:auto; padding-top:10px;">
                                 <div style="border:1px solid black; width:48%; height:65px; display:flex; flex-direction:column; justify-content:space-between; padding:5px;">
@@ -3866,13 +3798,11 @@ function exportMasterStatusReport() {
                 html += `</div>`;
                 return html;
             };
-
             previewContainer.innerHTML = renderHtmlTables(false);
             pngContainer.innerHTML = renderHtmlTables(true);
 
-            // ส่งข้อมูลทั้ง 2 ชุดเข้าไปในฟังก์ชัน Export
             document.getElementById('export-all-picking-btn').onclick = () => {
-                exportAllPickingFinal(finalFullList, finalFilteredList, finalSpareList, workOrderName);
+                exportAllPickingFinal(finalMainList, finalSpareList, workOrderName);
             };
 
             modal.style.display = 'flex';
@@ -3880,20 +3810,19 @@ function exportMasterStatusReport() {
 
         function hidePickingSlipModal() { document.getElementById('picking-slip-modal').style.display = 'none'; }
 
-        async function exportAllPickingFinal(fullData, filteredData, spareData, workOrderName) {
+        async function exportAllPickingFinal(mainData, spareData, workOrderName) {
             loadingOverlay.style.display = 'flex';
             try {
-                // 1. Export PNG (ใช้จาก DOM ที่ render ไปแล้วซึ่งเป็นแบบ Filtered)
                 const canvas = await html2canvas(document.getElementById("picking-slip-png-container"), { scale: 3 });
                 const pngLink = document.createElement('a');
                 pngLink.download = `ใบเบิก_${workOrderName}.png`;
                 pngLink.href = canvas.toDataURL("image/png");
                 pngLink.click();
 
-                // 2. Export XLSX (ใช้ข้อมูลที่ Filtered แล้ว และมีอะไหล่)
                 const wb = XLSX.utils.book_new();
+                
                 const ws1Headers = [['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก']];
-                const ws1Rows = filteredData.map(item => [item.woName, item.code, item.name, item.location, item.finalQty]);
+                const ws1Rows = mainData.map(item => [item.woName, item.code, item.name, item.location, item.finalQty]);
                 const ws1 = XLSX.utils.aoa_to_sheet(ws1Headers.concat(ws1Rows));
                 XLSX.utils.book_append_sheet(wb, ws1, "รายการหยิบสินค้า");
 
@@ -3901,12 +3830,12 @@ function exportMasterStatusReport() {
                 const ws2Rows = spareData.map(item => [item.name, item.qty]);
                 const ws2 = XLSX.utils.aoa_to_sheet(ws2Headers.concat(ws2Rows));
                 XLSX.utils.book_append_sheet(wb, ws2, "สรุปอะไหล่");
+
                 XLSX.writeFile(wb, `ใบเบิก_${workOrderName}.xlsx`);
 
-                // 3. Export CSV (ใช้ข้อมูลชุด Full ที่ไม่ตัดหมวดออก และไม่มีอะไหล่)
                 const csvHeaders = ['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก'];
                 const csvRows = [csvHeaders.join(',')];
-                fullData.forEach(item => {
+                mainData.forEach(item => {
                     const row = [
                         `"${item.woName}"`, 
                         `"${item.code}"`, 
@@ -4322,44 +4251,32 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
                 ['filter-waiting', 'filter-complete', 'filter-cancelled', 'filter-shipped', 'filter-work-orders'].forEach(id => { const el = container.querySelector(`#${id}`); if (el) el.addEventListener('change', renderAllTabs); });
 
                 const searchInputIds = ['search-waiting', 'search-complete', 'search-shipped', 'search-cancelled', 'search-work-orders'];
-searchInputIds.forEach(id => {
-    const el = container.querySelector(`#${id}`);
-    if (el) {
-        el.addEventListener('input', (e) => {
-            const query = e.target.value; 
-            
-            // Sync ค่าไปยังช่องค้นหาในแท็บอื่นๆ ทันที
-            searchInputIds.forEach(otherId => {
-                const otherEl = container.querySelector(`#${otherId}`);
-                if (otherEl && otherEl !== e.target) { otherEl.value = query; }
-            });
+                searchInputIds.forEach(id => {
+                    const el = container.querySelector(`#${id}`);
+                    if (el) {
+                        el.addEventListener('input', (e) => {
+                            const query = e.target.value; 
+                            searchInputIds.forEach(otherId => {
+                                const otherEl = container.querySelector(`#${otherId}`);
+                                if (otherEl && otherEl !== e.target) {
+                                    otherEl.value = query;
+                                }
+                            });
 
-            // ค้นหาในข้อมูลที่มีอยู่แล้วทันที (Real-time Local Filter)
-            renderAllTabs();
+                            renderAllTabs();
 
-            // ตั้งหน่วงเวลาเพื่อไปค้นหาใน Database (Remote Search)
-            clearTimeout(searchDebounceTimer);
-            searchDebounceTimer = setTimeout(async () => {
-                const trimmedQuery = query.trim();
-                // ถ้าค้นหามากกว่า 2 ตัวอักษร ให้ลองไปหาใน DB เพิ่มเผื่อเจอข้อมูลเก่า
-                if (trimmedQuery.length >= 2) {
-                    await performDatabaseSearch(trimmedQuery);
-                } else if (trimmedQuery.length === 0) {
-                    // ถ้าลบคำค้นหาจนเกลี้ยง ให้โหลดข้อมูลสถานะปัจจุบันกลับมา
-                    const activeTab = container.querySelector('.tab-link.active').dataset.tab;
-                    const statusMap = {
-                        'tab-waiting': 'รอลงข้อมูล',
-                        'tab-complete': 'ลงข้อมูลเสร็จสิ้น',
-                        'tab-work-orders': 'ใบงาน (กำลังผลิต)',
-                        'tab-shipped': 'จัดส่งแล้ว',
-                        'tab-cancelled': 'ยกเลิก'
-                    };
-                    await fetchOrdersByStatus(statusMap[activeTab]);
-                }
-            }, 400); // ลดเหลือ 400ms เพื่อความรู้สึกที่เร็วขึ้น
-        });
-    }
-});
+                            clearTimeout(searchDebounceTimer);
+                            searchDebounceTimer = setTimeout(async () => {
+                                const trimmedQuery = query.trim();
+                                if (trimmedQuery.length >= 3) {
+                                    await performDatabaseSearch(trimmedQuery);
+                                } else if (trimmedQuery.length === 0) {
+                                    await loadInitialData(true); 
+                                }
+                            }, 600);
+                        });
+                    }
+                });
                 document.getElementById('download-template-btn').addEventListener('click', downloadStandardOrderTemplate); document.getElementById('download-pgtr-template-btn')?.addEventListener('click', downloadPgtrTemplate); document.getElementById('download-wy-template-btn')?.addEventListener('click', downloadWyTemplate);
                 
                 importOrdersBtn.addEventListener('click', () => importOrdersFileInput.click()); 
@@ -4625,7 +4542,9 @@ window.packingSystem = (() => {
     function prepareDataForPacking(orders) {
         let flatData = [];
         completedIndices.clear();
-        const allProducts = window.orderSystem.getFullProductList();
+
+        // ดึงรายการสินค้าทั้งหมดจากระบบ Product มาไว้เทียบข้อมูล
+        const allProducts = orderSystem.getFullProductList();
 
         orders.forEach(order => {
             const isOrderShipped = order.status === 'จัดส่งแล้ว';
@@ -4633,41 +4552,57 @@ window.packingSystem = (() => {
             
             if (order.order_items) {
                 order.order_items.forEach(item => {
-                    // --- ระบบเช็ค Cache รูปภาพ ---
-                    const cacheKey = `${item.product_id}-${item.cartoon_pattern}-${item.line_pattern}`;
-                    let finalImageUrl = null;
+                    // 1. เริ่มต้นด้วยรูปสินค้าหลัก
+                    const productInfo = allProducts.find(p => p.id === item.product_id);
+                    let finalImageUrl = productInfo ? productInfo.image_url : null;
 
-                    if (globalImageCache.has(cacheKey)) {
-                        finalImageUrl = globalImageCache.get(cacheKey);
-                    } else {
-                        // 1. ตรวจสอบลายการ์ตูน
-                        if (item.cartoon_pattern && window.cartoonPatternList) {
-                            const foundPattern = window.cartoonPatternList.find(p => 
-                                String(p.pattern_name).trim().toLowerCase() === String(item.cartoon_pattern).trim().toLowerCase()
-                            );
-                            if (foundPattern) finalImageUrl = foundPattern.image_url;
+                    // 2. ตรวจสอบ "ลายการ์ตูน" ก่อน
+                    if (item.cartoon_pattern && window.cartoonPatternList) {
+                        const searchName = String(item.cartoon_pattern).trim().toLowerCase();
+                        const foundPattern = window.cartoonPatternList.find(p => 
+                            String(p.pattern_name).trim().toLowerCase() === searchName
+                        );
+                        if (foundPattern && foundPattern.image_url) {
+                            finalImageUrl = foundPattern.image_url;
                         }
-                        // 2. ถ้าไม่เจอลาย ให้ใช้รูปสินค้าหลัก
-                        if (!finalImageUrl) {
-                            const productInfo = allProducts.find(p => p.id === item.product_id);
-                            finalImageUrl = productInfo ? productInfo.image_url : null;
-                        }
-                        // ย่อรูปและเก็บเข้า Cache
-                        finalImageUrl = getOptimizedImageUrl(finalImageUrl, 400);
-                        globalImageCache.set(cacheKey, finalImageUrl);
                     }
 
+                    // 3. ตรวจสอบ "ลายเส้น" (line_pattern) ตามที่ผู้ใช้ต้องการ
+                    // หากมีการระบุลายเส้น และพบรูปในฐานข้อมูลลาย จะใช้รูปนี้แทน (Override)
+                    if (item.line_pattern && window.cartoonPatternList) {
+                        const searchLineName = String(item.line_pattern).trim().toLowerCase();
+                        const foundLinePattern = window.cartoonPatternList.find(p => 
+                            String(p.pattern_name).trim().toLowerCase() === searchLineName
+                        );
+                        // ถ้าเจอรูปในชื่อที่ตรงกับช่องลายเส้น ให้ใช้รูปนั้นแทน
+                        if (foundLinePattern && foundLinePattern.image_url) {
+                            finalImageUrl = foundLinePattern.image_url;
+                        }
+                    }
+
+                    // 4. รวมข้อมูลเข้าสู่ Flat Array
                     flatData.push({
-                        ...item,
                         'tracking_number': order.tracking_number,
                         'customer_name': order.customer_name,
                         'order_id': order.id,
+                        'product_name': item.product_name,
                         'image_url': finalImageUrl, 
+                        'details': [item.line_1, item.line_2, item.line_3].filter(Boolean).join(" // "),
+                        'ink_color': item.ink_color,
+                        'notes': item.notes,
+                        'shelf_location': item.product_type,
+                        'cartoon_pattern': item.cartoon_pattern,
+                        'line_pattern': item.line_pattern,
+                        'font': item.font,
+                        'item_uid': item.item_uid,
+                        'scanned': item.packing_status === 'สแกนแล้ว',
                         'parcelScanned': isParcelScanned,
                         'isOrderComplete': isOrderShipped,
-                        'details': [item.line_1, item.line_2, item.line_3].filter(Boolean).join(" // "),
                         'needsTaxInvoice': order.billing_details?.request_tax_invoice || false,
-                        'needsCashBill': order.billing_details?.request_cash_bill || false
+                        'needsCashBill': order.billing_details?.request_cash_bill || false,
+                        'claim_type': order.claim_type,
+                        'claim_details': order.claim_details,
+                        'file_attachment': item.file_attachment
                     });
                 });
             }
@@ -4768,9 +4703,9 @@ window.packingSystem = (() => {
             const rowClass = item.scanned ? 'item-scanned' : '';
             
             // สร้างรูปสินค้าแบบมีคลาสขยาย (Zoom)
-              const productImageHtml = item.image_url 
-                ? `<img src="${item.image_url}" loading="lazy" class="packing-product-img" style="width: 80px; height: 80px; object-fit: cover; border-radius: 6px;">`
-                : `<div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc;">No Pic</div>`;
+            const productImageHtml = item.image_url 
+                ? `<img src="${item.image_url}" class="packing-product-img" style="width: 80px; height: 80px; object-fit: cover; border-radius: 6px; display: block; margin: 0 auto 5px auto; border: 1px solid #eee;">`
+                : `<div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc; margin: 0 auto 5px auto; border: 1px solid #eee;">No Pic</div>`;
 
             tableHTML += `<tr class="${rowClass}" data-item-uid="${item.item_uid}">
                 <td style="text-align: center; vertical-align: middle; padding: 10px 5px;">
@@ -5086,9 +5021,8 @@ window.productSystem = (() => {
             const statusBtnClass = isInactive ? 'btn-success' : 'btn-warning';
             const statusBtnText = isInactive ? 'เปิด' : 'ปิด';
 
-            const smallImg = getOptimizedImageUrl(product.image_url, 400);
-            const imgHTML = smallImg 
-                ? `<img src="${smallImg}" loading="lazy" class="packing-product-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px;">` 
+            const imgHTML = product.image_url 
+                ? `<img src="${product.image_url}" class="packing-product-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; cursor: zoom-in;" onclick="window.open('${product.image_url}', '_blank')">` 
                 : `<div style="width: 45px; height: 45px; background: #f0f0f0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc;">No Pic</div>`;
             
             const row = `<tr ${rowStyle}>
@@ -5992,46 +5926,71 @@ window.patternSystem = (() => {
             }
 
             function render(dataToRender = []) {
-    const date = dateFilter.value;
-    const channelList = window.orderSystem.getChannelList();
-    const carriersList = [...new Set(channelList.map(c => (c.default_carrier || "OTHER").toUpperCase()))].sort();
+                const date = dateFilter.value;
+                const channelList = window.orderSystem.getChannelList();
+                const carriersList = [...new Set(channelList.map(c => (c.default_carrier || "OTHER").toUpperCase()))].sort();
 
-    const relevant = dataToRender;
+                const relevant = dataToRender;
 
-    // --- แก้ไขส่วนการนับยอด Stats ด้านบนตรงนี้ ---
-    let gTotal = 0; // จำนวนทั้งหมดที่ควรจะเป็น (ส่งวันนี้ + สแกนวันนี้)
-    let gVer = 0;   // สแกนแล้ววันนี้
-    let cTotal = 0; // เฉพาะขนส่งที่เลือก - ทั้งหมด
-    let cVer = 0;   // เฉพาะขนส่งที่เลือก - สแกนแล้ว
+                const nestedSummary = {}; 
+                relevant.forEach(o => {
+                    const isTodayVer = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
+                    if (isTodayVer) {
+                        const carrier = getCarrierName(o.channel_code);
+                        const ch = (o.channel_code || 'N/A').toUpperCase();
+                        const pType = o.transport_meta?.parcel_type || 'กล่อง';
 
-    relevant.forEach(o => {
-        const isShippedToday = o.shipped_time && o.shipped_time.substring(0, 10) === date;
-        const isVerifiedToday = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
-        const carrier = getCarrierName(o.channel_code);
+                        if (!nestedSummary[carrier]) nestedSummary[carrier] = {};
+                        if (!nestedSummary[carrier][ch]) {
+                            nestedSummary[carrier][ch] = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
+                        }
+                        nestedSummary[carrier][ch][pType]++;
+                        nestedSummary[carrier][ch].total++;
+                    }
+                });
 
-        // ถ้ายอดนี้ส่งวันนี้ หรือ สแกนวันนี้ ให้ถือว่าเป็น "งานของวันนี้"
-        if (isShippedToday || isVerifiedToday) {
-            gTotal++;
-            if (isVerifiedToday) gVer++;
+                const sumTbody = document.getElementById('transport-summary-tbody');
+                if (sumTbody) {
+                    let html = '';
+                    let grandRow = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
+                    const sortedCarriers = Object.keys(nestedSummary).sort();
 
-            if (carrier === activeCarrier) {
-                cTotal++;
-                if (isVerifiedToday) cVer++;
-            }
-        }
-    });
+                    sortedCarriers.forEach(carrier => {
+                        html += `<tr style="background: #f8f9fa;"><td colspan="6" style="padding: 10px 15px; border: 1px solid #e5e5e7; font-weight: bold; color: #0071e3;">🚚 ขนส่ง: ${carrier}</td></tr>`;
+                        let carrierSubTotal = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
+                        Object.keys(nestedSummary[carrier]).sort().forEach(ch => {
+                            const s = nestedSummary[carrier][ch];
+                            html += `<tr><td style="padding: 10px 30px; border: 1px solid #e5e5e7; color: #555;">└ ${ch}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["กล่อง"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["ซองกระดาษ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["ซองบับเบิล"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["ถุงพัสดุ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7; font-weight: bold;">${s.total}</td></tr>`;
+                            carrierSubTotal["กล่อง"] += s["กล่อง"]; carrierSubTotal["ซองกระดาษ"] += s["ซองกระดาษ"]; carrierSubTotal["ซองบับเบิล"] += s["ซองบับเบิล"]; carrierSubTotal["ถุงพัสดุ"] += s["ถุงพัสดุ"]; carrierSubTotal.total += s.total;
+                        });
+                        html += `<tr style="background: #eef7ff; font-weight: bold;"><td style="padding: 10px 15px; text-align: right; border: 1px solid #e5e5e7;">รวมยอด ${carrier}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["กล่อง"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["ซองกระดาษ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["ซองบับเบิล"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["ถุงพัสดุ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7; color: #0071e3;">${carrierSubTotal.total}</td></tr>`;
+                        grandRow["กล่อง"] += carrierSubTotal["กล่อง"]; grandRow["ซองกระดาษ"] += carrierSubTotal["ซองกระดาษ"]; grandRow["ซองบับเบิล"] += carrierSubTotal["ซองบับเบิล"]; grandRow["ถุงพัสดุ"] += carrierSubTotal["ถุงพัสดุ"]; grandRow.total += carrierSubTotal.total;
+                    });
 
-    // อัปเดตการแสดงผล HTML
-    statsPanel.innerHTML = `
-        <div class="stat-box total-box">
-            <span class="stat-label">รวมทั้งหมด (${date})</span>
-            <span class="stat-value">${gVer} / ${gTotal}</span>
-        </div>
-        <div class="stat-box" style="border-top: 5px solid #0071e3;">
-            <span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span>
-            <span class="stat-value" style="color:#0071e3;">${activeCarrier ? cVer + ' / ' + cTotal : '-'}</span>
-        </div>
-    `;
+                    if (sortedCarriers.length > 0) {
+                        html += `<tr style="background: #1d1d1f; color: white; font-weight: bold;"><td style="padding: 12px 15px; border: 1px solid #1d1d1f; text-align: left;">ยอดรวมทุกขนส่งสุทธิ</td><td style="text-align:center; border: 1px solid #333;">${grandRow["กล่อง"]}</td><td style="text-align:center; border: 1px solid #333;">${grandRow["ซองกระดาษ"]}</td><td style="text-align:center; border: 1px solid #333;">${grandRow["ซองบับเบิล"]}</td><td style="text-align:center; border: 1px solid #333;">${grandRow["ถุงพัสดุ"]}</td><td style="text-align:center; border: 1px solid #333; background: #0071e3;">${grandRow.total}</td></tr>`;
+                        sumTbody.innerHTML = html;
+                    } else {
+                        sumTbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; text-align: center; color: #ccc;">ไม่มีข้อมูลการทวนสอบในวันที่เลือก</td></tr>';
+                    }
+                }
+
+                // สรุปยอดด้านบน
+                let gTotal = 0, gVer = 0, cTotal = 0, cVer = 0;
+                relevant.forEach(o => {
+                    if (o.status === 'จัดส่งแล้ว') gTotal++;
+                    const isV = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
+                    if (isV) gVer++;
+                    if (getCarrierName(o.channel_code) === activeCarrier) {
+                        if (o.status === 'จัดส่งแล้ว') cTotal++;
+                        if (isV) cVer++;
+                    }
+                });
+
+                statsPanel.innerHTML = `
+                    <div class="stat-box total-box"><span class="stat-label">รวมทั้งหมด (${date})</span><span class="stat-value">${gVer} / ${gTotal}</span></div>
+                    <div class="stat-box" style="border-top: 5px solid #0071e3;"><span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span><span class="stat-value" style="color:#0071e3;">${activeCarrier ? cVer + ' / ' + cTotal : '-'}</span></div>
+                `;
 
                 tabsContainer.innerHTML = carriersList.map(c => {
                     const cCount = relevant.filter(o => getCarrierName(o.channel_code) === c && o.status === 'จัดส่งแล้ว').length;
