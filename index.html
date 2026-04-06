@@ -1482,13 +1482,12 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
 }
 
             async function performDatabaseSearch(searchTerm) {
-    if (searchTerm.length < 3) return; // ค้นหาเมื่อพิมพ์ 3 ตัวขึ้นไป
+    if (searchTerm.length < 3) return; 
 
     try {
-        const selectFields = 'id,bill_no,customer_name,status,tracking_number,work_order_name,order_items!order_id(id,packing_status)';
         const { data, error } = await supabaseClient
             .from('orders')
-            .select(selectFields)
+            .select('channel_code,id,bill_no,customer_name,customer_address,status,tracking_number,work_order_name,shipped_time,shipped_by,claim_type,claim_details,billing_details,created_at')
             .or(`bill_no.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,tracking_number.ilike.%${searchTerm}%`)
             .order('created_at', { ascending: false })
             .limit(100);
@@ -1496,7 +1495,7 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
         if (error) throw error;
         if (data) {
             allOrdersData = data;
-            renderAllTabs();
+            renderAllTabs(); // วาดตารางใหม่เฉพาะตอนได้ผลลัพธ์มาแล้วเท่านั้น
         }
     } catch (err) {
         console.error('Search Error:', err);
@@ -4248,26 +4247,29 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
                     const el = container.querySelector(`#${id}`);
                     if (el) {
                         el.addEventListener('input', (e) => {
-                            const query = e.target.value; 
-                            searchInputIds.forEach(otherId => {
-                                const otherEl = container.querySelector(`#${otherId}`);
-                                if (otherEl && otherEl !== e.target) {
-                                    otherEl.value = query;
-                                }
-                            });
+    const query = e.target.value; 
+    
+    // อัปเดตช่องค้นหาในแท็บอื่นให้เหมือนกัน
+    searchInputIds.forEach(otherId => {
+        const otherEl = container.querySelector(`#${otherId}`);
+        if (otherEl && otherEl !== e.target) otherEl.value = query;
+    });
 
-                            renderAllTabs();
-
-                            clearTimeout(searchDebounceTimer);
-                            searchDebounceTimer = setTimeout(async () => {
-                                const trimmedQuery = query.trim();
-                                if (trimmedQuery.length >= 3) {
-                                    await performDatabaseSearch(trimmedQuery);
-                                } else if (trimmedQuery.length === 0) {
-                                    await loadInitialData(true); 
-                                }
-                            }, 600);
-                        });
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(async () => {
+        const trimmedQuery = query.trim();
+        
+        if (trimmedQuery.length >= 3) {
+            // ถ้าพิมพ์ครบ 3 ตัว ค่อยไปดึงข้อมูลจาก Database
+            await performDatabaseSearch(trimmedQuery);
+        } else if (trimmedQuery.length === 0) {
+            // ถ้าลบจนว่าง ให้โหลดข้อมูลหน้าแรกกลับมา (แบบเงียบๆ ไม่ต้องมีหน้าจอดำ)
+            const activeTab = document.querySelector('.tab-link.active').dataset.tab;
+            const statusMap = { 'tab-waiting': 'รอลงข้อมูล', 'tab-complete': 'ลงข้อมูลเสร็จสิ้น', 'tab-shipped': 'จัดส่งแล้ว', 'tab-cancelled': 'ยกเลิก' };
+            if(statusMap[activeTab]) await fetchOrdersByStatus(statusMap[activeTab]);
+        }
+    }, 600); // รอให้หยุดพิมพ์ 0.6 วินาทีค่อยทำงาน
+});
                     }
                 });
                 document.getElementById('download-template-btn').addEventListener('click', downloadStandardOrderTemplate); document.getElementById('download-pgtr-template-btn')?.addEventListener('click', downloadPgtrTemplate); document.getElementById('download-wy-template-btn')?.addEventListener('click', downloadWyTemplate);
