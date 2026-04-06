@@ -1051,12 +1051,29 @@
         </div>
     </div>
 <script>
+
     document.addEventListener('DOMContentLoaded', () => {
         // --- CONFIG & GLOBAL STATE ---
         const SUPABASE_URL = 'https://scxcuwjhjbkxvqmpywqs.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjeGN1d2poamJreHZxbXB5d3FzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyODM4NTMsImV4cCI6MjA3NDg1OTg1M30.UqcmQUxCkOxgDxjtUa8Sbb0cLHT26qOuHfdbtdilkI8';
         const { createClient } = supabase;
         const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const globalImageCache = new Map();
+function getOptimizedImageUrl(url, width = 400) { // ปรับเป็น 400 เพื่อความคมชัด
+    if (!url) return null;
+    
+    if (url.includes('supabase.co/storage/v1/object/public/')) {
+        // เปลี่ยนเป็น URL สำหรับย่อรูป (Pro Plan)
+        let optimizedUrl = url.replace('/object/public/', '/render/image/public/');
+        
+        // width=400: ชัดกำลังดีสำหรับ Thumbnail ใหญ่
+        // quality=85: ภาพจะคมชัดเกือบเท่าต้นฉบับแต่ไฟล์เล็กลงมาก
+        // format=origin: ใช้ฟอร์แมตเดิม หรือเปลี่ยนเป็น format=webp ถ้าอยากให้เล็กลงอีก
+        return `${optimizedUrl}?width=${width}&quality=85&resize=contain`;
+    }
+    
+    return url;
+}
         let loggedInUsername = null;
         let loggedInUserRole = null;
 
@@ -4608,9 +4625,7 @@ window.packingSystem = (() => {
     function prepareDataForPacking(orders) {
         let flatData = [];
         completedIndices.clear();
-
-        // ดึงรายการสินค้าทั้งหมดจากระบบ Product มาไว้เทียบข้อมูล
-        const allProducts = orderSystem.getFullProductList();
+        const allProducts = window.orderSystem.getFullProductList();
 
         orders.forEach(order => {
             const isOrderShipped = order.status === 'จัดส่งแล้ว';
@@ -4618,57 +4633,41 @@ window.packingSystem = (() => {
             
             if (order.order_items) {
                 order.order_items.forEach(item => {
-                    // 1. เริ่มต้นด้วยรูปสินค้าหลัก
-                    const productInfo = allProducts.find(p => p.id === item.product_id);
-                    let finalImageUrl = productInfo ? productInfo.image_url : null;
+                    // --- ระบบเช็ค Cache รูปภาพ ---
+                    const cacheKey = `${item.product_id}-${item.cartoon_pattern}-${item.line_pattern}`;
+                    let finalImageUrl = null;
 
-                    // 2. ตรวจสอบ "ลายการ์ตูน" ก่อน
-                    if (item.cartoon_pattern && window.cartoonPatternList) {
-                        const searchName = String(item.cartoon_pattern).trim().toLowerCase();
-                        const foundPattern = window.cartoonPatternList.find(p => 
-                            String(p.pattern_name).trim().toLowerCase() === searchName
-                        );
-                        if (foundPattern && foundPattern.image_url) {
-                            finalImageUrl = foundPattern.image_url;
+                    if (globalImageCache.has(cacheKey)) {
+                        finalImageUrl = globalImageCache.get(cacheKey);
+                    } else {
+                        // 1. ตรวจสอบลายการ์ตูน
+                        if (item.cartoon_pattern && window.cartoonPatternList) {
+                            const foundPattern = window.cartoonPatternList.find(p => 
+                                String(p.pattern_name).trim().toLowerCase() === String(item.cartoon_pattern).trim().toLowerCase()
+                            );
+                            if (foundPattern) finalImageUrl = foundPattern.image_url;
                         }
+                        // 2. ถ้าไม่เจอลาย ให้ใช้รูปสินค้าหลัก
+                        if (!finalImageUrl) {
+                            const productInfo = allProducts.find(p => p.id === item.product_id);
+                            finalImageUrl = productInfo ? productInfo.image_url : null;
+                        }
+                        // ย่อรูปและเก็บเข้า Cache
+                        finalImageUrl = getOptimizedImageUrl(finalImageUrl, 400);
+                        globalImageCache.set(cacheKey, finalImageUrl);
                     }
 
-                    // 3. ตรวจสอบ "ลายเส้น" (line_pattern) ตามที่ผู้ใช้ต้องการ
-                    // หากมีการระบุลายเส้น และพบรูปในฐานข้อมูลลาย จะใช้รูปนี้แทน (Override)
-                    if (item.line_pattern && window.cartoonPatternList) {
-                        const searchLineName = String(item.line_pattern).trim().toLowerCase();
-                        const foundLinePattern = window.cartoonPatternList.find(p => 
-                            String(p.pattern_name).trim().toLowerCase() === searchLineName
-                        );
-                        // ถ้าเจอรูปในชื่อที่ตรงกับช่องลายเส้น ให้ใช้รูปนั้นแทน
-                        if (foundLinePattern && foundLinePattern.image_url) {
-                            finalImageUrl = foundLinePattern.image_url;
-                        }
-                    }
-
-                    // 4. รวมข้อมูลเข้าสู่ Flat Array
                     flatData.push({
+                        ...item,
                         'tracking_number': order.tracking_number,
                         'customer_name': order.customer_name,
                         'order_id': order.id,
-                        'product_name': item.product_name,
                         'image_url': finalImageUrl, 
-                        'details': [item.line_1, item.line_2, item.line_3].filter(Boolean).join(" // "),
-                        'ink_color': item.ink_color,
-                        'notes': item.notes,
-                        'shelf_location': item.product_type,
-                        'cartoon_pattern': item.cartoon_pattern,
-                        'line_pattern': item.line_pattern,
-                        'font': item.font,
-                        'item_uid': item.item_uid,
-                        'scanned': item.packing_status === 'สแกนแล้ว',
                         'parcelScanned': isParcelScanned,
                         'isOrderComplete': isOrderShipped,
+                        'details': [item.line_1, item.line_2, item.line_3].filter(Boolean).join(" // "),
                         'needsTaxInvoice': order.billing_details?.request_tax_invoice || false,
-                        'needsCashBill': order.billing_details?.request_cash_bill || false,
-                        'claim_type': order.claim_type,
-                        'claim_details': order.claim_details,
-                        'file_attachment': item.file_attachment
+                        'needsCashBill': order.billing_details?.request_cash_bill || false
                     });
                 });
             }
@@ -4769,9 +4768,9 @@ window.packingSystem = (() => {
             const rowClass = item.scanned ? 'item-scanned' : '';
             
             // สร้างรูปสินค้าแบบมีคลาสขยาย (Zoom)
-            const productImageHtml = item.image_url 
-                ? `<img src="${item.image_url}" class="packing-product-img" style="width: 80px; height: 80px; object-fit: cover; border-radius: 6px; display: block; margin: 0 auto 5px auto; border: 1px solid #eee;">`
-                : `<div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc; margin: 0 auto 5px auto; border: 1px solid #eee;">No Pic</div>`;
+              const productImageHtml = item.image_url 
+                ? `<img src="${item.image_url}" loading="lazy" class="packing-product-img" style="width: 80px; height: 80px; object-fit: cover; border-radius: 6px;">`
+                : `<div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc;">No Pic</div>`;
 
             tableHTML += `<tr class="${rowClass}" data-item-uid="${item.item_uid}">
                 <td style="text-align: center; vertical-align: middle; padding: 10px 5px;">
@@ -5087,8 +5086,9 @@ window.productSystem = (() => {
             const statusBtnClass = isInactive ? 'btn-success' : 'btn-warning';
             const statusBtnText = isInactive ? 'เปิด' : 'ปิด';
 
-            const imgHTML = product.image_url 
-                ? `<img src="${product.image_url}" class="packing-product-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; cursor: zoom-in;" onclick="window.open('${product.image_url}', '_blank')">` 
+            const smallImg = getOptimizedImageUrl(product.image_url, 400);
+            const imgHTML = smallImg 
+                ? `<img src="${smallImg}" loading="lazy" class="packing-product-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px;">` 
                 : `<div style="width: 45px; height: 45px; background: #f0f0f0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc;">No Pic</div>`;
             
             const row = `<tr ${rowStyle}>
