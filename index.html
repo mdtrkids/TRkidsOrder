@@ -1092,6 +1092,7 @@
         const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let loggedInUsername = null;
         let loggedInUserRole = null;
+        const getThumb = (url, size = 150) => (!url || url.includes('data:') || url.includes('blob:')) ? url : `${url}?width=${size}&quality=70&resize=contain`;
 
         // --- CORE UI ELEMENTS ---
         const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
@@ -4581,7 +4582,7 @@ function prepareDataForPacking(orders) {
                     'customer_name': order.customer_name,
                     'order_id': order.id,
                     'product_name': item.product_name,
-                    'image_url': finalImageUrl, 
+                    'image_url': getThumb(finalImageUrl, 200),
                     'details': [item.line_1, item.line_2, item.line_3].filter(Boolean).join(" // "),
                     'ink_color': item.ink_color,
                     'notes': item.notes,
@@ -5009,8 +5010,8 @@ window.productSystem = (() => {
             const statusBtnText = isInactive ? 'เปิด' : 'ปิด';
 
             const imgHTML = product.image_url 
-                ? `<img src="${product.image_url}" class="packing-product-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; cursor: zoom-in;" onclick="window.open('${product.image_url}', '_blank')">` 
-                : `<div style="width: 45px; height: 45px; background: #f0f0f0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc;">No Pic</div>`;
+    ? `<img src="${getThumb(product.image_url, 100)}" class="packing-product-img" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; cursor: zoom-in;" onclick="window.open('${product.image_url}', '_blank')">` 
+    : `<div style="width: 45px; height: 45px; background: #f0f0f0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #ccc;">No Pic</div>`;
             
             const row = `<tr ${rowStyle}>
                 <td>${imgHTML}</td>
@@ -5151,7 +5152,7 @@ window.productSystem = (() => {
                 const fileExt = file.name.split('.').pop();
                 const fileName = `${productCode}-${Date.now()}.${fileExt}`;
                 const filePath = `products/${fileName}`;
-                let { error: uploadError } = await supabaseClient.storage.from('product-images').upload(filePath, file);
+                let { error: uploadError } = await supabaseClient.storage.from('product-images').upload(filePath, file, { cacheControl: '31536000', upsert: true });
                 if (uploadError) throw uploadError;
                 const { data: publicUrlData } = supabaseClient.storage.from('product-images').getPublicUrl(filePath);
                 imageUrl = publicUrlData.publicUrl;
@@ -5202,7 +5203,7 @@ window.productSystem = (() => {
                 const fileExt = file.name.split('.').pop();
                 const fileName = `${productCode}-${Date.now()}.${fileExt}`;
                 const filePath = `products/${fileName}`;
-                await supabaseClient.storage.from('product-images').upload(filePath, file);
+                await supabaseClient.storage.from('product-images').upload(filePath, file, { cacheControl: '31536000', upsert: true });
                 const { data: urlData } = supabaseClient.storage.from('product-images').getPublicUrl(filePath);
                 await supabaseClient.from('products').update({ image_url: urlData.publicUrl }).eq('product_code', productCode);
                 successCount++;
@@ -5291,7 +5292,7 @@ window.patternSystem = (() => {
             let imageUrl = null;
             if (file) {
                 const fileName = `patterns/${Date.now()}_${file.name}`;
-                const { error: upErr } = await supabaseClient.storage.from('product-images').upload(fileName, file);
+                const { error: upErr } = await supabaseClient.storage.from('product-images').upload(fileName, file, { cacheControl: '31536000', upsert: true });
                 if (upErr) throw upErr;
                 const { data: urlData } = supabaseClient.storage.from('product-images').getPublicUrl(fileName);
                 imageUrl = urlData.publicUrl;
