@@ -5802,56 +5802,42 @@ window.patternSystem = (() => {
                 await fetchTransportData();
             }
 
-            // ฟังก์ชันหลัก: ดึงข้อมูลออร์เดอร์ตามวันที่เลือกจาก Database โดยตรง
-            async function fetchTransportData() {
-                const date = dateFilter.value; // "YYYY-MM-DD"
-                if (!date) return;
-                
-                loadingOverlay.style.display = 'flex';
-                statusMsg.textContent = "⌛ กำลังดึงข้อมูลวันที่ " + date;
-                statusMsg.style.color = "#666";
+async function fetchTransportData() {
+    const date = dateFilter.value; // "YYYY-MM-DD"
+    if (!date) return;
+    
+    loadingOverlay.style.display = 'flex';
+    statusMsg.textContent = "⌛ กำลังดึงข้อมูลวันที่ " + date;
+    statusMsg.style.color = "#666";
 
-                try {
-                    // สร้างช่วงเวลา เริ่มต้น และ สิ้นสุด ของวันที่เลือก (ISO Format)
-                    const startStr = `${date}T00:00:00Z`;
-                    const endStr = `${date}T23:59:59Z`;
+    try {
+        const startStr = `${date}T00:00:00Z`;
+        const endStr = `${date}T23:59:59Z`;
 
-                    // ดึงข้อมูลโดยใช้ช่วงเวลา (gte = มากกว่าหรือเท่ากับ, lte = น้อยกว่าหรือเท่ากับ)
-                    // วิธีนี้จะใช้กับคอลัมน์วันที่ (Timestamp) ได้โดยตรง ไม่ Error
-                    const { data, error } = await supabaseClient
-                        .from('orders')
-                        .select('*')
-                        .eq('status', 'จัดส่งแล้ว')
-                        .gte('shipped_time', startStr)
-                        .lte('shipped_time', endStr);
+        // ดึงเฉพาะบิลที่สถานะเป็น 'จัดส่งแล้ว' และมีเวลา Shipped ตรงกับวันที่เลือก
+        const { data, error } = await supabaseClient
+            .from('orders')
+            .select('*')
+            .eq('status', 'จัดส่งแล้ว')
+            .gte('shipped_time', startStr)
+            .lte('shipped_time', endStr);
 
-                    if (error) throw error;
-                    
-                    // กรณีพิเศษ: ดึงบิลที่มีการ "ทวนสอบขนส่ง" ในวันนี้เพิ่ม (เผื่อกรณีส่งวันอื่นแต่มาตรวจวันนี้)
-                    const { data: verData, error: verError } = await supabaseClient
-                        .from('orders')
-                        .select('*')
-                        .gte('transport_meta->>verified_at', startStr)
-                        .lte('transport_meta->>verified_at', endStr);
-                    
-                    if (verError) console.warn("Verification fetch warn:", verError);
-
-                    // รวมข้อมูลทั้ง 2 ก้อนเข้าด้วยกัน และลบรายการที่ซ้ำออก
-                    const combined = [...(data || []), ...(verData || [])];
-                    const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
-
-                    currentOrdersInView = unique; 
-                    render(currentOrdersInView);
-                    
-                    statusMsg.textContent = ""; 
-                } catch (err) {
-                    console.error('Transport Fetch Error:', err);
-                    statusMsg.textContent = "❌ ดึงข้อมูลไม่สำเร็จ";
-                    statusMsg.style.color = "#dc3545";
-                } finally {
-                    loadingOverlay.style.display = 'none';
-                }
-            }
+        if (error) throw error;
+        
+        // เราจะไม่ดึง verData แยก เพื่อป้องกันการดึงบิลข้ามวันมาปนจนยอดเพี้ยน 
+        // บิลที่สแกนวันนี้แต่ส่งวันอื่น ควรไปปรากฏในรายงานของวันนั้นๆ
+        currentOrdersInView = data || []; 
+        render(currentOrdersInView);
+        
+        statusMsg.textContent = ""; 
+    } catch (err) {
+        console.error('Transport Fetch Error:', err);
+        statusMsg.textContent = "❌ ดึงข้อมูลไม่สำเร็จ";
+        statusMsg.style.color = "#dc3545";
+    } finally {
+        loadingOverlay.style.display = 'none';
+    }
+}
 
             function getCarrierName(channelCode) {
                 const channelList = window.orderSystem.getChannelList();
