@@ -5992,71 +5992,46 @@ window.patternSystem = (() => {
             }
 
             function render(dataToRender = []) {
-                const date = dateFilter.value;
-                const channelList = window.orderSystem.getChannelList();
-                const carriersList = [...new Set(channelList.map(c => (c.default_carrier || "OTHER").toUpperCase()))].sort();
+    const date = dateFilter.value;
+    const channelList = window.orderSystem.getChannelList();
+    const carriersList = [...new Set(channelList.map(c => (c.default_carrier || "OTHER").toUpperCase()))].sort();
 
-                const relevant = dataToRender;
+    const relevant = dataToRender;
 
-                const nestedSummary = {}; 
-                relevant.forEach(o => {
-                    const isTodayVer = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
-                    if (isTodayVer) {
-                        const carrier = getCarrierName(o.channel_code);
-                        const ch = (o.channel_code || 'N/A').toUpperCase();
-                        const pType = o.transport_meta?.parcel_type || 'กล่อง';
+    // --- แก้ไขส่วนการนับยอด Stats ด้านบนตรงนี้ ---
+    let gTotal = 0; // จำนวนทั้งหมดที่ควรจะเป็น (ส่งวันนี้ + สแกนวันนี้)
+    let gVer = 0;   // สแกนแล้ววันนี้
+    let cTotal = 0; // เฉพาะขนส่งที่เลือก - ทั้งหมด
+    let cVer = 0;   // เฉพาะขนส่งที่เลือก - สแกนแล้ว
 
-                        if (!nestedSummary[carrier]) nestedSummary[carrier] = {};
-                        if (!nestedSummary[carrier][ch]) {
-                            nestedSummary[carrier][ch] = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
-                        }
-                        nestedSummary[carrier][ch][pType]++;
-                        nestedSummary[carrier][ch].total++;
-                    }
-                });
+    relevant.forEach(o => {
+        const isShippedToday = o.shipped_time && o.shipped_time.substring(0, 10) === date;
+        const isVerifiedToday = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
+        const carrier = getCarrierName(o.channel_code);
 
-                const sumTbody = document.getElementById('transport-summary-tbody');
-                if (sumTbody) {
-                    let html = '';
-                    let grandRow = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
-                    const sortedCarriers = Object.keys(nestedSummary).sort();
+        // ถ้ายอดนี้ส่งวันนี้ หรือ สแกนวันนี้ ให้ถือว่าเป็น "งานของวันนี้"
+        if (isShippedToday || isVerifiedToday) {
+            gTotal++;
+            if (isVerifiedToday) gVer++;
 
-                    sortedCarriers.forEach(carrier => {
-                        html += `<tr style="background: #f8f9fa;"><td colspan="6" style="padding: 10px 15px; border: 1px solid #e5e5e7; font-weight: bold; color: #0071e3;">🚚 ขนส่ง: ${carrier}</td></tr>`;
-                        let carrierSubTotal = { "กล่อง": 0, "ซองกระดาษ": 0, "ซองบับเบิล": 0, "ถุงพัสดุ": 0, total: 0 };
-                        Object.keys(nestedSummary[carrier]).sort().forEach(ch => {
-                            const s = nestedSummary[carrier][ch];
-                            html += `<tr><td style="padding: 10px 30px; border: 1px solid #e5e5e7; color: #555;">└ ${ch}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["กล่อง"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["ซองกระดาษ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["ซองบับเบิล"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${s["ถุงพัสดุ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7; font-weight: bold;">${s.total}</td></tr>`;
-                            carrierSubTotal["กล่อง"] += s["กล่อง"]; carrierSubTotal["ซองกระดาษ"] += s["ซองกระดาษ"]; carrierSubTotal["ซองบับเบิล"] += s["ซองบับเบิล"]; carrierSubTotal["ถุงพัสดุ"] += s["ถุงพัสดุ"]; carrierSubTotal.total += s.total;
-                        });
-                        html += `<tr style="background: #eef7ff; font-weight: bold;"><td style="padding: 10px 15px; text-align: right; border: 1px solid #e5e5e7;">รวมยอด ${carrier}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["กล่อง"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["ซองกระดาษ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["ซองบับเบิล"]}</td><td style="text-align:center; border: 1px solid #e5e5e7;">${carrierSubTotal["ถุงพัสดุ"]}</td><td style="text-align:center; border: 1px solid #e5e5e7; color: #0071e3;">${carrierSubTotal.total}</td></tr>`;
-                        grandRow["กล่อง"] += carrierSubTotal["กล่อง"]; grandRow["ซองกระดาษ"] += carrierSubTotal["ซองกระดาษ"]; grandRow["ซองบับเบิล"] += carrierSubTotal["ซองบับเบิล"]; grandRow["ถุงพัสดุ"] += carrierSubTotal["ถุงพัสดุ"]; grandRow.total += carrierSubTotal.total;
-                    });
+            if (carrier === activeCarrier) {
+                cTotal++;
+                if (isVerifiedToday) cVer++;
+            }
+        }
+    });
 
-                    if (sortedCarriers.length > 0) {
-                        html += `<tr style="background: #1d1d1f; color: white; font-weight: bold;"><td style="padding: 12px 15px; border: 1px solid #1d1d1f; text-align: left;">ยอดรวมทุกขนส่งสุทธิ</td><td style="text-align:center; border: 1px solid #333;">${grandRow["กล่อง"]}</td><td style="text-align:center; border: 1px solid #333;">${grandRow["ซองกระดาษ"]}</td><td style="text-align:center; border: 1px solid #333;">${grandRow["ซองบับเบิล"]}</td><td style="text-align:center; border: 1px solid #333;">${grandRow["ถุงพัสดุ"]}</td><td style="text-align:center; border: 1px solid #333; background: #0071e3;">${grandRow.total}</td></tr>`;
-                        sumTbody.innerHTML = html;
-                    } else {
-                        sumTbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; text-align: center; color: #ccc;">ไม่มีข้อมูลการทวนสอบในวันที่เลือก</td></tr>';
-                    }
-                }
-
-                // สรุปยอดด้านบน
-                let gTotal = 0, gVer = 0, cTotal = 0, cVer = 0;
-                relevant.forEach(o => {
-                    if (o.status === 'จัดส่งแล้ว') gTotal++;
-                    const isV = o.transport_meta?.verified && o.transport_meta.verified_at.substring(0, 10) === date;
-                    if (isV) gVer++;
-                    if (getCarrierName(o.channel_code) === activeCarrier) {
-                        if (o.status === 'จัดส่งแล้ว') cTotal++;
-                        if (isV) cVer++;
-                    }
-                });
-
-                statsPanel.innerHTML = `
-                    <div class="stat-box total-box"><span class="stat-label">รวมทั้งหมด (${date})</span><span class="stat-value">${gVer} / ${gTotal}</span></div>
-                    <div class="stat-box" style="border-top: 5px solid #0071e3;"><span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span><span class="stat-value" style="color:#0071e3;">${activeCarrier ? cVer + ' / ' + cTotal : '-'}</span></div>
-                `;
+    // อัปเดตการแสดงผล HTML
+    statsPanel.innerHTML = `
+        <div class="stat-box total-box">
+            <span class="stat-label">รวมทั้งหมด (${date})</span>
+            <span class="stat-value">${gVer} / ${gTotal}</span>
+        </div>
+        <div class="stat-box" style="border-top: 5px solid #0071e3;">
+            <span class="stat-label">${activeCarrier || 'เลือกขนส่ง'}</span>
+            <span class="stat-value" style="color:#0071e3;">${activeCarrier ? cVer + ' / ' + cTotal : '-'}</span>
+        </div>
+    `;
 
                 tabsContainer.innerHTML = carriersList.map(c => {
                     const cCount = relevant.filter(o => getCarrierName(o.channel_code) === c && o.status === 'จัดส่งแล้ว').length;
