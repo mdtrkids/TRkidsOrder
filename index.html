@@ -3693,6 +3693,9 @@ function exportMasterStatusReport() {
             modalTitle.textContent = `ใบเบิก: ${workOrderName}`;
 
             const itemsInWorkOrder = [];
+            const allOrdersData = window.orderSystem.getAllOrdersData();
+            const fullProductList = window.orderSystem.getFullProductList();
+
             allOrdersData.forEach(order => {
                 if (order.work_order_name === workOrderName && order.order_items) {
                     order.order_items.forEach(item => {
@@ -3704,105 +3707,153 @@ function exportMasterStatusReport() {
 
             if (itemsInWorkOrder.length === 0) { alert('ไม่พบสินค้า'); return; }
 
-            const mainItemsMap = {};
-            const excludedCategories = ['UV', 'STK', 'TUBE']; 
+            // --- 1. เตรียมข้อมูลสำหรับ CSV (ไม่ตัดรายการเลย) ---
+            const csvDataList = itemsInWorkOrder.map(item => {
+                let displayQty = 1;
+                const cat = (item.product_category || '').toUpperCase();
+                // ถ้าเป็น Condo Stamp ให้มองเป็น 1/5 ของชุดในระดับ Item (แต่ใน CSV เรามักจะลิสต์รายตัวอยู่แล้ว)
+                return {
+                    woName: workOrderName,
+                    code: item.product_code || 'N/A',
+                    name: item.product_name,
+                    location: item.storage_location || 'N/A',
+                    qty: 1
+                };
+            });
 
-itemsInWorkOrder.filter(item => {
-    const cat = (item.product_category || '').toUpperCase();
-    const productName = (item.product_name || '').trim();
-    
-    // เงื่อนไขข้อยกเว้น: ถ้าชื่อสินค้าคือ "RLC ไม้บรรทัดใส 18cm" ให้ผ่านเงื่อนไข (คืนค่า true)
-    if (productName === "RLC ไม้บรรทัดใส 18cm") {
-        return true;
-    }
-    
-    // ถ้าไม่ใช่สินค้าข้อยกเว้น ให้เช็คตามหมวดที่ถูกสั่งห้าม (Excluded) ปกติ
-    return !excludedCategories.some(ex => cat.includes(ex));
-}).forEach(item => {
+            // --- 2. เตรียมข้อมูลสำหรับ XLSX/PNG/Preview (มีการกรองหมวดหมู่) ---
+            const excludedCategories = ['UV', 'STK', 'TUBE'];
+            const filteredItems = itemsInWorkOrder.filter(item => {
+                const cat = (item.product_category || '').toUpperCase();
+                const productName = (item.product_name || '').trim();
+                // ข้อยกเว้น: ถ้าเป็นไม้บรรทัด RLC ให้ผ่านเสมอ
+                if (productName === "RLC ไม้บรรทัดใส 18cm") return true;
+                // กรองหมวดหมู่ที่ไม่อยากให้แสดงในใบเบิกกระดาษ
+                return !excludedCategories.some(ex => cat.includes(ex));
+            });
+
+            // จัดกลุ่มและนับจำนวน (Aggregate)
+            const mainItemsMap = {};
+            filteredItems.forEach(item => {
                 const key = item.product_id;
                 if (!mainItemsMap[key]) {
+                    // กำหนดแผนก (Department)
+                    const cat = (item.product_category || '').toUpperCase();
+                    const name = (item.product_name || '').trim();
+                    let dept = 'แผนกทั่วไป';
+                    if (cat.includes('STAMP')) dept = 'แผนก Stamp';
+                    else if (cat.includes('LASER')) dept = 'แผนก Laser';
+                    else if (cat.includes('UV') || cat.includes('SUBLIMATION') || name === 'RLC ไม้บรรทัดใส 18cm') dept = 'แผนก CTT';
+
                     mainItemsMap[key] = {
                         woName: workOrderName,
                         code: item.product_code || 'N/A',
                         name: item.product_name,
                         location: item.storage_location || 'N/A',
-                        category: (item.product_category || '').toUpperCase(),
+                        category: cat,
+                        dept: dept,
                         qty: 0
                     };
                 }
                 mainItemsMap[key].qty += 1;
             });
 
-            const finalMainList = Object.values(mainItemsMap).map(item => {
-                let displayQty = item.qty;
+            // คำนวณจำนวนจริง (กรณี Condo Stamp) และจัดกลุ่มตามแผนก
+            const deptGroups = {};
+            Object.values(mainItemsMap).forEach(item => {
+                let finalQty = item.qty;
                 if (item.category.includes('CONDO STAMP')) {
-                    displayQty = Math.ceil(item.qty / 5);
+                    finalQty = Math.ceil(item.qty / 5);
                 }
-                return { ...item, finalQty: displayQty };
-            }).sort((a, b) => a.location.localeCompare(b.location));
+                item.finalQty = finalQty;
 
+                if (!deptGroups[item.dept]) deptGroups[item.dept] = [];
+                deptGroups[item.dept].push(item);
+            });
+
+            // เรียงลำดับแผนกและเรียงจุดเก็บภายในแผนก
+            const sortedDepts = Object.keys(deptGroups).sort();
+            sortedDepts.forEach(d => {
+                deptGroups[d].sort((a, b) => a.location.localeCompare(b.location));
+            });
+
+            // อะไหล่ (Spare Parts)
             const sparePartsMap = {};
             itemsInWorkOrder.forEach(item => {
                 if (item.rubber_code) {
                     const key = item.rubber_code;
-                    if (!sparePartsMap[key]) {
-                        sparePartsMap[key] = { name: ` ${item.rubber_code}`, qty: 0 };
-                    }
+                    if (!sparePartsMap[key]) sparePartsMap[key] = { name: ` ${item.rubber_code}`, qty: 0 };
                     sparePartsMap[key].qty += 1;
                 }
             });
             const finalSpareList = Object.values(sparePartsMap);
 
             const today = new Date().toLocaleDateString('th-TH');
+
+            // --- ฟังก์ชัน Render Table ตามแผนก ---
             const renderHtmlTables = (isForPNG = false) => {
-                const style = isForPNG ? '' : 'border: 1px solid #ddd; padding: 6px; font-size: 12px;';
-                const tableStyle = isForPNG ? '' : 'style="width: 100%; border-collapse: collapse; margin-bottom: 20px;"';
+                const style = isForPNG ? 'border: 1px solid black; padding: 3px 5px; font-size: 11px;' : 'border: 1px solid #ddd; padding: 6px; font-size: 12px;';
+                const tableStyle = `style="width: 100%; border-collapse: collapse; margin-bottom: 15px; table-layout: fixed;"`;
                 
                 let html = `<div>`;
                 if(isForPNG) {
-                    html += `<div style="display:flex; justify-content:space-between; border-bottom:2px solid black; padding-bottom:5px; margin-bottom:15px; font-size: 13px;">
+                    html += `<div style="display:flex; justify-content:space-between; border-bottom:2px solid black; padding-bottom:5px; margin-bottom:10px; font-size: 13px;">
                                 <b>ใบเบิกใบงาน: ${workOrderName}</b> <b>วันที่: ${today}</b>
                              </div>`;
                 }
 
-                html += `<h3 style="margin-top:0;">📦 สินค้าหลัก</h3><table ${tableStyle}>
-                    <thead><tr style="background:#f2f2f2;">
-                        <th style="${style} width:25%;">จุดเก็บ</th><th style="${style} width:20%;">รหัส</th><th style="${style} width:40%;">รายการ</th><th style="${style} width:15%;">จำนวน</th>
-                    </tr></thead><tbody>`;
-                finalMainList.forEach(item => {
-                    html += `<tr><td style="${style}">${item.location}</td><td style="${style}">${item.code}</td><td style="${style}">${item.name}</td><td style="${style} text-align:center;">${item.finalQty}</td></tr>`;
+                // วนลูปแสดงทีละแผนก
+                sortedDepts.forEach(deptName => {
+                    html += `<h3 style="margin: 10px 0 5px 0; font-size: 14px; background: #eee; padding: 3px 8px; border-left: 5px solid #333;">${deptName}</h3>`;
+                    html += `<table ${tableStyle}>
+                        <thead><tr style="background:#f2f2f2;">
+                            <th style="${style} width:20%;">จุดเก็บ</th><th style="${style} width:20%;">รหัส</th><th style="${style} width:45%;">รายการ</th><th style="${style} width:15%;">จำนวน</th>
+                        </tr></thead><tbody>`;
+                    
+                    deptGroups[deptName].forEach(item => {
+                        html += `<tr>
+                            <td style="${style}">${item.location}</td>
+                            <td style="${style}">${item.code}</td>
+                            <td style="${style}">${item.name}</td>
+                            <td style="${style} text-align:center; font-weight:bold;">${item.finalQty}</td>
+                        </tr>`;
+                    });
+                    html += `</tbody></table>`;
                 });
-                html += `</tbody></table>`;
 
                 if(finalSpareList.length > 0) {
-                    html += `<h3>🔧 อะไหล่ </h3><table ${tableStyle}>
-                        <thead><tr style="background:#f2f2f2;"><th style="${style}">รายการอะไหล่</th><th style="${style} width:20%;">จำนวน</th></tr></thead><tbody>`;
+                    html += `<h3 style="margin: 10px 0 5px 0; font-size: 14px;">🔧 รายการอะไหล่รวม </h3>
+                    <table ${tableStyle}>
+                        <thead><tr style="background:#f2f2f2;"><th style="${style}">รหัสอะไหล่</th><th style="${style} width:20%;">จำนวน</th></tr></thead><tbody>`;
                     finalSpareList.forEach(spare => {
-                        html += `<tr><td style="${style}">${spare.name}</td><td style="${style} text-align:center;">${spare.qty}</td></tr>`;
+                        html += `<tr><td style="${style}">${spare.name}</td><td style="${style} text-align:center; font-weight:bold;">${spare.qty}</td></tr>`;
                     });
                     html += `</tbody></table>`;
                 }
 
                 if(isForPNG) {
-                    html += `<div style="display:flex; justify-content:space-between; margin-top:auto; padding-top:10px;">
-                                <div style="border:1px solid black; width:48%; height:65px; display:flex; flex-direction:column; justify-content:space-between; padding:5px;">
-                                    <div style="text-align:center; font-size:12px; font-weight:bold;">ผู้เบิก (Requester)</div>
-                                    <div style="border-bottom:1px dotted black; margin: 0 10px 5px 10px; height: 30px;"></div>
+                    html += `<div style="display:flex; justify-content:space-between; margin-top:20px; padding-top:10px;">
+                                <div style="border:1px solid black; width:48%; height:60px; display:flex; flex-direction:column; justify-content:space-between; padding:5px;">
+                                    <div style="text-align:center; font-size:11px; font-weight:bold;">ผู้เบิก (Requester)</div>
+                                    <div style="border-bottom:1px dotted black; margin: 0 10px 5px 10px; height: 25px;"></div>
                                 </div>
-                                <div style="border:1px solid black; width:48%; height:65px; display:flex; flex-direction:column; justify-content:space-between; padding:5px;">
-                                    <div style="text-align:center; font-size:12px; font-weight:bold;">ผู้จ่าย (Issuer)</div>
-                                    <div style="border-bottom:1px dotted black; margin: 0 10px 5px 10px; height: 30px;"></div>
+                                <div style="border:1px solid black; width:48%; height:60px; display:flex; flex-direction:column; justify-content:space-between; padding:5px;">
+                                    <div style="text-align:center; font-size:11px; font-weight:bold;">ผู้จ่าย (Issuer)</div>
+                                    <div style="border-bottom:1px dotted black; margin: 0 10px 5px 10px; height: 25px;"></div>
                                 </div>
                              </div>`;
                 }
                 html += `</div>`;
                 return html;
             };
+
             previewContainer.innerHTML = renderHtmlTables(false);
             pngContainer.innerHTML = renderHtmlTables(true);
 
+            // ปุ่ม Export ส่งข้อมูล CSV แยกต่างหาก (ที่เป็นแบบ Full)
             document.getElementById('export-all-picking-btn').onclick = () => {
-                exportAllPickingFinal(finalMainList, finalSpareList, workOrderName);
+                const mainDataForXlsx = Object.values(mainItemsMap).map(item => ({...item, finalQty: item.finalQty}));
+                exportAllPickingFinal(mainDataForXlsx, finalSpareList, workOrderName, csvDataList);
             };
 
             modal.style.display = 'flex';
@@ -3810,17 +3861,18 @@ itemsInWorkOrder.filter(item => {
 
         function hidePickingSlipModal() { document.getElementById('picking-slip-modal').style.display = 'none'; }
 
-        async function exportAllPickingFinal(mainData, spareData, workOrderName) {
+        async function exportAllPickingFinal(mainData, spareData, workOrderName, fullCsvData) {
             loadingOverlay.style.display = 'flex';
             try {
+                // 1. Export PNG
                 const canvas = await html2canvas(document.getElementById("picking-slip-png-container"), { scale: 3 });
                 const pngLink = document.createElement('a');
                 pngLink.download = `ใบเบิก_${workOrderName}.png`;
                 pngLink.href = canvas.toDataURL("image/png");
                 pngLink.click();
 
+                // 2. Export XLSX (ใช้ข้อมูลที่กรองแล้วเหมือน PNG)
                 const wb = XLSX.utils.book_new();
-                
                 const ws1Headers = [['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก']];
                 const ws1Rows = mainData.map(item => [item.woName, item.code, item.name, item.location, item.finalQty]);
                 const ws1 = XLSX.utils.aoa_to_sheet(ws1Headers.concat(ws1Rows));
@@ -3830,18 +3882,18 @@ itemsInWorkOrder.filter(item => {
                 const ws2Rows = spareData.map(item => [item.name, item.qty]);
                 const ws2 = XLSX.utils.aoa_to_sheet(ws2Headers.concat(ws2Rows));
                 XLSX.utils.book_append_sheet(wb, ws2, "สรุปอะไหล่");
-
                 XLSX.writeFile(wb, `ใบเบิก_${workOrderName}.xlsx`);
 
+                // 3. Export CSV (ใช้ fullCsvData - ข้อมูลดิบครบทุกรายการ)
                 const csvHeaders = ['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก'];
                 const csvRows = [csvHeaders.join(',')];
-                mainData.forEach(item => {
+                fullCsvData.forEach(item => {
                     const row = [
                         `"${item.woName}"`, 
                         `"${item.code}"`, 
-                        `"${item.name}"`, 
+                        `"${item.name.replace(/"/g, '""')}"`, 
                         `"${item.location}"`, 
-                        item.finalQty
+                        item.qty
                     ];
                     csvRows.push(row.join(','));
                 });
@@ -3849,12 +3901,12 @@ itemsInWorkOrder.filter(item => {
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const csvLink = document.createElement("a");
                 csvLink.href = URL.createObjectURL(blob);
-                csvLink.download = `ใบเบิก_${workOrderName}.csv`;
+                csvLink.download = `ใบเบิก_Full_${workOrderName}.csv`;
                 csvLink.click();
 
             } catch (err) {
                 console.error(err);
-                alert("เกิดข้อผิดพลาดในการ Export");
+                alert("เกิดข้อผิดพลาดในการ Export: " + err.message);
             }
             loadingOverlay.style.display = 'none';
         }
