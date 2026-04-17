@@ -1152,6 +1152,9 @@
                     window.patternSystem.initializeApp(); 
                     window.plannerSystem.initializeApp(loggedInUserRole);
                     window.salesReportSystem.initializeApp();
+	} else if (isStore) {
+    window.productSystem.initializeApp();
+    window.salesReportSystem.initializeApp();
                 } else if (isProduction) {
                     document.querySelector('.nav-link.active')?.classList.remove('active');
                     document.querySelector('.system-content.active')?.classList.remove('active');
