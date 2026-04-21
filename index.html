@@ -5853,6 +5853,33 @@ window.patternSystem = (() => {
                             scanInput.focus();
                         });
                     });
+
+// เพิ่มคำสั่งให้ปุ่มบันทึกภาพ PNG
+document.getElementById('btn-export-summary-png').addEventListener('click', async () => {
+    const element = document.getElementById('transport-summary-section'); // ระบุส่วนที่ต้องการถ่ายภาพ
+    if (!element) return;
+    
+    loadingOverlay.style.display = 'flex'; // แสดงหน้าจอโหลด
+    try {
+        // ใช้ html2canvas จับภาพ (ตั้ง scale: 2 เพื่อให้ภาพคมชัด)
+        const canvas = await html2canvas(element, { 
+            scale: 2,
+            backgroundColor: "#ffffff", // บังคับพื้นหลังสีขาว
+            useCORS: true // เผื่อกรณีมีรูปภาพจากภายนอก
+        });
+        
+        const link = document.createElement('a');
+        link.download = `สรุปยอดขนส่ง_${dateFilter.value}.png`; // ตั้งชื่อไฟล์ตามวันที่
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+    } catch (err) {
+        console.error("PNG Export Error:", err);
+        alert("ไม่สามารถบันทึกภาพได้: " + err.message);
+    } finally {
+        loadingOverlay.style.display = 'none'; // ปิดหน้าจอโหลด
+    }
+});
+
                     isInitialized = true;
                 }
                 await fetchTransportData();
