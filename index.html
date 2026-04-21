@@ -5870,19 +5870,34 @@ async function fetchTransportData() {
         const startStr = `${date}T00:00:00Z`;
         const endStr = `${date}T23:59:59Z`;
 
-        // ดึงเฉพาะบิลที่สถานะเป็น 'จัดส่งแล้ว' และมีเวลา Shipped ตรงกับวันที่เลือก
-        const { data, error } = await supabaseClient
-            .from('orders')
-            .select('*')
-            .eq('status', 'จัดส่งแล้ว')
-            .gte('shipped_time', startStr)
-            .lte('shipped_time', endStr);
+        let allData = [];
+        let from = 0;
+        let to = 999;
+        let hasMore = true;
 
-        if (error) throw error;
+        // แก้ไข: เพิ่ม Loop เพื่อดึงข้อมูลให้เกิน 1,000 รายการ
+        while (hasMore) {
+            const { data, error } = await supabaseClient
+                .from('orders')
+                .select('*')
+                .eq('status', 'จัดส่งแล้ว')
+                .gte('shipped_time', startStr)
+                .lte('shipped_time', endStr)
+                .range(from, to); // ดึงทีละชุดละ 1,000 รายการ
+
+            if (error) throw error;
+            
+            allData = allData.concat(data);
+
+            if (data.length < 1000) {
+                hasMore = false; // ถ้าดึงมาได้ไม่ถึง 1,000 แสดงว่าหมดแล้ว
+            } else {
+                from += 1000;
+                to += 1000;
+            }
+        }
         
-        // เราจะไม่ดึง verData แยก เพื่อป้องกันการดึงบิลข้ามวันมาปนจนยอดเพี้ยน 
-        // บิลที่สแกนวันนี้แต่ส่งวันอื่น ควรไปปรากฏในรายงานของวันนั้นๆ
-        currentOrdersInView = data || []; 
+        currentOrdersInView = allData || []; 
         render(currentOrdersInView);
         
         statusMsg.textContent = ""; 
