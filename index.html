@@ -877,19 +877,24 @@
                     <div class="wrap">
                         <section class="card hidden" id="viewForm"></section>
                         <section class="card" id="viewJobs">
-                          <h2>ใบงานทั้งหมด (ค้นหา/แก้ไข/ลบ)</h2>
-                          <div class="inner">
-                            <div class="toolbar">
-                              <div><label>เลือกวัน</label><select id="j_date"></select></div>
-                              <div><label>ค้นหาชื่อ</label><input type="text" id="j_search" placeholder="พิมพ์บางส่วนของชื่อ" style="width:260px;"></div>
-                              <button class="btn gray" id="j_clear">ล้างตัวกรอง</button>
-                              <div class="right" style="display: flex; gap: 8px;">
-                                <button class="btn btn-success" id="btnExportForSorting">Export for Sorting System (.xlsx)</button>
-                                <button class="btn danger hidden" id="j_deleteSelected">ลบรายการที่เลือก (0)</button>
-                              </div>
-                            </div>
-                            <div class="tablewrap" style="overflow-x:auto;max-height:520px;border:1px solid var(--border);border-radius:12px">
-                              <table id="tableJobs"><thead><tr>
+  <h2>ใบงานทั้งหมด (ค้นหา/แก้ไข/ลบ)</h2>
+  <div class="inner">
+    <div class="toolbar">
+      <div><label>เลือกวัน</label><select id="j_date"></select></div>
+      <div><label>ค้นหาชื่อ</label><input type="text" id="j_search" placeholder="พิมพ์บางส่วนของชื่อ" style="width:260px;"></div>
+      <button class="btn gray" id="j_clear">ล้างตัวกรอง</button>
+      
+      <!-- ลบส่วนปุ่ม Export เดิมออก และใส่พื้นที่สำหรับสรุปยอดรวมแทน -->
+      <div class="right" id="planner-summary-stats" style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">
+        <!-- ยอดรวมแผนกจะถูกฉีดเข้าที่นี่ด้วย JS -->
+      </div>
+    </div>
+    
+    <!-- เพิ่มแถบแสดงวันที่ที่กำลังสรุป (Optional แต่แนะนำ) -->
+    <div id="planner-summary-header" style="margin-bottom: 10px; font-weight: bold; color: #4F634A;"></div>
+
+    <div class="tablewrap" style="overflow-x:auto;max-height:520px;border:1px solid var(--border);border-radius:12px">
+      <table id="tableJobs"><thead><tr>
                                 <th class="checkbox-cell"><input type="checkbox" id="j_selectAll"></th>
                                 <th style="min-width:160px">ชื่อใบงาน</th>
                                 <th>วันที่</th>
@@ -3711,37 +3716,20 @@ function exportMasterStatusReport() {
 
             if (itemsInWorkOrder.length === 0) { alert('ไม่พบสินค้า'); return; }
 
-            // --- 1. เตรียมข้อมูลสำหรับ CSV (ไม่ตัดรายการเลย) ---
-            const csvDataList = itemsInWorkOrder.map(item => {
-                let displayQty = 1;
-                const cat = (item.product_category || '').toUpperCase();
-                // ถ้าเป็น Condo Stamp ให้มองเป็น 1/5 ของชุดในระดับ Item (แต่ใน CSV เรามักจะลิสต์รายตัวอยู่แล้ว)
-                return {
-                    woName: workOrderName,
-                    code: item.product_code || 'N/A',
-                    name: item.product_name,
-                    location: item.storage_location || 'N/A',
-                    qty: 1
-                };
-            });
-
-            // --- 2. เตรียมข้อมูลสำหรับ XLSX/PNG/Preview (มีการกรองหมวดหมู่) ---
+            // --- 1. กรองรายการที่ไม่ต้องการแสดงในใบเบิกกระดาษ/สรุป ---
             const excludedCategories = ['UV', 'STK', 'TUBE'];
             const filteredItems = itemsInWorkOrder.filter(item => {
                 const cat = (item.product_category || '').toUpperCase();
                 const productName = (item.product_name || '').trim();
-                // ข้อยกเว้น: ถ้าเป็นไม้บรรทัด RLC ให้ผ่านเสมอ
                 if (productName === "RLC ไม้บรรทัดใส 18cm") return true;
-                // กรองหมวดหมู่ที่ไม่อยากให้แสดงในใบเบิกกระดาษ
                 return !excludedCategories.some(ex => cat.includes(ex));
             });
 
-            // จัดกลุ่มและนับจำนวน (Aggregate)
+            // --- 2. จัดกลุ่มและนับจำนวน (Aggregate) ---
             const mainItemsMap = {};
             filteredItems.forEach(item => {
                 const key = item.product_id;
                 if (!mainItemsMap[key]) {
-                    // กำหนดแผนก (Department)
                     const cat = (item.product_category || '').toUpperCase();
                     const name = (item.product_name || '').trim();
                     let dept = 'แผนกทั่วไป';
@@ -3762,17 +3750,29 @@ function exportMasterStatusReport() {
                 mainItemsMap[key].qty += 1;
             });
 
-            // คำนวณจำนวนจริง (กรณี Condo Stamp) และจัดกลุ่มตามแผนก
+            // --- 3. คำนวณจำนวนจริง (หาร 5 สำหรับ Condo Stamp) และเตรียมข้อมูลสำหรับ CSV ---
+            const aggregatedListForExport = [];
             const deptGroups = {};
+
             Object.values(mainItemsMap).forEach(item => {
                 let finalQty = item.qty;
                 if (item.category.includes('CONDO STAMP')) {
-                    finalQty = Math.ceil(item.qty / 5);
+                    finalQty = Math.ceil(item.qty / 5); // หาร 5 และปัดขึ้น
                 }
                 item.finalQty = finalQty;
 
+                // สำหรับแสดงผลในตาราง Preview/PNG (จัดกลุ่มตามแผนก)
                 if (!deptGroups[item.dept]) deptGroups[item.dept] = [];
                 deptGroups[item.dept].push(item);
+
+                // สำหรับ Export CSV/XLSX
+                aggregatedListForExport.push({
+                    woName: item.woName,
+                    code: item.code,
+                    name: item.name,
+                    location: item.location,
+                    qty: item.finalQty
+                });
             });
 
             // เรียงลำดับแผนกและเรียงจุดเก็บภายในแผนก
@@ -3794,7 +3794,7 @@ function exportMasterStatusReport() {
 
             const today = new Date().toLocaleDateString('th-TH');
 
-            // --- ฟังก์ชัน Render Table ตามแผนก ---
+            // --- ฟังก์ชัน Render Table ตามแผนก (สำหรับ Preview และ PNG) ---
             const renderHtmlTables = (isForPNG = false) => {
                 const style = isForPNG ? 'border: 1px solid black; padding: 3px 5px; font-size: 11px;' : 'border: 1px solid #ddd; padding: 6px; font-size: 12px;';
                 const tableStyle = `style="width: 100%; border-collapse: collapse; margin-bottom: 15px; table-layout: fixed;"`;
@@ -3806,7 +3806,6 @@ function exportMasterStatusReport() {
                              </div>`;
                 }
 
-                // วนลูปแสดงทีละแผนก
                 sortedDepts.forEach(deptName => {
                     html += `<h3 style="margin: 10px 0 5px 0; font-size: 14px; background: #eee; padding: 3px 8px; border-left: 5px solid #333;">${deptName}</h3>`;
                     html += `<table ${tableStyle}>
@@ -3854,10 +3853,9 @@ function exportMasterStatusReport() {
             previewContainer.innerHTML = renderHtmlTables(false);
             pngContainer.innerHTML = renderHtmlTables(true);
 
-            // ปุ่ม Export ส่งข้อมูล CSV แยกต่างหาก (ที่เป็นแบบ Full)
+            // เมื่อกดปุ่ม Export ให้ส่งค่าที่ถูก Aggregate และหาร 5 แล้วไปใช้ทั้ง XLSX และ CSV
             document.getElementById('export-all-picking-btn').onclick = () => {
-                const mainDataForXlsx = Object.values(mainItemsMap).map(item => ({...item, finalQty: item.finalQty}));
-                exportAllPickingFinal(mainDataForXlsx, finalSpareList, workOrderName, csvDataList);
+                exportAllPickingFinal(aggregatedListForExport, finalSpareList, workOrderName, aggregatedListForExport);
             };
 
             modal.style.display = 'flex';
@@ -5479,78 +5477,104 @@ window.patternSystem = (() => {
             }
 
             function renderPlannerView() {
-                const tableContainer = document.getElementById('tableJobs');
-                if (!tableContainer) return;
+    const tableContainer = document.getElementById('tableJobs');
+    const summaryStatsContainer = document.getElementById('planner-summary-stats');
+    const summaryHeader = document.getElementById('planner-summary-header');
+    
+    if (!tableContainer) return;
 
-                const selectedDate = document.getElementById('j_date').value;
-                const searchTerm = document.getElementById('j_search').value.toLowerCase();
+    const selectedDate = document.getElementById('j_date').value;
+    const searchTerm = document.getElementById('j_search').value.toLowerCase();
 
-                const filteredJobs = state.jobs.filter(j => {
-                    const dateMatch = !selectedDate || j.date === selectedDate;
-                    const searchMatch = !searchTerm || j.name.toLowerCase().includes(searchTerm);
-                    return dateMatch && searchMatch;
-                });
+    const filteredJobs = state.jobs.filter(j => {
+        const dateMatch = !selectedDate || j.date === selectedDate;
+        const searchMatch = !searchTerm || j.name.toLowerCase().includes(searchTerm);
+        return dateMatch && searchMatch;
+    });
 
-                // วาดหัวตาราง (ตัดคอลัมน์ จัดการ ออก)
-                let html = `
-                <thead>
-                    <tr style="background:#f8f9fa;">
-                        <th style="border:1px solid #ddd; padding:12px; min-width:200px; text-align:left;">ชื่อใบงาน</th>
-                        <th style="border:1px solid #ddd; padding:12px; width:100px; text-align:center;">เวลาตัด</th>
-                        <th style="border:1px solid #ddd; padding:12px; width:150px; text-align:center;">สถานะ</th>
-                        <th style="border:1px solid #ddd; padding:12px; text-align:left;">จำนวนงานแยกตามแผนก</th>
-                    </tr>
-                </thead>
-                <tbody>`;
+    // --- ส่วนคำนวณยอดรวม (Sum totals) ---
+    const totalByDept = {};
+    filteredJobs.forEach(j => {
+        if (j.qty) {
+            Object.entries(j.qty).forEach(([dept, count]) => {
+                totalByDept[dept] = (totalByDept[dept] || 0) + count;
+            });
+        }
+    });
 
-                if (filteredJobs.length > 0) {
-                    filteredJobs.forEach(j => {
-                        // 1. เวลาตัด (วินาทีตัดออก)
-                        const cutDisplay = (j.cut && j.cut.length >= 5) ? j.cut.substring(0, 5) : (j.cut || '-');
+    // วาดส่วนสรุปยอดรวมด้านบน
+    if (summaryStatsContainer) {
+        summaryStatsContainer.innerHTML = '';
+        if (Object.keys(totalByDept).length > 0) {
+            Object.entries(totalByDept).forEach(([dept, count]) => {
+                const badge = document.createElement('div');
+                badge.style.cssText = "background: #1d2b3a; color: white; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: bold;";
+                badge.innerHTML = `${dept}: <span style="color: #ffc107;">${count.toLocaleString()}</span>`;
+                summaryStatsContainer.appendChild(badge);
+            });
+        }
+    }
+    
+    if (summaryHeader) {
+        summaryHeader.textContent = selectedDate ? `สรุปยอดงานประจำวันที่: ${selectedDate}` : 'สรุปยอดงานทั้งหมด';
+    }
 
-                        // 2. ดึงสถานะจาก work_orders
-                        const wo = state.workOrders.find(w => w.work_order_name === j.name);
-                        const statusText = wo ? wo.status : 'กำลังผลิต';
-                        const statusColor = statusText === 'จัดส่งแล้ว' ? '#28a745' : '#0071e3';
+    // --- ส่วนวาดตารางใบงาน (เหมือนเดิม) ---
+    let html = `
+    <thead>
+        <tr style="background:#f8f9fa;">
+            <th style="border:1px solid #ddd; padding:12px; min-width:200px; text-align:left;">ชื่อใบงาน</th>
+            <th style="border:1px solid #ddd; padding:12px; width:100px; text-align:center;">เวลาตัด</th>
+            <th style="border:1px solid #ddd; padding:12px; width:150px; text-align:center;">สถานะ</th>
+            <th style="border:1px solid #ddd; padding:12px; text-align:left;">จำนวนงานแยกตามแผนก</th>
+        </tr>
+    </thead>
+    <tbody>`;
 
-                        // 3. แสดงจำนวนชิ้นแยกแผนก (Qty)
-                        let qtyHtml = '';
-                        if (j.qty) {
-                            qtyHtml = Object.entries(j.qty)
-                                .filter(([dept, count]) => count > 0)
-                                .map(([dept, count]) => `
-                                    <span style="display:inline-block; background:#f0f7ff; border:1px solid #cce3ff; color:#0056b3; padding:2px 8px; border-radius:4px; margin:2px; font-size:11px; font-weight:bold;">
-                                        ${dept}: <span style="color:#d9534f;">${count}</span>
-                                    </span>
-                                `).join('');
-                        }
+    if (filteredJobs.length > 0) {
+        filteredJobs.forEach(j => {
+            const cutDisplay = (j.cut && j.cut.length >= 5) ? j.cut.substring(0, 5) : (j.cut || '-');
+            const wo = state.workOrders.find(w => w.work_order_name === j.name);
+            const statusText = wo ? wo.status : 'กำลังผลิต';
+            const statusColor = statusText === 'จัดส่งแล้ว' ? '#28a745' : '#0071e3';
 
-                        html += `
-                        <tr>
-                            <td style="border:1px solid #ddd; padding:12px;">
-                                <div style="font-weight:bold; color:#1a1a1a; font-size:14px;">${j.name}</div>
-                                <div style="font-size:10px; color:#888;">วันที่ใบงาน: ${j.date}</div>
-                            </td>
-                            <td style="border:1px solid #ddd; padding:12px; text-align:center; font-size:16px; font-weight:900; color:#d9534f;">
-                                ${cutDisplay}
-                            </td>
-                            <td style="border:1px solid #ddd; padding:12px; text-align:center;">
-                                <span style="background:${statusColor}; color:white; padding:5px 12px; border-radius:15px; font-size:11px; font-weight:bold; display:inline-block; min-width:100px;">
-                                    ${statusText}
-                                </span>
-                            </td>
-                            <td style="border:1px solid #ddd; padding:12px;">
-                                ${qtyHtml || '<span style="color:#ccc;">-</span>'}
-                            </td>
-                        </tr>`;
-                    });
-                } else {
-                    html += `<tr><td colspan="4" style="padding:60px; text-align:center; color:#999; font-style:italic;">-- ไม่พบข้อมูลใบงานที่ค้นหา --</td></tr>`;
-                }
-
-                html += `</tbody>`;
-                tableContainer.innerHTML = html;
+            let qtyHtml = '';
+            if (j.qty) {
+                qtyHtml = Object.entries(j.qty)
+                    .filter(([dept, count]) => count > 0)
+                    .map(([dept, count]) => `
+                        <span style="display:inline-block; background:#f0f7ff; border:1px solid #cce3ff; color:#0056b3; padding:2px 8px; border-radius:4px; margin:2px; font-size:11px; font-weight:bold;">
+                            ${dept}: <span style="color:#d9534f;">${count}</span>
+                        </span>
+                    `).join('');
             }
+
+            html += `
+            <tr>
+                <td style="border:1px solid #ddd; padding:12px;">
+                    <div style="font-weight:bold; color:#1a1a1a; font-size:14px;">${j.name}</div>
+                    <div style="font-size:10px; color:#888;">วันที่ใบงาน: ${j.date}</div>
+                </td>
+                <td style="border:1px solid #ddd; padding:12px; text-align:center; font-size:16px; font-weight:900; color:#d9534f;">
+                    ${cutDisplay}
+                </td>
+                <td style="border:1px solid #ddd; padding:12px; text-align:center;">
+                    <span style="background:${statusColor}; color:white; padding:5px 12px; border-radius:15px; font-size:11px; font-weight:bold; display:inline-block; min-width:100px;">
+                        ${statusText}
+                    </span>
+                </td>
+                <td style="border:1px solid #ddd; padding:12px;">
+                    ${qtyHtml || '<span style="color:#ccc;">-</span>'}
+                </td>
+            </tr>`;
+        });
+    } else {
+        html += `<tr><td colspan="4" style="padding:60px; text-align:center; color:#999; font-style:italic;">-- ไม่พบข้อมูลใบงาน --</td></tr>`;
+    }
+
+    html += `</tbody>`;
+    tableContainer.innerHTML = html;
+}
 
             return { initializeApp, loadData: loadPlannerData };
         })();
