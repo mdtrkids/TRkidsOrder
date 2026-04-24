@@ -2783,6 +2783,19 @@ remainingBills.forEach(order => {
 
                     const channelCode = container.querySelector('#channel_code').value || $('#channel_code').val();
                     const customerName = container.querySelector('#customer_name').value.trim();
+	if (!customerName) {
+                        throw new Error("กรุณากรอก 'ชื่อลูกค้า' ก่อนทำการบันทึก");
+                    }
+
+                    if (channelCode === 'SPTR' && !customerName.startsWith('26')) {
+                        throw new Error("❌ ช่องทาง SPTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '26' เท่านั้น");
+                    }
+                    if (channelCode === 'TTTR' && !customerName.startsWith('58')) {
+                        throw new Error("❌ ช่องทาง TTTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '58' เท่านั้น");
+                    }
+                    if (channelCode === 'LZTR' && !customerName.startsWith('10')) {
+                        throw new Error("❌ ช่องทาง LZTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '10' เท่านั้น");
+                    }
                     const customerAddress = container.querySelector('#customer_address').value.trim();
                     const paymentMethod = container.querySelector('#payment_method').value;
                     const paymentDate = container.querySelector('#payment_date').value;
