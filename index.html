@@ -1189,37 +1189,7 @@
         async function logout() { await supabaseClient.auth.signOut(); loggedInUsername = null; loggedInUserRole = null; mainAppContainer.style.display = 'none'; loginOverlay.style.display = 'flex'; document.getElementById('email').value = ''; document.getElementById('password').value = ''; errorMessage.textContent = ''; }
         logoutBtn.addEventListener('click', logout);
 
-        async function checkAuth() { 
-    try {
-        const { data: { session }, error } = await supabaseClient.auth.getSession(); 
-        
-        if (error) {
-            console.error("Auth Error:", error.message);
-            // หากเกิด error เกี่ยวกับ Refresh Token ให้สั่ง Logout เพื่อล้าง LocalStorage
-            await supabaseClient.auth.signOut();
-            loginOverlay.style.display = 'flex'; 
-            mainAppContainer.style.display = 'none';
-            return;
-        }
-
-        if (session) { 
-            await mainAppInitializer(session.user); 
-        } else { 
-            loginOverlay.style.display = 'flex'; 
-            mainAppContainer.style.display = 'none'; 
-        } 
-    } catch (err) {
-        console.error("Critical Auth Fail:", err);
-        loginOverlay.style.display = 'flex';
-    }
-}
-
-// เพิ่มบรรทัดนี้ไว้ใต้ checkAuth(); เพื่อดักจับเหตุการณ์ที่ Session หลุดระหว่างใช้งาน
-supabaseClient.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESH_FAILED') {
-        window.location.reload(); // รีโหลดหน้าเพื่อกลับไปหน้า Login
-    }
-});
+        async function checkAuth() { const { data: { session } } = await supabaseClient.auth.getSession(); if (session) { await mainAppInitializer(session.user); } else { loginOverlay.style.display = 'flex'; mainAppContainer.style.display = 'none'; } }
         
         // --- SLIP PROCESSING MODULE ---
         const slipProcessor = (() => {
@@ -2814,18 +2784,6 @@ remainingBills.forEach(order => {
                     const channelCode = container.querySelector('#channel_code').value || $('#channel_code').val();
                     const customerName = container.querySelector('#customer_name').value.trim();
                     const customerAddress = container.querySelector('#customer_address').value.trim();
-
-if (channelCode !== 'CLAIM') {
-    if (channelCode === 'TTTR' && customerAddress !== "" && !customerAddress.startsWith('58')) {
-        throw new Error("❌ ผิดช่องทาง: เลขพัสดุของ TikTok (TTTR) ต้องขึ้นต้นด้วย 58 เท่านั้น");
-    }
-    if (channelCode === 'SPTR' && customerAddress !== "" && !customerAddress.startsWith('26')) {
-        throw new Error("❌ ผิดช่องทาง: เลขพัสดุของ Shopee (SPTR) ต้องขึ้นต้นด้วย 26 เท่านั้น");
-    }
-    if (channelCode === 'LZTR' && customerAddress !== "" && !customerAddress.startsWith('10')) {
-        throw new Error("❌ ผิดช่องทาง: เลขพัสดุของ Lazada (LZTR) ต้องขึ้นต้นด้วย 10 เท่านั้น");
-    }
-}
                     const paymentMethod = container.querySelector('#payment_method').value;
                     const paymentDate = container.querySelector('#payment_date').value;
                     const paymentTime = container.querySelector('#payment_time').value;
