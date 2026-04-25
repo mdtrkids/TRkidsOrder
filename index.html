@@ -2708,6 +2708,11 @@ remainingBills.forEach(order => {
                     return { isValid: false, reason: "ไม่มีที่อยู่/เลขพัสดุ" };
                 }
 
+                // --- เพิ่มเงื่อนไขตรวจสอบสำหรับช่องทาง CLAIM ---
+                if (order.channel_code === 'CLAIM' && order.customer_address.trim().toUpperCase().startsWith('TH')) {
+                    return { isValid: false, reason: "ช่องทาง CLAIM ต้องระบุ 'ที่อยู่ลูกค้า' ห้ามใส่เลขพัสดุ (TH...)" };
+                }
+
                 if (order.channel_code !== 'CLAIM' && order.channel_code !== 'INFU') {
                     if (order.total_amount <= 0) {
                         return { isValid: false, reason: "ยอดสุทธิเป็น 0 หรือไม่ถูกต้อง" };
@@ -2720,55 +2725,53 @@ remainingBills.forEach(order => {
                     }
                 }
 
-                if (!order.order_items || order.order_items.length === 0) {
+                // --- แก้ไขเงื่อนไข: อนุญาตให้ไม่มีสินค้าได้ถ้าขอใบกำกับหรือบิลเงินสด ---
+                const isBillingRequested = order.billing_details?.request_tax_invoice || order.billing_details?.request_cash_bill;
+                
+                if ((!order.order_items || order.order_items.length === 0) && !isBillingRequested) {
                     return { isValid: false, reason: "ไม่มีรายการสินค้า" };
                 }
 
-                for (const item of order.order_items) {
-                    const product = fullProductList.find(p => p.id === item.product_id);
-                    if (!product || !product.product_category) continue;
+                // ตรวจสอบความครบถ้วนของแต่ละรายการ (ถ้ามีสินค้า)
+                if (order.order_items && order.order_items.length > 0) {
+                    for (const item of order.order_items) {
+                        const product = fullProductList.find(p => p.id === item.product_id);
+                        if (!product || !product.product_category) continue;
 
-                    const category = product.product_category.toUpperCase();
-                    const productName = product.product_name;
+                        const category = product.product_category.toUpperCase();
+                        const productName = product.product_name;
 
-                    const check = (value, fieldName) => {
-                        if (!value || !String(value).trim()) {
-                            return `สินค้า '${productName}' ข้อมูลไม่ครบ (ต้องการ ${fieldName})`;
-                        }
-                        return null;
-                    };
-
-                    let errorReason = null;
-                    
-                    if (category.includes('STAMP')) {
-                        errorReason = check(item.ink_color, 'สีหมึก') || 
-                                      check(item.cartoon_pattern, 'ลายการ์ตูน') || 
-                                      check(item.line_1, 'บรรทัด 1') || 
-                                      check(item.quantity, 'จำนวน');
-                                      
-                    } else if (category.includes('UV') || category.includes('LASER') || category.includes('TUBE') || category.includes('SUBLIMATION')) {
-                        // เช็คเงื่อนไขพื้นฐาน: ลายการ์ตูน และ บรรทัด 1
-                        errorReason = check(item.cartoon_pattern, 'ลายการ์ตูน') || 
-                                      check(item.line_1, 'บรรทัด 1');
-                        
-                        if (errorReason) return { isValid: false, reason: errorReason };
-
-                        // เงื่อนไขพิเศษ: หมวด UV ถ้าลายขึ้นต้นด้วย L หรือ G ต้องเช็ค บรรทัด 2
-                        if (category.includes('UV')) {
-                            const patternVal = (item.cartoon_pattern || "").trim().toUpperCase();
-                            if (patternVal.startsWith('L') || patternVal.startsWith('G')) {
-                                errorReason = check(item.line_2, 'บรรทัด 2 (เนื่องจากลายขึ้นต้นด้วย L หรือ G)');
-                                if (errorReason) return { isValid: false, reason: errorReason };
+                        const check = (value, fieldName) => {
+                            if (!value || !String(value).trim()) {
+                                return `สินค้า '${productName}' ข้อมูลไม่ครบ (ต้องการ ${fieldName})`;
                             }
-                        }
+                            return null;
+                        };
+
+                        let errorReason = null;
                         
-                        errorReason = check(item.quantity, 'จำนวน');
-
-                    } else if (category.includes('STK')) {
-                        errorReason = check(item.line_1, 'บรรทัด 1') || check(item.quantity, 'จำนวน');
+                        if (category.includes('STAMP')) {
+                            errorReason = check(item.ink_color, 'สีหมึก') || 
+                                          check(item.cartoon_pattern, 'ลายการ์ตูน') || 
+                                          check(item.line_1, 'บรรทัด 1') || 
+                                          check(item.quantity, 'จำนวน');
+                        } else if (category.includes('UV') || category.includes('LASER') || category.includes('TUBE') || category.includes('SUBLIMATION')) {
+                            errorReason = check(item.cartoon_pattern, 'ลายการ์ตูน') || 
+                                          check(item.line_1, 'บรรทัด 1');
+                            if (errorReason) return { isValid: false, reason: errorReason };
+                            if (category.includes('UV')) {
+                                const patternVal = (item.cartoon_pattern || "").trim().toUpperCase();
+                                if (patternVal.startsWith('L') || patternVal.startsWith('G')) {
+                                    errorReason = check(item.line_2, 'บรรทัด 2 (ลาย L/G)');
+                                    if (errorReason) return { isValid: false, reason: errorReason };
+                                }
+                            }
+                            errorReason = check(item.quantity, 'จำนวน');
+                        } else if (category.includes('STK')) {
+                            errorReason = check(item.line_1, 'บรรทัด 1') || check(item.quantity, 'จำนวน');
+                        }
+                        if (errorReason) return { isValid: false, reason: errorReason };
                     }
-
-                    if (errorReason) return { isValid: false, reason: errorReason };
                 }
 
                 return { isValid: true };
@@ -2783,167 +2786,104 @@ remainingBills.forEach(order => {
 
                     const channelCode = container.querySelector('#channel_code').value || $('#channel_code').val();
                     const customerName = container.querySelector('#customer_name').value.trim();
-	if (!customerName) {
-                        throw new Error("กรุณากรอก 'ชื่อลูกค้า' ก่อนทำการบันทึก");
-                    }
+                    if (!customerName) throw new Error("กรุณากรอก 'ชื่อลูกค้า' ก่อนทำการบันทึก");
 
-                    if (channelCode === 'SPTR' && !customerName.startsWith('26')) {
-                        throw new Error("❌ ช่องทาง SPTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '26' เท่านั้น");
-                    }
-                    if (channelCode === 'TTTR' && !customerName.startsWith('58')) {
-                        throw new Error("❌ ช่องทาง TTTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '58' เท่านั้น");
-                    }
-                    if (channelCode === 'LZTR' && !customerName.startsWith('10')) {
-                        throw new Error("❌ ช่องทาง LZTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '10' เท่านั้น");
-                    }
+                    // กรองรหัสลูกค้าตามช่องทาง
+                    if (channelCode === 'SPTR' && !customerName.startsWith('26')) throw new Error("❌ ช่องทาง SPTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '26'");
+                    if (channelCode === 'TTTR' && !customerName.startsWith('58')) throw new Error("❌ ช่องทาง TTTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '58'");
+                    if (channelCode === 'LZTR' && !customerName.startsWith('10')) throw new Error("❌ ช่องทาง LZTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '10'");
+
                     const customerAddress = container.querySelector('#customer_address').value.trim();
                     const paymentMethod = container.querySelector('#payment_method').value;
                     const paymentDate = container.querySelector('#payment_date').value;
                     const paymentTime = container.querySelector('#payment_time').value;
                     const totalAmount = parseFloat(container.querySelector('#total_amount').value) || 0;
                     
-                    const paymentRecords = [];
-document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
-    const amt = parseFloat(row.querySelector('.pay-amount').value) || 0;
-    const dt = row.querySelector('.pay-date').value;
-    const tm = row.querySelector('.pay-time').value;
-    if (amt > 0) {
-        paymentRecords.push({ amount: amt, date: dt, time: tm });
-    }
-});
+                    const isBillingRequested = requestTaxInvoiceCb.checked || requestCashBillCb.checked;
 
-                    if (!customerName) {
-                        throw new Error("กรุณากรอก 'ชื่อลูกค้า' ก่อนทำการบันทึก");
-                    }
+                    // --- 1. ตรวจสอบเลขพัสดุซ้ำ หรือ ที่อยู่ช่องทางเคลม ---
+                    if (effectiveStatusForValidation === 'ลงข้อมูลเสร็จสิ้น') {
+                        if (channelCode === 'CLAIM' && customerAddress.toUpperCase().startsWith('TH')) {
+                            throw new Error("❌ ช่องทาง CLAIM ต้องระบุ 'ที่อยู่ลูกค้า' ห้ามใส่เลขพัสดุ (TH...)");
+                        }
 
-                    // --- 1. ตรวจสอบเลขพัสดุซ้ำ (เฉพาะช่องทาง E-commerce) ---
-                    const isEcom = ecommerceChannels.includes(channelCode);
-                    if (isEcom && customerAddress) {
-                        let query = supabaseClient
-                            .from('orders')
-                            .select('bill_no, customer_name')
-                            .eq('customer_address', customerAddress)
-                            .neq('status', 'ยกเลิก');
-
-                        if (isUpdate) query = query.neq('id', currentEditingOrderId);
-
-                        const { data: existingOrders } = await query;
-                        if (existingOrders && existingOrders.length > 0) {
-                            const duplicate = existingOrders[0];
-                            throw new Error(`❌ เลขพัสดุซ้ำ! ถูกใช้ไปแล้วในบิล: ${duplicate.bill_no} (ลูกค้า: ${duplicate.customer_name})`);
+                        const isEcom = ecommerceChannels.includes(channelCode);
+                        if (isEcom && customerAddress) {
+                            let query = supabaseClient.from('orders').select('bill_no, customer_name').eq('customer_address', customerAddress).neq('status', 'ยกเลิก');
+                            if (isUpdate) query = query.neq('id', currentEditingOrderId);
+                            const { data: existingOrders } = await query;
+                            if (existingOrders && existingOrders.length > 0) {
+                                throw new Error(`❌ เลขพัสดุซ้ำ! ถูกใช้ไปแล้วในบิล: ${existingOrders[0].bill_no}`);
+                            }
                         }
                     }
 
                     // --- 2. ตรวจสอบเงื่อนไขสำหรับการ "ลงข้อมูลเสร็จสิ้น" ---
                     if (effectiveStatusForValidation === 'ลงข้อมูลเสร็จสิ้น') {
-                        if (!customerAddress) {
-                            throw new Error("กรุณากรอก 'ที่อยู่ลูกค้า / เลขพัสดุ' สำหรับออร์เดอร์ที่ข้อมูลครบถ้วนแล้ว");
-                        }
+                        if (!customerAddress) throw new Error("กรุณากรอก 'ที่อยู่ลูกค้า / เลขพัสดุ'");
 
-                        // ตรวจสอบว่ามีรายการสินค้าหรือไม่ และต้องไม่ใช่แถวว่าง
                         let validItemCount = 0;
                         for (const row of itemsTbody.rows) {
                             const selectedData = $(row).find('.item-product').select2('data')[0];
-                            if (selectedData && selectedData.id) {
-                                validItemCount++;
-                            }
+                            if (selectedData && selectedData.id) validItemCount++;
                         }
 
-                        if (validItemCount === 0) {
-                            throw new Error("❌ บันทึกไม่ได้: ต้องมีรายการสินค้าอย่างน้อย 1 รายการ");
+                        // แก้ไข: อนุญาตให้ไม่มีสินค้าได้ถ้าขอใบกำกับหรือบิลเงินสด
+                        if (validItemCount === 0 && !isBillingRequested) {
+                            throw new Error("❌ บันทึกไม่ได้: ต้องมีรายการสินค้าอย่างน้อย 1 รายการ หรือเลือกขอใบกำกับ/บิลเงินสด");
                         }
 
                         if (channelCode !== 'CLAIM' && channelCode !== 'INFU') { 
-                            if (totalAmount <= 0) {
-                                throw new Error("ข้อมูลไม่ครบถ้วน: ยอดสุทธิต้องมากกว่า 0");
-                            }
-                            if (!paymentMethod) {
-                                throw new Error("กรุณาเลือก 'วิธีการชำระเงิน'");
-                            }
-                            if (paymentMethod === 'โอน' && (!paymentDate || !paymentTime)) {
-                                throw new Error("กรุณากรอก 'วันที่' และ 'เวลาที่ชำระ'");
-                            }
+                            if (totalAmount <= 0) throw new Error("ยอดสุทธิต้องมากกว่า 0");
+                            if (!paymentMethod) throw new Error("กรุณาเลือก 'วิธีการชำระเงิน'");
+                            if (paymentMethod === 'โอน' && (!paymentDate || !paymentTime)) throw new Error("กรุณากรอก 'วันที่' และ 'เวลาที่ชำระ'");
                         }
 
-                        // ตรวจสอบรายละเอียดภายในแต่ละแถวสินค้า
+                        // ตรวจสอบสินค้าในแต่ละแถว (ถ้ามี)
                         let rowIndex = 1;
                         for (const row of itemsTbody.rows) {
                             const selectedData = $(row).find('.item-product').select2('data')[0];
                             if (!selectedData || !selectedData.id) continue;
-
                             const product = fullProductList.find(p => p.id == selectedData.id);
                             const category = (product.product_category || '').toUpperCase();
-                            const productName = product.product_name;
-
                             const validateField = (fieldClass, fieldName) => {
                                 const element = row.querySelector(`.${fieldClass}`);
-                                const isNoName = row.querySelector('.item-no-name-cb').checked;
-                                if (['item-line_1', 'item-line_2', 'item-line_3'].includes(fieldClass) && isNoName) return;
-                                if (!element || !element.value.trim()) {
-                                    throw new Error(`แถวที่ ${rowIndex} (${productName}): กรุณากรอก '${fieldName}'`);
-                                }
+                                if (['item-line_1', 'item-line_2', 'item-line_3'].includes(fieldClass) && row.querySelector('.item-no-name-cb').checked) return;
+                                if (!element || !element.value.trim()) throw new Error(`แถวที่ ${rowIndex} (${product.product_name}): กรุณากรอก '${fieldName}'`);
                             };
-                            
                             if (category.includes('STAMP')) {
-                                validateField('item-ink_color', 'สีหมึก');
-                                validateField('item-cartoon_pattern', 'ลายการ์ตูน');
-                                validateField('item-line_1', 'บรรทัด 1');
-                                validateField('item-quantity', 'จำนวน');
-                            } 
-                            else if (category.includes('UV') || category.includes('LASER') || category.includes('TUBE') || category.includes('SUBLIMATION')) {
-                                // 1. บังคับกรอกลายการ์ตูน
-                                validateField('item-cartoon_pattern', 'ลายการ์ตูน');
-                                // 2. บังคับกรอกบรรทัด 1
-                                validateField('item-line_1', 'บรรทัด 1');
-
-                                // 3. เงื่อนไขพิเศษ: ถ้าเป็นหมวด UV และลายขึ้นต้นด้วย L หรือ G
+                                validateField('item-ink_color', 'สีหมึก'); validateField('item-cartoon_pattern', 'ลายการ์ตูน'); validateField('item-line_1', 'บรรทัด 1');
+                            } else if (category.includes('UV') || category.includes('LASER') || category.includes('TUBE') || category.includes('SUBLIMATION')) {
+                                validateField('item-cartoon_pattern', 'ลายการ์ตูน'); validateField('item-line_1', 'บรรทัด 1');
                                 if (category.includes('UV')) {
-                                    const patternInput = row.querySelector('.item-cartoon_pattern');
-                                    const patternVal = patternInput ? patternInput.value.trim().toUpperCase() : "";
-                                    
-                                    if (patternVal.startsWith('L') || patternVal.startsWith('G')) {
-                                        // บังคับกรอกบรรทัด 2 เพิ่มเติมทันที
-                                        validateField('item-line_2', 'บรรทัด 2 (เนื่องจากลายขึ้นต้นด้วย L หรือ G)');
-                                    }
+                                    const patternVal = (row.querySelector('.item-cartoon_pattern')?.value || "").trim().toUpperCase();
+                                    if (patternVal.startsWith('L') || patternVal.startsWith('G')) validateField('item-line_2', 'บรรทัด 2 (ลาย L/G)');
                                 }
-
-                                validateField('item-quantity', 'จำนวน');
-                            } 
-                            else if (category.includes('STK')) {
+                            } else if (category.includes('STK')) {
                                 validateField('item-line_1', 'บรรทัด 1');
-                                validateField('item-quantity', 'จำนวน');
                             }
                             rowIndex++;
                         }
                     }
 
-                    // --- 3. ดำเนินการบันทึกข้อมูล ---
-                    let billNo;
-                    let currentStatus = status;
+                    // --- 3. บันทึกข้อมูล ---
+                    let billNo = isUpdate ? oldOrder.bill_no : await generateNextBillNo(channelCode);
+                    let currentStatus = status || (oldOrder ? oldOrder.status : 'รอลงข้อมูล');
 
-                    if (!isUpdate) {
-                        billNo = await generateNextBillNo(channelCode);
-                        currentStatus = status;
-                    } else {
-                        billNo = oldOrder.bill_no;
-                        currentStatus = status || oldOrder.status;
-                    }
+                    const paymentRecords = [];
+                    document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
+                        const amt = parseFloat(row.querySelector('.pay-amount').value) || 0;
+                        if (amt > 0) paymentRecords.push({ amount: amt, date: row.querySelector('.pay-date').value, time: row.querySelector('.pay-time').value });
+                    });
 
                     const orderData = {
-                        channel_code: channelCode,
-                        bill_no: billNo,
-                        status: currentStatus,
+                        channel_code: channelCode, bill_no: billNo, status: currentStatus,
                         price: parseFloat(container.querySelector('#price').value) || 0,
                         shipping_cost: parseFloat(container.querySelector('#shipping_cost').value) || 0,
                         discount: parseFloat(container.querySelector('#discount').value) || 0,
-                        total_amount: totalAmount,
-                        payment_date: paymentDate || null,
-                        payment_time: paymentTime || null,
-                        payment_details: paymentRecords, 
-                        payment_method: paymentMethod,
-                        promotion: ($('#promotion').val() || '').trim(),
-                        customer_name: customerName,
-                        customer_address: customerAddress
+                        total_amount: totalAmount, payment_date: paymentDate || null, payment_time: paymentTime || null,
+                        payment_details: paymentRecords, payment_method: paymentMethod,
+                        promotion: ($('#promotion').val() || '').trim(), customer_name: customerName, customer_address: customerAddress
                     };
 
                     if (channelCode === 'CLAIM') {
@@ -2952,15 +2892,12 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
                     }
 
                     const taxInvoiceData = {
-                        request_tax_invoice: requestTaxInvoiceCb.checked,
-                        request_cash_bill: requestCashBillCb.checked,
+                        request_tax_invoice: requestTaxInvoiceCb.checked, request_cash_bill: requestCashBillCb.checked,
                         tax_customer_name: document.getElementById('tax-customer-name').value,
                         tax_customer_address: document.getElementById('tax-customer-address').value,
-                        tax_id: document.getElementById('tax-id').value,
-                        tax_items: []
+                        tax_id: document.getElementById('tax-id').value, tax_items: []
                     };
-                    
-                    if(requestTaxInvoiceCb.checked || requestCashBillCb.checked) {
+                    if(isBillingRequested) {
                         taxItemsTbody.querySelectorAll('tr').forEach(row => {
                             taxInvoiceData.tax_items.push({
                                 product_name: row.cells[0].textContent,
@@ -2985,41 +2922,24 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
 
                     if (currentStatus !== 'จัดส่งแล้ว') {
                         await supabaseClient.from('order_items').delete().eq('order_id', targetOrderId);
-                        
-                        let allItemsToInsert = [];
-                        let itemSequence = 1;
+                        let allItemsToInsert = []; let itemSequence = 1;
                         for (const row of itemsTbody.rows) {
                             const selectedData = $(row).find('.item-product').select2('data')[0];
                             if (!selectedData || !selectedData.id) continue;
-                            
                             const originalProduct = fullProductList.find(p => p.id == selectedData.id);
                             const quantity = parseInt(row.querySelector('.item-quantity').value) || 1;
-                            
                             const baseItemData = {
-                                order_id: targetOrderId, 
-                                bill_no: billNo, 
-                                product_id: originalProduct.id,
-                                product_name: originalProduct.product_name,
-                                ink_color: row.querySelector('.item-ink_color').value,
+                                order_id: targetOrderId, bill_no: billNo, product_id: originalProduct.id,
+                                product_name: originalProduct.product_name, ink_color: row.querySelector('.item-ink_color').value,
                                 product_type: row.querySelector('.item-shelf_location').value,
                                 cartoon_pattern: row.querySelector('.item-cartoon_pattern').value,
                                 line_pattern: row.querySelector('.item-line_pattern').value,
-                                font: row.querySelector('.item-font').value,
-                                line_1: row.querySelector('.item-line_1').value,
-                                line_2: row.querySelector('.item-line_2').value,
-                                line_3: row.querySelector('.item-line_3').value,
-                                notes: row.querySelector('.item-notes').value,
-                                file_attachment: row.querySelector('.item-file_attachment').value
+                                font: row.querySelector('.item-font').value, line_1: row.querySelector('.item-line_1').value,
+                                line_2: row.querySelector('.item-line_2').value, line_3: row.querySelector('.item-line_3').value,
+                                notes: row.querySelector('.item-notes').value, file_attachment: row.querySelector('.item-file_attachment').value
                             };
-                            
-                            for (let i = 0; i < quantity; i++) {
-                                allItemsToInsert.push({ 
-                                    ...baseItemData, 
-                                    item_uid: `${billNo}-${itemSequence++}` 
-                                });
-                            }
+                            for (let i = 0; i < quantity; i++) allItemsToInsert.push({ ...baseItemData, item_uid: `${billNo}-${itemSequence++}` });
                         }
-                        
                         if (allItemsToInsert.length > 0) {
                             const { error: itemsError } = await supabaseClient.from('order_items').insert(allItemsToInsert);
                             if (itemsError) throw itemsError;
@@ -3029,9 +2949,7 @@ document.querySelectorAll('#payment-records-tbody tr').forEach(row => {
                     alert(isUpdate ? 'อัปเดตข้อมูลสำเร็จ' : `บันทึกสำเร็จ! เลขบิล: ${billNo}`);
                     setFormMode('create');
                     if (window.orderSystem) window.orderSystem.loadInitialData(true);
-
                 } catch (error) {
-                    console.error('Save error:', error);
                     alert(`${error.message}`);
                 } finally {
                     loadingOverlay.style.display = 'none';
