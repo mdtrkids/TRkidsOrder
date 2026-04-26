@@ -2542,14 +2542,26 @@ if (mode === 'edit' && order) {
                         const groupSelectedIds = ordersByChannel[channelCode].map(o => o.id); 
                         try { 
                             const today = new Date(); 
-                            const datePart = today.toLocaleDateString('th-TH', { year: '2-digit', month: '2-digit', day: '2-digit' }).replace(/\//g, ''); 
-                            const workOrderDate = today.toISOString().slice(0, 10); 
+	// สร้างวันที่ YYYY-MM-DD จากเวลาเครื่อง (Local Time)
+		const localY = today.getFullYear();
+		const localM = String(today.getMonth() + 1).padStart(2, '0');
+		const localD = String(today.getDate()).padStart(2, '0');
+		const workOrderDate = `${localY}-${localM}-${localD}`; 
                             
-                            const { data: woData, error: woReadError } = await supabaseClient.from('work_orders').select('batch_number').eq('channel_code', channelCode).eq('production_date', workOrderDate).order('batch_number', { ascending: false }).limit(1); 
-                            if (woReadError) throw woReadError; 
-                            const batchNumber = (woData.length > 0 ? woData[0].batch_number : 0) + 1; 
-                            const workOrderName = `${channelCode}-${datePart}-R${batchNumber}`; 
-
+	// สร้างวันที่ในชื่อใบงาน DDMMYY (พ.ศ.)
+		const shortYear = String(localY + 543).slice(-2);
+		const datePart = `${localD}${localM}${shortYear}`;
+                            
+                            const { data: woData, error: woReadError } = await supabaseClient
+    		.from('work_orders')
+   		.select('batch_number')
+    		.eq('channel_code', channelCode)
+    		.eq('production_date', workOrderDate) // ตรงนี้จะเป็นวันที่ 26 แน่นอนแม้ตัดก่อน 7 โมง
+    		.order('batch_number', { ascending: false })
+    		.limit(1);
+		if (woReadError) throw woReadError;
+		const batchNumber = (woData && woData.length > 0 ? woData[0].batch_number : 0) + 1; 
+		const workOrderName = `${channelCode}-${datePart}-R${batchNumber}`;
                             const { error: woError } = await supabaseClient.from('work_orders').insert({ work_order_name: workOrderName, channel_code: channelCode, production_date: workOrderDate, batch_number: batchNumber, order_count: groupSelectedIds.length, created_by: loggedInUsername, status: 'กำลังผลิต' }); 
                             if (woError) throw woError; 
 
