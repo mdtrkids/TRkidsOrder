@@ -4487,7 +4487,31 @@ window.packingSystem = (() => {
         if (woError) { workOrderList.innerHTML = "<li>โหลดผิดพลาด</li>"; return; }
         if (!workOrders || workOrders.length === 0) { workOrderList.innerHTML = "<li>ไม่พบใบงาน</li>"; return; }
         
-        const { data: allProductionOrders } = await supabaseClient.from("orders").select("work_order_name, tracking_number, packing_meta, order_items(packing_status)").in('work_order_name', workOrders.map(wo => wo.work_order_name));
+        let allProductionOrders = [];
+        let from = 0;
+        let to = 999;
+        let hasMore = true;
+
+        while (hasMore) {
+            const { data: batchOrders, error: batchError } = await supabaseClient
+                .from("orders")
+                .select("work_order_name, tracking_number, packing_meta, order_items(packing_status)")
+                .in('work_order_name', workOrders.map(wo => wo.work_order_name))
+                .range(from, to);
+
+            if (batchError) {
+                console.error("Fetch batch error:", batchError);
+                break;
+            }
+
+            allProductionOrders = allProductionOrders.concat(batchOrders);
+            if (batchOrders.length < 1000) {
+                hasMore = false;
+            } else {
+                from += 1000;
+                to += 1000;
+            }
+        }
         
         workOrderList.innerHTML = "";
         workOrders.forEach(wo => {
