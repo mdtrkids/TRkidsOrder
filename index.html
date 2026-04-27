@@ -1730,29 +1730,54 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
             }
             
 async function fetchOrdersByStatus(status) {
-                loadingOverlay.style.display = 'flex';
-                try {
-                    let query = supabaseClient.from('orders').select('*, order_items(*)');
-                    
-                    if (status === 'จัดส่งแล้ว') {
-                        query = query.eq('status', 'จัดส่งแล้ว').order('shipped_time', { ascending: false }).limit(300);
-                    } else if (status === 'ใบงาน (กำลังผลิต)') {
-                        query = query.eq('status', 'ใบงาน (กำลังผลิต)').order('created_at', { ascending: false });
-                    } else {
-                        query = query.eq('status', status).order('created_at', { ascending: false });
-                    }
+    loadingOverlay.style.display = 'flex';
+    try {
+        // กรณี "จัดส่งแล้ว" เราจำกัดไว้ 300 เพื่อความเร็ว (หรือปรับเพิ่มตามเหมาะสม)
+        if (status === 'จัดส่งแล้ว') {
+            const { data, error } = await supabaseClient.from('orders')
+                .select('*, order_items(*)')
+                .eq('status', 'จัดส่งแล้ว')
+                .order('shipped_time', { ascending: false })
+                .limit(300);
+            if (error) throw error;
+            allOrdersData = data || [];
+        } 
+        // กรณีอื่นๆ (ใบงาน, รอลงข้อมูล, ฯลฯ) ให้ดึงจนครบทุกแถว (แก้ปัญหา 0 บิล)
+        else {
+            let allData = [];
+            let from = 0;
+            let to = 999;
+            let hasMore = true;
 
-                    const { data, error } = await query;
-                    if (error) throw error;
-                    
-                    allOrdersData = data || [];
-                    renderAllTabs(); 
-                } catch (err) {
-                    console.error("Fetch Error:", err);
-                } finally {
-                    loadingOverlay.style.display = 'none';
+            while (hasMore) {
+                const { data, error } = await supabaseClient
+                    .from('orders')
+                    .select('*, order_items(*)')
+                    .eq('status', status)
+                    .order('created_at', { ascending: false })
+                    .range(from, to);
+
+                if (error) throw error;
+
+                allData = allData.concat(data);
+                if (data.length < 1000) {
+                    hasMore = false;
+                } else {
+                    from += 1000;
+                    to += 1000;
                 }
             }
+            allOrdersData = allData;
+        }
+        
+        renderAllTabs(); 
+    } catch (err) {
+        console.error("Fetch Error:", err);
+        alert("เกิดข้อผิดพลาดในการดึงข้อมูล: " + err.message);
+    } finally {
+        loadingOverlay.style.display = 'none';
+    }
+}
 
             let isOpeningWindow = false;
             function prepareForWaybill(workOrderName) { if (isOpeningWindow) return; isOpeningWindow = true; const ordersToProcess = allOrdersData.filter(order => order.work_order_name === workOrderName); if (ordersToProcess.length === 0) { alert("ไม่พบออร์เดอร์"); isOpeningWindow = false; return; } const headers = ['bill_no', 'customer_address', 'payment_method', 'total_amount']; const rows = ordersToProcess.map(order => { const escapeCsvField = (field) => { const strField = String(field || ''); if (strField.includes(',') || strField.includes('"') || strField.includes('\n')) { return `"${strField.replace(/"/g, '""')}"`; } return strField; }; const addressForExport = ecommerceChannels.includes(order.channel_code) ? '' : order.customer_address; return [escapeCsvField(order.bill_no), escapeCsvField(addressForExport), escapeCsvField(order.payment_method), escapeCsvField(order.total_amount)].join(','); }); const csvContent = [headers.join(','), ...rows].join('\n'); try { localStorage.setItem('waybillDataForFlash', csvContent); localStorage.setItem('workOrderNameForFlash', workOrderName); window.open('flash_express_tool.html', '_blank'); } catch (e) { console.error("Error:", e); alert("เกิดข้อผิดพลาด"); } finally { setTimeout(() => { isOpeningWindow = false; }, 1000); } }
