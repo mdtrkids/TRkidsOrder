@@ -4561,138 +4561,137 @@ window.packingSystem = (() => {
 
     // MODIFIED: Added skipReset parameter
     async function loadPackingData(workOrderName, skipReset = false) {
-    if (workOrderName !== currentWorkOrderName && !skipReset) {
-        await checkAndResetCurrentIncompleteOrder();
+        // --- ADDED: Check and reset when loading a NEW WO ---
+        if (workOrderName !== currentWorkOrderName && !skipReset) {
+            await checkAndResetCurrentIncompleteOrder();
+        }
+
+        loadingOverlay.style.display = "flex";
+        currentWorkOrderName = workOrderName;
+        // 1. Clear inactivity timer
+        clearTimeout(inactivityTimer);
+
+        const { data, error } = await supabaseClient.from("orders").select("*, order_items(*)").eq("work_order_name", workOrderName).order('bill_no', { ascending: true });
+        loadingOverlay.style.display = "none";
+        if (error) { alert("ดึงข้อมูลไม่ได้: " + error.message); return; }
+        const ordersWithTracking = data.filter(order => order.tracking_number && order.tracking_number.trim() !== "");
+        prepareDataForPacking(ordersWithTracking);
+        if (aggregatedData.length > 0) {
+            headerTitle.textContent = `จัดของ: ${workOrderName}`;
+            showPackingView("main");
+            renderOrderNav();
+            const nextIndex = aggregatedData.findIndex((_, i) => !completedIndices.has(i) && !aggregatedData[i][0].isOrderComplete);
+            displayOrder(nextIndex !== -1 ? nextIndex : 0);
+        }
     }
-
-    loadingOverlay.style.display = "flex";
-    currentWorkOrderName = workOrderName;
-    clearTimeout(inactivityTimer);
-
-    // ดึงข้อมูลออร์เดอร์ทั้งหมดในใบงาน (ไม่กรองเลขพัสดุออกแล้ว)
-    const { data, error } = await supabaseClient.from("orders")
-        .select("*, order_items(*)")
-        .eq("work_order_name", workOrderName)
-        .order('bill_no', { ascending: true });
-
-    loadingOverlay.style.display = "none";
-    if (error) { alert("ดึงข้อมูลไม่ได้: " + error.message); return; }
-
-    // ส่ง data ทั้งหมดไปประมวลผล (เดิมส่งเฉพาะ ordersWithTracking)
-    prepareDataForPacking(data); 
-
-    if (aggregatedData.length > 0) {
-        headerTitle.textContent = `จัดของ: ${workOrderName}`;
-        showPackingView("main");
-        renderOrderNav();
-        // เลือกออร์เดอร์แรกที่ยังแสกนไม่เสร็จและ "มีเลขพัสดุแล้ว" มาแสดงก่อน
-        const nextIndex = aggregatedData.findIndex((group, i) => 
-            !completedIndices.has(i) && 
-            !group[0].isOrderComplete && 
-            group[0].tracking_number // ต้องมีเลขพัสดุถึงจะ Auto-select
-        );
-        displayOrder(nextIndex !== -1 ? nextIndex : 0);
-    }
-}
 
     function prepareDataForPacking(orders) {
-    let flatData = [];
-    completedIndices.clear();
-    const allProducts = orderSystem.getFullProductList();
+        let flatData = [];
+        completedIndices.clear();
 
-    orders.forEach(order => {
-        const isOrderShipped = order.status === 'จัดส่งแล้ว';
-        const isParcelScanned = order.packing_meta?.parcelScanned || false;
-        
-        // ถ้าไม่มี tracking_number ให้ระบุว่าเป็น Waiting
-        const displayTracking = order.tracking_number && order.tracking_number.trim() !== "" 
-            ? order.tracking_number 
-            : null;
+        // ดึงรายการสินค้าทั้งหมดจากระบบ Product มาไว้เทียบข้อมูล
+        const allProducts = orderSystem.getFullProductList();
 
-        if (order.order_items) {
-            order.order_items.forEach(item => {
-                // ... (Logic การหารูปภาพคงเดิม) ...
-                const productInfo = allProducts.find(p => p.id === item.product_id);
-                let finalImageUrl = productInfo ? productInfo.image_url : null;
-                // ... (Logic cartoon_pattern / line_pattern คงเดิม) ...
+        orders.forEach(order => {
+            const isOrderShipped = order.status === 'จัดส่งแล้ว';
+            const isParcelScanned = order.packing_meta?.parcelScanned || false;
+            
+            if (order.order_items) {
+                order.order_items.forEach(item => {
+                    // 1. เริ่มต้นด้วยรูปสินค้าหลัก
+                    const productInfo = allProducts.find(p => p.id === item.product_id);
+                    let finalImageUrl = productInfo ? productInfo.image_url : null;
 
-                flatData.push({
-                    'tracking_number': displayTracking, // อาจเป็น null
-                    'bill_no': order.bill_no,           // เพิ่มเลขบิลไว้ใช้ Grouping
-                    'customer_name': order.customer_name,
-                    'order_id': order.id,
-                    'product_name': item.product_name,
-                    'image_url': finalImageUrl, 
-                    'details': [item.line_1, item.line_2, item.line_3].filter(Boolean).join(" // "),
-                    'ink_color': item.ink_color,
-                    'notes': item.notes,
-                    'shelf_location': item.product_type,
-                    'cartoon_pattern': item.cartoon_pattern,
-                    'line_pattern': item.line_pattern,
-                    'font': item.font,
-                    'item_uid': item.item_uid,
-                    'scanned': item.packing_status === 'สแกนแล้ว',
-                    'parcelScanned': isParcelScanned,
-                    'isOrderComplete': isOrderShipped,
-                    'needsTaxInvoice': order.billing_details?.request_tax_invoice || false,
-                    'needsCashBill': order.billing_details?.request_cash_bill || false,
-                    'claim_type': order.claim_type,
-                    'claim_details': order.claim_details,
-                    'file_attachment': item.file_attachment
+                    // 2. ตรวจสอบ "ลายการ์ตูน" ก่อน
+                    if (item.cartoon_pattern && window.cartoonPatternList) {
+                        const searchName = String(item.cartoon_pattern).trim().toLowerCase();
+                        const foundPattern = window.cartoonPatternList.find(p => 
+                            String(p.pattern_name).trim().toLowerCase() === searchName
+                        );
+                        if (foundPattern && foundPattern.image_url) {
+                            finalImageUrl = foundPattern.image_url;
+                        }
+                    }
+
+                    // 3. ตรวจสอบ "ลายเส้น" (line_pattern) ตามที่ผู้ใช้ต้องการ
+                    // หากมีการระบุลายเส้น และพบรูปในฐานข้อมูลลาย จะใช้รูปนี้แทน (Override)
+                    if (item.line_pattern && window.cartoonPatternList) {
+                        const searchLineName = String(item.line_pattern).trim().toLowerCase();
+                        const foundLinePattern = window.cartoonPatternList.find(p => 
+                            String(p.pattern_name).trim().toLowerCase() === searchLineName
+                        );
+                        // ถ้าเจอรูปในชื่อที่ตรงกับช่องลายเส้น ให้ใช้รูปนั้นแทน
+                        if (foundLinePattern && foundLinePattern.image_url) {
+                            finalImageUrl = foundLinePattern.image_url;
+                        }
+                    }
+
+                    // 4. รวมข้อมูลเข้าสู่ Flat Array
+                    flatData.push({
+                        'tracking_number': order.tracking_number,
+                        'customer_name': order.customer_name,
+                        'order_id': order.id,
+                        'product_name': item.product_name,
+                        'image_url': finalImageUrl, 
+                        'details': [item.line_1, item.line_2, item.line_3].filter(Boolean).join(" // "),
+                        'ink_color': item.ink_color,
+                        'notes': item.notes,
+                        'shelf_location': item.product_type,
+                        'cartoon_pattern': item.cartoon_pattern,
+                        'line_pattern': item.line_pattern,
+                        'font': item.font,
+                        'item_uid': item.item_uid,
+                        'scanned': item.packing_status === 'สแกนแล้ว',
+                        'parcelScanned': isParcelScanned,
+                        'isOrderComplete': isOrderShipped,
+                        'needsTaxInvoice': order.billing_details?.request_tax_invoice || false,
+                        'needsCashBill': order.billing_details?.request_cash_bill || false,
+                        'claim_type': order.claim_type,
+                        'claim_details': order.claim_details,
+                        'file_attachment': item.file_attachment
+                    });
                 });
-            });
-        }
-    });
+            }
+        });
 
-    const grouped = {}; 
-    const tOrder = [];
-    flatData.forEach(item => {
-        // ใช้ tracking_number ถ้ามี ถ้าไม่มีใช้ bill_no เป็น Key เพื่อให้บิลเดียวกันอยู่ด้วยกัน
-        const groupKey = item.bill_no;
-        if (!grouped[groupKey]) { 
-            grouped[groupKey] = []; 
-            tOrder.push(groupKey); 
-        }
-        grouped[groupKey].push(item);
-    });
+        const grouped = {}; 
+        const tOrder = [];
+        flatData.forEach(item => {
+            if (!grouped[item.tracking_number]) { 
+                grouped[item.tracking_number] = []; 
+                tOrder.push(item.tracking_number); 
+            }
+            grouped[item.tracking_number].push(item);
+        });
 
-    aggregatedData = tOrder.map(t => grouped[t]);
-    aggregatedData.forEach((group, index) => {
-        if (group.every(i => i.scanned)) { completedIndices.add(index); }
-    });
-    currentIndex = -1;
-    updateFinalizeButtonVisibility();
-}
+        aggregatedData = tOrder.map(t => grouped[t]);
+
+        aggregatedData.forEach((group, index) => {
+            if (group.every(i => i.scanned)) {
+                completedIndices.add(index);
+            }
+        });
+
+        currentIndex = -1;
+        updateFinalizeButtonVisibility();
+    }
 
     function renderOrderNav() {
         orderList.innerHTML = "";
         aggregatedData.forEach((group, index) => {
-            const hasTracking = !!group[0].tracking_number;
             const isDone = group[0].isOrderComplete;
             const isFullScanned = completedIndices.has(index);
-            
             const li = document.createElement("li");
             li.className = "order-item";
             if (isDone) li.classList.add("completed");
-            if (!hasTracking) li.style.borderLeft = "4px solid #ffc107"; // สีเหลืองเตือนว่ารอเลข
-            
             li.dataset.index = index;
-            // แก้ให้ค้นหาได้ทั้งเลขบิลและเลขพัสดุ
-            li.dataset.trackingId = `${group[0].bill_no} ${group[0].tracking_number || ''}`.toLowerCase();
-
-            let icon = isDone ? '✅' : (isFullScanned ? '🟢' : (hasTracking ? '📦' : '⏳'));
+            li.dataset.trackingId = group[0].tracking_number;
+            let icon = isDone ? '✅' : (isFullScanned ? '🟢' : '📦');
+            li.innerHTML = `<span class="tracking-id">${icon} ${group[0].tracking_number}</span><span class="customer-name">${group[0].customer_name || 'N/A'}</span>`;
             
-            // ปรับการแสดงผล: แสดงเลขบิลเป็นตัวหนา และเลขพัสดุไว้ข้างล่าง
-            let trackingText = hasTracking 
-                ? `<b>${group[0].tracking_number}</b><br><small>${group[0].bill_no}</small>` 
-                : `<b>${group[0].bill_no}</b><br><small style="color: #856404;">[รอเลขพัสดุ]</small>`;
-
-            li.innerHTML = `
-                <span class="tracking-id">${icon} ${trackingText}</span>
-                <span class="customer-name">${group[0].customer_name || 'N/A'}</span>
-            `;
-            
+            // เมื่อคลิกเลือกออร์เดอร์ใหม่
             li.addEventListener("click", async () => {
+                // --- MODIFIED: Check and reset when switching orders WITHIN the WO ---
                 if (currentIndex !== -1 && currentIndex !== index) {
                     await checkAndResetCurrentIncompleteOrder();
                 }
@@ -4933,37 +4932,17 @@ window.packingSystem = (() => {
     const showPackingView = (v) => { selectionView.style.display = (v === 'selection' ? "block" : "none"); mainView.style.display = (v === 'main' ? "block" : "none"); };
     
     const updateInputStates = () => {
-    if (currentIndex < 0) return;
-    const g = aggregatedData[currentIndex];
-    const hasTracking = !!g[0].tracking_number; // เช็คว่ามีเลขพัสดุหรือไม่
-    const isParcelScanned = g[0].parcelScanned;
-    const isDone = g[0].isOrderComplete;
-
-    // ถ้าไม่มีเลขพัสดุ ให้ปิดการทำงานทุกอย่างในส่วน Input
-    if (!hasTracking) {
-        parcelScanInput.disabled = true;
-        itemScanInput.disabled = true;
-        parcelScanInput.value = "";
-        itemScanInput.value = "";
-        updateStatus("⚠️ บิลนี้ยังไม่มีเลขพัสดุ ไม่สามารถสแกนจัดของได้", "error");
-        return;
-    }
-
-    // กรณีมีเลขพัสดุแล้ว ทำงานตามปกติ
-    parcelScanInput.disabled = isParcelScanned || isDone;
-    itemScanInput.disabled = !isParcelScanned || isDone || g.every(i => i.scanned);
-    
-    if (isDone) updateStatus("✅ จัดส่งเรียบร้อย", "success");
-    else if (!isParcelScanned) { 
-        updateStatus("รอสแกนเลขพัสดุ...", ""); 
-        parcelScanInput.focus(); 
-    }
-    else if (g.every(i => i.scanned)) updateStatus("🟢 แสกนครบแล้ว!", "success");
-    else { 
-        updateStatus("รอสแกนสินค้า...", ""); 
-        itemScanInput.focus(); 
-    }
-};
+        if (currentIndex < 0) return;
+        const g = aggregatedData[currentIndex];
+        const isParcelScanned = g[0].parcelScanned;
+        const isDone = g[0].isOrderComplete;
+        parcelScanInput.disabled = isParcelScanned || isDone;
+        itemScanInput.disabled = !isParcelScanned || isDone || g.every(i => i.scanned);
+        if (isDone) updateStatus("✅ จัดส่งเรียบร้อย", "success");
+        else if (!isParcelScanned) { updateStatus("รอสแกนเลขพัสดุ...", ""); parcelScanInput.focus(); }
+        else if (g.every(i => i.scanned)) updateStatus("🟢 แสกนครบแล้ว!", "success");
+        else { updateStatus("รอสแกนสินค้า...", ""); itemScanInput.focus(); }
+    };
 
     searchInput.addEventListener("input", () => {
         const f = searchInput.value.toLowerCase();
