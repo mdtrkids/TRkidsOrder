@@ -1630,10 +1630,18 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
                                 infoHTML += `<div class="shipping-details" style="color: #c82333; font-size: 0.8em; white-space: normal;">เคลม: ${claimType}${separator}${claimDetails}</div>`;
                             }
 
-                            if (order.status === 'จัดส่งแล้ว' && order.shipped_by) {
-                                const shippedTime = new Date(order.shipped_time).toLocaleString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
-                                infoHTML += `<div class="shipping-details">โดย: ${order.shipped_by} (${shippedTime})</div>`;
-                            }
+                            if (order.status === 'จัดส่งแล้ว' || (order.packing_meta && order.packing_meta.scanTime)) {
+    const timeToUse = (order.packing_meta && order.packing_meta.scanTime) ? order.packing_meta.scanTime : order.shipped_time;
+    const staff = (order.packing_meta && order.packing_meta.scannedBy) ? order.packing_meta.scannedBy : (order.shipped_by || 'N/A');
+    
+    if (timeToUse) {
+        const displayTime = new Date(timeToUse).toLocaleString('th-TH', { 
+            day: '2-digit', month: '2-digit', year: '2-digit', 
+            hour: '2-digit', minute: '2-digit', second: '2-digit' 
+        });
+        infoHTML += `<div class="shipping-details" style="color: #28a745; font-weight: bold;">📦 แพ็คเสร็จ: ${displayTime} (${staff})</div>`;
+    }
+}
                             htmlContent += `<li class="order-list-item" data-order-id="${order.id}"><input type="checkbox" class="order-checkbox"><div class="order-info">${infoHTML}</div>${trackingHTML}</li>`;
                         }
                     });
@@ -4867,8 +4875,27 @@ window.packingSystem = (() => {
             // 4. CHECK COMPLETION (SLOW, only run once when complete)
             if (scannedItems === group.length) {
                 completedIndices.add(currentIndex);
-                clearTimeout(inactivityTimer); // แสกนครบแล้ว ไม่ต้องจับเวลารีเซ็ต
+                clearTimeout(inactivityTimer); 
                 updateStatus("✅ สแกนครบแล้ว!", "success");
+                
+                // --- เพิ่มโค้ดส่วนนี้เข้าไป ---
+                const finishTime = new Date().toISOString();
+                supabaseClient.from("orders")
+                    .update({ 
+                        packing_meta: { 
+                            parcelScanned: true, 
+                            scannedBy: loggedInUsername, 
+                            scanTime: finishTime 
+                        } 
+                    })
+                    .eq('id', group[0].order_id)
+                    .then(() => {
+                        // อัปเดตข้อมูลในตัวแปรเครื่องด้วยเพื่อให้ UI แสดงผลทันที
+                        group[0].parcelScanned = true;
+                        group[0].scanTime = finishTime;
+                    });
+                // --------------------------
+
                 updateFinalizeButtonVisibility();
                 renderOrderNav();
                 setTimeout(() => {
