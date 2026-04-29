@@ -2827,8 +2827,10 @@ remainingBills.forEach(order => {
 
                     // กรองรหัสลูกค้าตามช่องทาง
                     if (channelCode === 'SPTR' && !customerName.startsWith('26')) throw new Error("❌ ช่องทาง SPTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '26'");
-                    if (channelCode === 'TTTR' && !customerName.startsWith('58')) throw new Error("❌ ช่องทาง TTTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '58'");
-                    if (channelCode === 'LZTR' && !customerName.startsWith('10')) throw new Error("❌ ช่องทาง LZTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '10'");
+	  if (channelCode === 'TTTR' && !customerName.startsWith('58')) throw new Error("❌ ช่องทาง TTTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '58'");
+	  if (channelCode === 'LZTR' && !(customerName.startsWith('10') || customerName.startsWith('11'))) {
+                   throw new Error("❌ ช่องทาง LZTR: ชื่อลูกค้าต้องขึ้นต้นด้วย '10' หรือ '11'");
+}
 
                     const customerAddress = container.querySelector('#customer_address').value.trim();
                     const paymentMethod = container.querySelector('#payment_method').value;
