@@ -751,9 +751,17 @@
                         <div class="main-container">
                             <nav id="order-nav-panel">
                                 <div id="nav-header">
-                                    <span id="order-counter">ยังไม่มีข้อมูล</span>
-                                    <input type="text" id="search-input" placeholder="ค้นหาเลขพัสดุ...">
-                                </div>
+    <span id="order-counter">ยังไม่มีข้อมูล</span>
+    <input type="text" id="search-input" placeholder="ค้นหาเลขพัสดุ...">
+    
+    <!-- เพิ่มส่วนนี้เข้าไป -->
+    <div style="margin-top: 10px; display: flex; align-items: center; justify-content: center; background: #f0f0f2; padding: 5px; border-radius: 8px;">
+        <label style="cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #1d1d1f;">
+            <input type="checkbox" id="filter-unpacked-only" style="width: 18px; height: 18px; cursor: pointer;"> 
+            แสดงเฉพาะที่ยังไม่แพ็ค
+        </label>
+    </div>
+</div>
                                 <ul id="order-list"></ul>
                             </nav>
                             <main id="content-panel">
@@ -4405,6 +4413,7 @@ window.packingSystem = (() => {
     const searchInput = container.querySelector("#search-input");
     const orderList = container.querySelector("#order-list");
     const orderCounter = container.querySelector("#order-counter");
+    const filterUnpackedCheckbox = container.querySelector("#filter-unpacked-only");
     const resultContainer = container.querySelector("#result-container");
     const actionPanel = container.querySelector("#action-panel");
     const itemScanInput = container.querySelector("#item-scan-input");
@@ -4710,6 +4719,7 @@ window.packingSystem = (() => {
             orderList.appendChild(li);
         });
         updateCounter();
+applyPackingFilters();
     }
 
     function displayOrder(index) {
@@ -4973,10 +4983,25 @@ window.packingSystem = (() => {
         else { updateStatus("รอสแกนสินค้า...", ""); itemScanInput.focus(); }
     };
 
-    searchInput.addEventListener("input", () => {
+    const applyPackingFilters = () => {
         const f = searchInput.value.toLowerCase();
-        orderList.querySelectorAll(".order-item").forEach(it => it.style.display = it.dataset.trackingId.toLowerCase().includes(f) ? "" : "none");
-    });
+        const showUnpackedOnly = filterUnpackedCheckbox.checked;
+        
+        orderList.querySelectorAll(".order-item").forEach(it => {
+            const index = parseInt(it.dataset.index);
+            // ตรวจสอบว่าแสกนครบหรือยัง (เช็คจาก Set หรือ สถานะ Order)
+            const isDone = completedIndices.has(index) || (aggregatedData[index] && aggregatedData[index][0].isOrderComplete);
+            
+            const matchesSearch = it.dataset.trackingId.toLowerCase().includes(f);
+            const matchesStatus = showUnpackedOnly ? !isDone : true;
+
+            it.style.display = (matchesSearch && matchesStatus) ? "" : "none";
+        });
+    };
+
+    // --- ผูกเหตุการณ์ (Event Listeners) สำหรับการ Filter ---
+    searchInput.addEventListener("input", applyPackingFilters);
+    filterUnpackedCheckbox.addEventListener("change", applyPackingFilters);
     
     // NOTE: ใช้ "change" event เหมือนเดิม เพราะ Scanner จะส่ง Enter มาให้
     parcelScanInput.addEventListener("change", handleParcelScan);
@@ -4987,7 +5012,6 @@ window.packingSystem = (() => {
         await performResetAction();
     });
     
-    // --- MODIFIED: Back button now checks and resets ---
     backBtn.addEventListener('click', async () => {
         await checkAndResetCurrentIncompleteOrder();
         loadWorkOrdersForPacking();
@@ -5003,8 +5027,6 @@ window.packingSystem = (() => {
 
     return { loadWorkOrdersForPacking };
 })();
-        
-        // --- PRODUCT SYSTEM MODULE ---
         // --- PRODUCT SYSTEM MODULE (UPDATED: UPSERT & STATUS) ---
 window.productSystem = (() => {
     let isInitialized = false; 
