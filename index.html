@@ -1608,7 +1608,21 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
                 };
                 const lists = { 'รอลงข้อมูล': container.querySelector('#tab-waiting .order-list'), 'ลงข้อมูลเสร็จสิ้น': container.querySelector('#tab-complete .order-list'), 'ยกเลิก': container.querySelector('#tab-cancelled .order-list'), 'จัดส่งแล้ว': container.querySelector('#tab-shipped .order-list') };
                 const summaryContainer = container.querySelector('#channel-summary-container');
-                if (summaryContainer) { const completedOrders = allOrdersData.filter(order => order.status === 'ลงข้อมูลเสร็จสิ้น'); const channelCounts = completedOrders.reduce((acc, order) => { const channel = order.channel_code || 'N/A'; acc[channel] = (acc[channel] || 0) + 1; return acc; }, {}); summaryContainer.innerHTML = ''; const sortedChannels = Object.keys(channelCounts).sort(); if (sortedChannels.length > 0) { let summaryHTML = ''; for (const channel of sortedChannels) { summaryHTML += `<span class="channel-summary-item" data-channel="${channel}">${channel}: ${channelCounts[channel]} บิล</span>`; } summaryContainer.innerHTML = summaryHTML; } else { summaryContainer.innerHTML = `<span class="channel-summary-placeholder">ไม่มีบิลรอสร้างใบงาน</span>`; } }
+                if (summaryContainer) {
+    // แก้ไขตรงนี้: กรองเอาเฉพาะบิลที่สถานะเป็น "ลงข้อมูลเสร็จสิ้น" และ "ยังไม่ได้แสกนแพ็ค/ส่ง"
+    const completedOrders = allOrdersData.filter(order => {
+        const isStatusComplete = order.status === 'ลงข้อมูลเสร็จสิ้น';
+        const isAlreadyPacked = order.packing_meta && order.packing_meta.scanTime;
+        const isShipped = !!order.shipped_time;
+        
+        return isStatusComplete && !isAlreadyPacked && !isShipped;
+    });
+
+    const channelCounts = completedOrders.reduce((acc, order) => {
+        const channel = order.channel_code || 'N/A';
+        acc[channel] = (acc[channel] || 0) + 1;
+        return acc;
+    }, {}); summaryContainer.innerHTML = ''; const sortedChannels = Object.keys(channelCounts).sort(); if (sortedChannels.length > 0) { let summaryHTML = ''; for (const channel of sortedChannels) { summaryHTML += `<span class="channel-summary-item" data-channel="${channel}">${channel}: ${channelCounts[channel]} บิล</span>`; } summaryContainer.innerHTML = summaryHTML; } else { summaryContainer.innerHTML = `<span class="channel-summary-placeholder">ไม่มีบิลรอสร้างใบงาน</span>`; } }
                 workOrdersListContainer.innerHTML = ''; Object.values(lists).forEach(list => { if(list) list.innerHTML = ''; });
                 
                 const renderOrderListItems = (orders, listElement, filterValue, searchTerm) => {
@@ -1661,12 +1675,24 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
                     .sort((a, b) => (b.shipped_time || '').localeCompare(a.shipped_time || ''));
                 
                 const otherStatuses = ['รอลงข้อมูล', 'ลงข้อมูลเสร็จสิ้น', 'ยกเลิก'];
-                otherStatuses.forEach(status => {
-                    const ordersForStatus = allOrdersData
-                        .filter(o => o.status === status)
-                        .sort((a, b) => (b.bill_no || '').localeCompare(a.bill_no || ''));
-                    
-                    let tabKey;
+otherStatuses.forEach(status => {
+    const ordersForStatus = allOrdersData
+        .filter(o => {
+            // เงื่อนไขที่ 1: สถานะต้องตรงกับ Tab
+            if (o.status !== status) return false;
+
+            // เงื่อนไขที่ 2: ถ้าเป็นสถานะ "ลงข้อมูลเสร็จสิ้น" 
+            // ต้องไม่มีข้อมูลการแสกน (packing_meta) และ ไม่มีเวลาจัดส่ง (shipped_time)
+            if (status === 'ลงข้อมูลเสร็จสิ้น') {
+                const isAlreadyPacked = o.packing_meta && o.packing_meta.scanTime;
+                const isShipped = !!o.shipped_time;
+                if (isAlreadyPacked || isShipped) return false; // ถ้ามีอย่างใดอย่างหนึ่ง ไม่ให้แสดงในหน้านี้
+            }
+            return true;
+        })
+        .sort((a, b) => (b.bill_no || '').localeCompare(a.bill_no || ''));
+    
+    let tabKey;
                     if (status === 'รอลงข้อมูล') tabKey = 'waiting';
                     else if (status === 'ลงข้อมูลเสร็จสิ้น') tabKey = 'complete';
                     else if (status === 'ยกเลิก') tabKey = 'cancelled';
