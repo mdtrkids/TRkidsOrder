@@ -1209,118 +1209,188 @@
             async function process(file) { if (!file) return; loadingOverlay.textContent = 'กำลังประมวลผลสลิป...'; loadingOverlay.style.display = 'flex'; slipStatusEl.textContent = '⏳ กำลังอ่านข้อมูล...'; slipStatusEl.style.color = '#0056b3'; try { const worker = await Tesseract.createWorker('tha+eng', 1, { logger: m => { if (m.status === 'recognizing text') { loadingOverlay.textContent = `ประมวลผลสลิป... ${Math.round(m.progress * 100)}%`; } }, }); const { data: { text } } = await worker.recognize(file); await worker.terminate(); const slipData = extractSlipInfo(text); if (slipData.date || slipData.time || slipData.amount) { paymentMethodEl.value = 'โอน'; } if (slipData.date) { paymentDateEl.value = buddhistToISO(slipData.date); } if (slipData.time) { paymentTimeEl.value = slipData.time; } if (slipData.amount) { const slipAmount = parseFloat(slipData.amount.replace(/,/g, '')); const totalAmount = parseFloat(totalAmountEl.value); if (Math.abs(slipAmount - totalAmount) < 0.01) { slipStatusEl.textContent = `✅ ยอดตรงกัน (${slipAmount.toFixed(2)} บาท)`; slipStatusEl.style.color = '#28a745'; } else { slipStatusEl.textContent = `❌ ยอดไม่ตรง! (สลิป: ${slipAmount.toFixed(2)}, ยอดสุทธิ: ${totalAmount.toFixed(2)})`; slipStatusEl.style.color = '#dc3545'; } } else { slipStatusEl.textContent = '⚠️ ไม่พบยอดเงิน แต่กรอกวันที่/เวลา (ถ้ามี)'; slipStatusEl.style.color = '#ffc107'; } } catch (error) { console.error("Slip error:", error); slipStatusEl.textContent = `❌ เกิดพลาด: ${error.message}`; slipStatusEl.style.color = '#dc3545'; } finally { loadingOverlay.textContent = 'กำลังโหลด...'; loadingOverlay.style.display = 'none'; document.getElementById('slip-file-input').value = ''; } }
             return { process };
         })();
- // --- WAYBILL SORTER MODULE ---
-        window.waybillSorter = (() => {
-            if (window.pdfjsLib) { pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js`; }
-            const modal = document.getElementById('waybill-sorter-modal'); const woNameEl = document.getElementById('waybill-sorter-wo-name'); const selectFolderBtn = document.getElementById('select-pdf-folder-btn'); const folderInput = document.getElementById('pdf-folder-input'); const statCsv = document.getElementById('ws-stat-csv'); const statPdf = document.getElementById('ws-stat-pdf'); const statFound = document.getElementById('ws-stat-found'); const progressBar = document.getElementById('ws-progress-bar'); const statusLog = document.getElementById('ws-status-log'); const downloadMissingBtn = document.getElementById('ws-download-missing-btn'); const closeBtn = document.getElementById('ws-close-btn'); const cropTopInput = document.getElementById('ws-crop-top'); const batchSizeInput = document.getElementById('ws-batch-size');
-            let trackingNumbersRaw = [];
+// --- WAYBILL SORTER MODULE (FIXED: LOG MISSING NUMBERS) ---
+window.waybillSorter = (() => {
+    if (window.pdfjsLib) { pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js`; }
+    
+    const modal = document.getElementById('waybill-sorter-modal'); 
+    const woNameEl = document.getElementById('waybill-sorter-wo-name'); 
+    const selectFolderBtn = document.getElementById('select-pdf-folder-btn'); 
+    const folderInput = document.getElementById('pdf-folder-input'); 
+    const statCsv = document.getElementById('ws-stat-csv'); 
+    const statPdf = document.getElementById('ws-stat-pdf'); 
+    const statFound = document.getElementById('ws-stat-found'); 
+    const progressBar = document.getElementById('ws-progress-bar'); 
+    const statusLog = document.getElementById('ws-status-log'); 
+    const downloadMissingBtn = document.getElementById('ws-download-missing-btn'); 
+    const closeBtn = document.getElementById('ws-close-btn'); 
+    const cropTopInput = document.getElementById('ws-crop-top'); 
+    const batchSizeInput = document.getElementById('ws-batch-size');
+    
+    let trackingNumbersRaw = [];
 
-            function log(message, overwrite = false) { if(overwrite){ const lines = statusLog.textContent.split('\n'); lines[0] = message; statusLog.textContent = lines.join('\n'); } else { statusLog.textContent = message + '\n' + statusLog.textContent; } }
-            function updateProgress(current, total) { progressBar.style.width = (total > 0 ? (current / total) * 100 : 0) + '%'; }
-            function resetUI() { statCsv.textContent = '--'; statPdf.textContent = '--'; statFound.textContent = '--'; progressBar.style.width = '0%'; statusLog.textContent = ''; downloadMissingBtn.disabled = true; downloadMissingBtn.onclick = null; folderInput.value = ''; }
-            function normText(s){ return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
-            function normOCR(s){ return normText(s).replace(/O/g,'0').replace(/I/g,'1').replace(/Z/g,'2').replace(/S/g,'5').replace(/B/g,'8'); }
-            function downloadCSV(filename, rows){ const csv='เลขพัสดุที่ไม่พบ\n'+rows.join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
-            const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
-
-            async function pageTextNormalized(page){ const tc = await page.getTextContent(); let text=''; tc.items.forEach(it=>text+=it.str+' '); return normText(text); }
-            async function renderPageToCanvas(page, scale=2){ const viewport=page.getViewport({scale}); const canvas=document.createElement('canvas'); const ctx=canvas.getContext('2d'); canvas.width=viewport.width; canvas.height=viewport.height; await page.render({canvasContext:ctx, viewport}).promise; return canvas; }
-            function cropTop(canvas, percent){ const p=Math.max(5,Math.min(60,percent)); const h=canvas.height,w=canvas.width, ch=Math.round(h*(p/100)); const c2=document.createElement('canvas'); c2.width=w; c2.height=ch; c2.getContext('2d').drawImage(canvas,0,0,w,ch,0,0,w,ch); return c2; }
-            async function ocrCanvasToNorm(canvas, worker){ const { data: { text } } = await worker.recognize(canvas); return normOCR(text||''); }
-
-            async function mapTrackingInFile(file, targetsTextSet, targetsOCRSet, ocr2textMap, worker, cropTopPct){
-                const buf=await file.arrayBuffer(); const pdf=await pdfjsLib.getDocument({data:buf}).promise; const results=[];
-                for(let i=1;i<=pdf.numPages;i++){
-                    const page=await pdf.getPage(i);
-                    log(`>> ตรวจหาจาก Text...`, true);
-                    const textNorm = await pageTextNormalized(page);
-                    let keyText=null;
-                    for(const t of targetsTextSet){ if(textNorm.includes(t)){ keyText=t; break; } }
-                    if(keyText){ log(`✅ พบจาก Text!`, true); }
-                    if(!keyText){
-                        log(`>> ไม่พบ, เริ่มสแกน OCR ส่วนบน...`, true);
-                        const fullCanvas=await renderPageToCanvas(page,2); const topCanvas=cropTop(fullCanvas, cropTopPct);
-                        const topNorm=await ocrCanvasToNorm(topCanvas, worker);
-                        for(const k of targetsOCRSet){ if(topNorm.includes(k)){ keyText=ocr2textMap.get(k); break; } }
-                        if(keyText){ log(`✅ พบจาก OCR ส่วนบน!`, true); }
-                        if(!keyText){
-                            log(`>> ไม่พบ, เริ่ม OCR ทั้งหน้า...`, true);
-                            const fullNorm=await ocrCanvasToNorm(fullCanvas, worker);
-                            for(const k of targetsOCRSet){ if(fullNorm.includes(k)){ keyText=ocr2textMap.get(k); break; } }
-                            if(keyText){ log(`✅ พบจาก OCR ทั้งหน้า!`, true); }
-                        }
-                    }
-                    if(keyText){ results.push({ trackingKeyText:keyText, pageIndex:i-1 }); }
-                }
-                return { fileArrayBuffer: buf, pages: results };
-            }
-
-            async function processFiles(pdfFilesArray) {
-                if (!pdfFilesArray || pdfFilesArray.length === 0) { log('⚠️ ไม่ได้เลือกไฟล์ PDF'); return; }
-                const pdfFiles = Array.from(pdfFilesArray); statPdf.textContent = pdfFiles.length;
-                let worker = null;
-                try {
-                    const cropTopPct = parseInt(cropTopInput.value, 10) || 25; const batchSize = parseInt(batchSizeInput.value, 10) || 25;
-                    log('⏳ เตรียมข้อมูลเลขพัสดุ...');
-                    const targetsText = trackingNumbersRaw.map(normText); const targetsOCR  = trackingNumbersRaw.map(normOCR); const targetsTextSet=new Set(targetsText); const targetsOCRSet =new Set(targetsOCR); const ocr2textMap=new Map(); for(let i=0;i<trackingNumbersRaw.length;i++){ ocr2textMap.set(targetsOCR[i], targetsText[i]); }
-                    // โค้ดที่แก้ไข
-log('⏳ เริ่มต้นระบบ OCR...');
-worker = await Tesseract.createWorker({
-    logger: m => {
-        if (m.status === 'recognizing text') {
-            const progress = (m.progress * 100).toFixed(0);
-            log(`(OCR กำลังสแกน... ${progress}%)`, true);
-        }
+    function log(message, overwrite = false) { 
+        if(overwrite && statusLog.textContent.includes('\n')){ 
+            const lines = statusLog.textContent.split('\n'); 
+            lines[0] = message; 
+            statusLog.textContent = lines.join('\n'); 
+        } else { 
+            statusLog.textContent = message + '\n' + statusLog.textContent; 
+        } 
     }
-});
+    
+    function resetUI() { 
+        statCsv.textContent = '--'; statPdf.textContent = '--'; statFound.textContent = '--'; 
+        progressBar.style.width = '0%'; statusLog.textContent = ''; 
+        downloadMissingBtn.disabled = true; folderInput.value = ''; 
+    }
 
-await worker.loadLanguage('eng');
-await worker.initialize('eng');
-await worker.setParameters({
-    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-});
-                    log(`⏳ เริ่มสแกน ${pdfFiles.length} ไฟล์ PDF...`);
-                    const mapping=new Map(); const fileBuffers=new Array(pdfFiles.length); let processed=0; updateProgress(0,pdfFiles.length);
-                    for(let idx=0; idx<pdfFiles.length; idx++){
-                        const file=pdfFiles[idx]; log(`🔎 สแกนไฟล์: ${file.name} (${processed+1}/${pdfFiles.length})`);
-                        const { fileArrayBuffer, pages } = await mapTrackingInFile(file, targetsTextSet, targetsOCRSet, ocr2textMap, worker, cropTopPct);
-                        fileBuffers[idx]=fileArrayBuffer;
-                        for(const p of pages){ if(!mapping.has(p.trackingKeyText)){ mapping.set(p.trackingKeyText, { fileIndex: idx, pageIndex: p.pageIndex }); statFound.textContent = `${mapping.size}`; } }
-                        processed++; updateProgress(processed,pdfFiles.length);
-                        await sleep(0);
-                    }
-                    log('⏳ รวมหน้าเป็นไฟล์เดียวตามลำดับ...');
-                    const merged = await PDFLib.PDFDocument.create(); const docCache=new Map(); const missing=[];
-                    for(let i=0;i<trackingNumbersRaw.length;i++){
-                        const keyText = targetsText[i]; const original = trackingNumbersRaw[i];
-                        if(mapping.has(keyText)){ const { fileIndex, pageIndex } = mapping.get(keyText); let srcDoc = docCache.get(fileIndex); if(!srcDoc){ srcDoc = await PDFLib.PDFDocument.load(fileBuffers[fileIndex]); docCache.set(fileIndex, srcDoc); } const [copied] = await merged.copyPages(srcDoc, [pageIndex]); merged.addPage(copied); } 
-                        else { missing.push(original); }
-                        if((i+1)%batchSize===0){ log(`🧩 รวมหน้า... ${i+1}/${trackingNumbersRaw.length}`); await sleep(0); }
-                    }
-                    if(missing.length > 0){ log(`⚠️ ไม่พบ ${missing.length} รายการ`); downloadMissingBtn.disabled=false; downloadMissingBtn.onclick=()=>downloadCSV('missing_tracking.csv', missing); } 
-                    else { log(`✅ พบครบทุกเลข`); }
-                    log('⏳ กำลังบันทึกไฟล์ PDF...'); await sleep(0);
-                    const outBytes = await merged.save(); const blob = new Blob([outBytes], {type:'application/pdf'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`sorted_waybills_${woNameEl.textContent.split(': ')[1]}.pdf`; a.click();
-                    log(`✅ เสร็จสิ้น! ดาวน์โหลดไฟล์แล้ว`);
-                } catch (err) { console.error(err); log('❌ เกิดข้อผิดพลาด: ' + (err?.message || err));
-                } finally { if (worker) { await worker.terminate(); log('ⓘ ปิดระบบ OCR เรียบร้อย'); } folderInput.value = ''; }
+    function normText(s){ return (s||'').toString().toUpperCase().replace(/[^A-Z0-9]/g,'').trim(); }
+    function normOCR(s){ return normText(s).replace(/O/g,'0').replace(/I/g,'1').replace(/Z/g,'2').replace(/S/g,'5').replace(/B/g,'8').replace(/G/g,'6'); }
+
+    async function pageTextNormalized(page){ 
+        const tc = await page.getTextContent(); 
+        return normText(tc.items.map(it => it.str).join('')); 
+    }
+
+    async function renderPageToCanvas(page, scale = 3){
+        const viewport = page.getViewport({scale}); 
+        const canvas = document.createElement('canvas'); 
+        const ctx = canvas.getContext('2d'); 
+        canvas.width = viewport.width; canvas.height = viewport.height; 
+        await page.render({canvasContext:ctx, viewport}).promise; 
+        return canvas; 
+    }
+
+    async function mapTrackingInFile(file, targetsTextSet, targetsOCRSet, ocr2textMap, worker, cropTopPct){
+        const buf = await file.arrayBuffer(); 
+        const pdf = await pdfjsLib.getDocument({data:buf}).promise; 
+        const results = [];
+        
+        for(let i=1; i<=pdf.numPages; i++){
+            const page = await pdf.getPage(i);
+            let keyText = null;
+            const textNorm = await pageTextNormalized(page);
+            for(const t of targetsTextSet){ if(textNorm.includes(t)){ keyText = t; break; } }
+
+            if(!keyText) {
+                const fullCanvas = await renderPageToCanvas(page, 3); 
+                const h = fullCanvas.height, w = fullCanvas.width, ch = Math.round(h * (cropTopPct / 100)); 
+                const topCanvas = document.createElement('canvas');
+                topCanvas.width = w; topCanvas.height = ch;
+                topCanvas.getContext('2d').drawImage(fullCanvas, 0, 0, w, ch, 0, 0, w, ch);
+                const topNorm = normOCR((await worker.recognize(topCanvas)).data.text);
+                for(const k of targetsOCRSet){ if(topNorm.includes(k)){ keyText = ocr2textMap.get(k); break; } }
+                if(!keyText) {
+                    const fullNorm = normOCR((await worker.recognize(fullCanvas)).data.text);
+                    for(const k of targetsOCRSet){ if(fullNorm.includes(k)){ keyText = ocr2textMap.get(k); break; } }
+                }
             }
-            function start(workOrderName, allOrders) {
-                const ordersInWorkOrder = allOrders.filter(order => order.work_order_name === workOrderName && order.tracking_number);
-                trackingNumbersRaw = ordersInWorkOrder.map(order => order.tracking_number);
-                if (trackingNumbersRaw.length === 0) { alert("ไม่พบเลขพัสดุในใบงานนี้"); return; }
-                resetUI();
-                woNameEl.textContent = `ใบงาน: ${workOrderName}`;
-                statCsv.textContent = trackingNumbersRaw.length;
-                log('เตรียมข้อมูลเรียบร้อย กรุณาเลือกโฟลเดอร์ PDF');
-                modal.style.display = 'flex';
+            if(keyText){ results.push({ trackingKeyText: keyText, pageIndex: i-1 }); log(`[หน้า ${i}] ✅ พบ: ${keyText}`, true); }
+        }
+        return { fileArrayBuffer: buf, pages: results };
+    }
+
+    async function processFiles(pdfFilesArray) {
+        if (!pdfFilesArray || pdfFilesArray.length === 0) return;
+        const pdfFiles = Array.from(pdfFilesArray); 
+        statPdf.textContent = pdfFiles.length;
+        let worker = null;
+
+        try {
+            const cropTopPct = parseInt(cropTopInput.value, 10) || 25; 
+            
+            // แยกเลขสั้น
+            const shortTrackings = trackingNumbersRaw.filter(t => t.trim().length <= 7);
+            const validTracking = trackingNumbersRaw.filter(t => t.trim().length > 7);
+            
+            if (shortTrackings.length > 0) {
+                log(`⚠️ เลขพัสดุที่สั้นเกินไป (ข้ามการหา):`);
+                shortTrackings.forEach(num => log(`   ❌ [${num}]`));
             }
-            selectFolderBtn.addEventListener('click', () => folderInput.click());
-            folderInput.addEventListener('change', (e) => processFiles(e.target.files));
-            closeBtn.addEventListener('click', () => { modal.style.display = 'none'; folderInput.value = ''; });
-            modal.addEventListener('click', (e) => { if(e.target === modal) { modal.style.display = 'none'; folderInput.value = ''; }});
-            return { start };
-        })();
+
+            const targetsTextSet = new Set(validTracking.map(normText)); 
+            const targetsOCRSet = new Set(validTracking.map(normOCR)); 
+            const ocr2textMap = new Map(); 
+            validTracking.forEach(t => ocr2textMap.set(normOCR(t), normText(t)));
+
+            worker = await Tesseract.createWorker();
+            await worker.loadLanguage('eng');
+            await worker.initialize('eng');
+            await worker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
+
+            log(`⏳ เริ่มสแกนไฟล์...`);
+            const mapping = new Map(); 
+            const fileBuffers = []; 
+
+            for(let idx=0; idx<pdfFiles.length; idx++){
+                log(`🔎 ไฟล์ ${idx+1}/${pdfFiles.length}: ${pdfFiles[idx].name}`);
+                const { fileArrayBuffer, pages } = await mapTrackingInFile(pdfFiles[idx], targetsTextSet, targetsOCRSet, ocr2textMap, worker, cropTopPct);
+                fileBuffers[idx] = fileArrayBuffer;
+                pages.forEach(p => { if(!mapping.has(p.trackingKeyText)) mapping.set(p.trackingKeyText, { fileIndex: idx, pageIndex: p.pageIndex }); });
+                statFound.textContent = mapping.size;
+                progressBar.style.width = `${((idx+1)/pdfFiles.length)*100}%`;
+            }
+
+            log('⏳ กำลังจัดเตรียมไฟล์ PDF ผลลัพธ์...');
+            const merged = await PDFLib.PDFDocument.create(); 
+            const docCache = new Map(); 
+            const missing = [];
+
+            // ตรวจสอบและ Log รายชื่อที่ไม่พบ
+            log(`-----------------------------------`);
+            for(const original of trackingNumbersRaw){
+                const key = normText(original);
+                if(mapping.has(key)){ 
+                    const { fileIndex, pageIndex } = mapping.get(key); 
+                    if(!docCache.has(fileIndex)) docCache.set(fileIndex, await PDFLib.PDFDocument.load(fileBuffers[fileIndex]));
+                    const [copied] = await merged.copyPages(docCache.get(fileIndex), [pageIndex]); 
+                    merged.addPage(copied); 
+                } else { 
+                    missing.push(original); 
+                    log(`   ❌ [${original}] ไม่พบในไฟล์ PDF`); // <-- พ่น Log ตรงนี้
+                }
+            }
+            log(`-----------------------------------`);
+
+            const outBytes = await merged.save(); 
+            const blob = new Blob([outBytes], {type:'application/pdf'}); 
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(blob); 
+            a.download = `Sorted_${woNameEl.textContent.split(': ')[1]}.pdf`; 
+            a.click();
+            
+            if(missing.length > 0) {
+                log(`❌ ไม่พบใบปะหน้าทั้งหมด ${missing.length} รายการ`);
+                downloadMissingBtn.disabled = false;
+                downloadMissingBtn.onclick = () => {
+                    const csv = '\ufeffเลขพัสดุที่ไม่พบ\n' + missing.join('\n');
+                    const b = new Blob([csv], {type:'text/csv'});
+                    const url = URL.createObjectURL(b);
+                    const link = document.createElement('a');
+                    link.href = url; link.download = 'missing_tracking.csv'; link.click();
+                };
+            } else { log('✅ สำเร็จ! พบครบทุกรายการ'); }
+
+        } catch (err) { log('❌ ผิดพลาด: ' + err.message); } 
+        finally { if (worker) await worker.terminate(); }
+    }
+
+    function start(workOrderName, allOrders) {
+        const orders = allOrders.filter(o => o.work_order_name === workOrderName && o.tracking_number);
+        trackingNumbersRaw = orders.map(o => o.tracking_number.trim());
+        resetUI();
+        woNameEl.textContent = `ใบงาน: ${workOrderName}`;
+        statCsv.textContent = trackingNumbersRaw.length;
+        modal.style.display = 'flex';
+    }
+
+    selectFolderBtn.onclick = () => folderInput.click();
+    folderInput.onchange = (e) => processFiles(e.target.files);
+    closeBtn.onclick = () => modal.style.display = 'none';
+
+    return { start };
+})();
         // --- ORDER SYSTEM MODULE ---
          window.orderSystem = (() => {
 function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
