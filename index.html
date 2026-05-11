@@ -3153,7 +3153,47 @@ remainingBills.forEach(order => {
                     <button class="btn btn-sm btn-edit-tracking" title="แก้ไขเลขพัสดุ">✏️</button>
                 `; 
             }
-            async function saveTrackingNumber(trackingSpan) { const orderItem = trackingSpan.closest('.order-list-item'); const orderId = orderItem.dataset.orderId; const newTrackingNumber = trackingSpan.querySelector('.tracking-input').value.trim(); if (!newTrackingNumber) { alert('เลขพัสดุห้ามว่าง'); return; } loadingOverlay.style.display = 'flex'; try { const { error } = await supabaseClient.from('orders').update({ tracking_number: newTrackingNumber }).eq('id', orderId); if (error) throw error; alert('อัปเดตสำเร็จ!'); } catch (error) { console.error('Error updating tracking:', error); alert('เกิดพลาด: ' + error.message); exitTrackingEditMode(trackingSpan); } finally { loadingOverlay.style.display = 'none'; } }
+            async function saveTrackingNumber(trackingSpan) {
+    const orderItem = trackingSpan.closest('.order-list-item');
+    const orderId = orderItem.dataset.orderId;
+    const newTrackingNumber = trackingSpan.querySelector('.tracking-input').value.trim();
+
+    // --- ส่วนที่แก้ไข: อนุญาตให้ลบเลขพัสดุออกได้ ---
+    if (!newTrackingNumber) {
+        if (!confirm('คุณต้องการลบเลขพัสดุออก (ทำให้เป็นค่าว่าง) ใช่หรือไม่?')) {
+            // ถ้าผู้ใช้เปลี่ยนใจ ไม่ลบ ให้ยกเลิกการทำงาน
+            exitTrackingEditMode(trackingSpan);
+            return;
+        }
+    }
+
+    loadingOverlay.style.display = 'flex';
+    try {
+        // อัปเดตข้อมูลลงฐานข้อมูล (ถ้าว่างจะส่งค่าเป็น null)
+        const { error } = await supabaseClient.from('orders')
+            .update({ tracking_number: newTrackingNumber || null })
+            .eq('id', orderId);
+
+        if (error) throw error;
+
+        // อัปเดตข้อมูลในตัวแปรเครื่อง (allOrdersData) เพื่อให้หน้าจอเปลี่ยนตามทันที
+        const orderData = allOrdersData.find(o => String(o.id) === String(orderId));
+        if (orderData) {
+            orderData.tracking_number = newTrackingNumber || null;
+        }
+
+        alert('บันทึกข้อมูลเรียบร้อย!');
+        // สั่งให้ออกจากโหมดแก้ไขและแสดงข้อความ "ยังไม่มีเลขพัสดุ"
+        exitTrackingEditMode(trackingSpan, newTrackingNumber || null);
+        
+    } catch (error) {
+        console.error('Error updating tracking:', error);
+        alert('เกิดข้อผิดพลาด: ' + error.message);
+        exitTrackingEditMode(trackingSpan);
+    } finally {
+        loadingOverlay.style.display = 'none';
+    }
+}
             async function generateNextBillNo(channelCode) { const today = new Date(); const year = String(today.getFullYear() + 543).slice(-2); const month = String(today.getMonth() + 1).padStart(2, '0'); const prefix = `${channelCode}${year}${month}`; const { data, error } = await supabaseClient.from('orders').select('bill_no').like('bill_no', `${prefix}%`).order('bill_no', { ascending: false }).limit(1); if (error) throw new Error(`ค้นหาบิลล่าสุดไม่ได้: ${error.message}`); let nextSequence = 1; if (data.length > 0) { const lastBillNo = data[0].bill_no; const lastSequence = parseInt(lastBillNo.slice(prefix.length), 10); if (!isNaN(lastSequence)) { nextSequence = lastSequence + 1; } } return `${prefix}${String(nextSequence).padStart(5, '0')}`; }
             
             function calculateTotal() {
