@@ -4540,6 +4540,7 @@ window.packingSystem = (() => {
 
     let allOrdersForPacking = [];
     let aggregatedData = [];
+    let currentWOOrdersList = [];
     let completedIndices = new Set();
     let currentIndex = -1;
     let currentWorkOrderName = null;
@@ -4699,12 +4700,15 @@ window.packingSystem = (() => {
 
         loadingOverlay.style.display = "flex";
         currentWorkOrderName = workOrderName;
-        // 1. Clear inactivity timer
         clearTimeout(inactivityTimer);
 
         const { data, error } = await supabaseClient.from("orders").select("*, order_items(*)").eq("work_order_name", workOrderName).order('bill_no', { ascending: true });
         loadingOverlay.style.display = "none";
+        
         if (error) { alert("ดึงข้อมูลไม่ได้: " + error.message); return; }
+
+        currentWOOrdersList = data || []; // <--- เก็บค่าบิลทั้งหมด (เช่น 50 บิล) ไว้ที่นี่
+        
         const ordersWithTracking = data.filter(order => order.tracking_number && order.tracking_number.trim() !== "");
         prepareDataForPacking(ordersWithTracking);
         if (aggregatedData.length > 0) {
