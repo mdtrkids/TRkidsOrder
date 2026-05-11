@@ -18,6 +18,7 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+   <script src="https://unpkg.com/@zxing/library@latest"></script>
     
     <!-- Library for QR Code Generation (Added for Packing System) -->
     <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
@@ -1210,6 +1211,7 @@
             return { process };
         })();
 // --- WAYBILL SORTER MODULE (FIXED: LOG MISSING NUMBERS) ---
+// --- WAYBILL SORTER MODULE (HYBRID: TEXT + MULTI-BARCODE + OCR) ---
 window.waybillSorter = (() => {
     if (window.pdfjsLib) { pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js`; }
     
@@ -1225,7 +1227,9 @@ window.waybillSorter = (() => {
     const downloadMissingBtn = document.getElementById('ws-download-missing-btn'); 
     const closeBtn = document.getElementById('ws-close-btn'); 
     const cropTopInput = document.getElementById('ws-crop-top'); 
-    const batchSizeInput = document.getElementById('ws-batch-size');
+
+    // เริ่มต้นตัวอ่านบาร์โค้ด (รองรับหลายรูปแบบพร้อมกัน)
+    const barcodeReader = new ZXing.BrowserMultiFormatReader();
     
     let trackingNumbersRaw = [];
 
@@ -1248,12 +1252,7 @@ window.waybillSorter = (() => {
     function normText(s){ return (s||'').toString().toUpperCase().replace(/[^A-Z0-9]/g,'').trim(); }
     function normOCR(s){ return normText(s).replace(/O/g,'0').replace(/I/g,'1').replace(/Z/g,'2').replace(/S/g,'5').replace(/B/g,'8').replace(/G/g,'6'); }
 
-    async function pageTextNormalized(page){ 
-        const tc = await page.getTextContent(); 
-        return normText(tc.items.map(it => it.str).join('')); 
-    }
-
-    async function renderPageToCanvas(page, scale = 3){
+    async function renderPageToCanvas(page, scale = 2.5){
         const viewport = page.getViewport({scale}); 
         const canvas = document.createElement('canvas'); 
         const ctx = canvas.getContext('2d'); 
@@ -1270,23 +1269,54 @@ window.waybillSorter = (() => {
         for(let i=1; i<=pdf.numPages; i++){
             const page = await pdf.getPage(i);
             let keyText = null;
-            const textNorm = await pageTextNormalized(page);
+
+            // 1. ลองอ่านจาก Text Layer (Digital PDF) - เร็วที่สุด
+            const tc = await page.getTextContent();
+            const textNorm = normText(tc.items.map(it => it.str).join(''));
             for(const t of targetsTextSet){ if(textNorm.includes(t)){ keyText = t; break; } }
 
             if(!keyText) {
-                const fullCanvas = await renderPageToCanvas(page, 3); 
-                const h = fullCanvas.height, w = fullCanvas.width, ch = Math.round(h * (cropTopPct / 100)); 
-                const topCanvas = document.createElement('canvas');
-                topCanvas.width = w; topCanvas.height = ch;
-                topCanvas.getContext('2d').drawImage(fullCanvas, 0, 0, w, ch, 0, 0, w, ch);
-                const topNorm = normOCR((await worker.recognize(topCanvas)).data.text);
-                for(const k of targetsOCRSet){ if(topNorm.includes(k)){ keyText = ocr2textMap.get(k); break; } }
+                // ขยายภาพให้ชัดขึ้นเพื่อการอ่านบาร์โค้ดและ OCR
+                const canvas = await renderPageToCanvas(page, 2.8);
+                
+                // 2. ลองอ่านจาก "บาร์โค้ด และ QR Code" ทุกอันในหน้านี้
+                try {
+                    const barcodeResults = await barcodeReader.decodeFromCanvas(canvas);
+                    const allFound = Array.isArray(barcodeResults) ? barcodeResults : [barcodeResults];
+                    
+                    for(const b of allFound) {
+                        const bText = normText(b.text);
+                        // ถ้าบาร์โค้ดที่เจอตรงกับเลขพัสดุในใบงานเรา ให้เลือกทันที
+                        if(targetsTextSet.has(bText)) { 
+                            keyText = bText; 
+                            log(`[หน้า ${i}] 🎯 พบจากบาร์โค้ด: ${keyText}`, true);
+                            break; 
+                        }
+                    }
+                } catch(e) { /* ไม่เจอบาร์โค้ดที่ต้องการ */ }
+
+                // 3. ถ้ายังไม่เจอ (กรณีบาร์โค้ดจาง/เสีย) ให้ใช้ OCR (อ่านภาพตัวหนังสือ)
                 if(!keyText) {
-                    const fullNorm = normOCR((await worker.recognize(fullCanvas)).data.text);
-                    for(const k of targetsOCRSet){ if(fullNorm.includes(k)){ keyText = ocr2textMap.get(k); break; } }
+                    const h = canvas.height, w = canvas.width, ch = Math.round(h * (cropTopPct / 100)); 
+                    const topCanvas = document.createElement('canvas');
+                    topCanvas.width = w; topCanvas.height = ch;
+                    topCanvas.getContext('2d').drawImage(canvas, 0, 0, w, ch, 0, 0, w, ch);
+                    
+                    const topNorm = normOCR((await worker.recognize(topCanvas)).data.text);
+                    for(const k of targetsOCRSet){ if(topNorm.includes(k)){ keyText = ocr2textMap.get(k); break; } }
+                    
+                    if(!keyText) {
+                        const fullNorm = normOCR((await worker.recognize(canvas)).data.text);
+                        for(const k of targetsOCRSet){ if(fullNorm.includes(k)){ keyText = ocr2textMap.get(k); break; } }
+                    }
                 }
             }
-            if(keyText){ results.push({ trackingKeyText: keyText, pageIndex: i-1 }); log(`[หน้า ${i}] ✅ พบ: ${keyText}`, true); }
+
+            if(keyText){ 
+                results.push({ trackingKeyText: keyText, pageIndex: i-1 }); 
+            } else {
+                log(`[หน้า ${i}] ❌ ไม่พบเลขพัสดุในหน้านี้`, true);
+            }
         }
         return { fileArrayBuffer: buf, pages: results };
     }
@@ -1299,46 +1329,56 @@ window.waybillSorter = (() => {
 
         try {
             const cropTopPct = parseInt(cropTopInput.value, 10) || 25; 
-            
-            // แยกเลขสั้น
-            const shortTrackings = trackingNumbersRaw.filter(t => t.trim().length <= 7);
-            const validTracking = trackingNumbersRaw.filter(t => t.trim().length > 7);
-            
-            if (shortTrackings.length > 0) {
-                log(`⚠️ เลขพัสดุที่สั้นเกินไป (ข้ามการหา):`);
-                shortTrackings.forEach(num => log(`   ❌ [${num}]`));
-            }
+            const validTracking = trackingNumbersRaw.filter(t => t.trim().length > 5);
 
             const targetsTextSet = new Set(validTracking.map(normText)); 
             const targetsOCRSet = new Set(validTracking.map(normOCR)); 
             const ocr2textMap = new Map(); 
             validTracking.forEach(t => ocr2textMap.set(normOCR(t), normText(t)));
 
-            worker = await Tesseract.createWorker();
+            log(`⏳ กำลังเริ่มต้นระบบ OCR...`);
+
+            // --- ส่วนที่แก้ไข: การสร้าง Worker สำหรับ Tesseract v4 ให้ถูกต้อง ---
+            worker = await Tesseract.createWorker({
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        // อัปเดตความคืบหน้าเล็กน้อยใน log ได้ถ้าต้องการ
+                    }
+                }
+            });
+            
             await worker.loadLanguage('eng');
             await worker.initialize('eng');
-            await worker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
+            await worker.setParameters({
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+            });
+            // -----------------------------------------------------------
 
-            log(`⏳ เริ่มสแกนไฟล์...`);
+            log(`⏳ เริ่มสแกนไฟล์ ${pdfFiles.length} รายการ (ระบบ Barcode/QR พร้อม)...`);
             const mapping = new Map(); 
             const fileBuffers = []; 
 
             for(let idx=0; idx<pdfFiles.length; idx++){
-                log(`🔎 ไฟล์ ${idx+1}/${pdfFiles.length}: ${pdfFiles[idx].name}`);
-                const { fileArrayBuffer, pages } = await mapTrackingInFile(pdfFiles[idx], targetsTextSet, targetsOCRSet, ocr2textMap, worker, cropTopPct);
-                fileBuffers[idx] = fileArrayBuffer;
-                pages.forEach(p => { if(!mapping.has(p.trackingKeyText)) mapping.set(p.trackingKeyText, { fileIndex: idx, pageIndex: p.pageIndex }); });
+                log(`📂 กำลังอ่านไฟล์ ${idx+1}/${pdfFiles.length}: ${pdfFiles[idx].name}`);
+                try {
+                    const { fileArrayBuffer, pages } = await mapTrackingInFile(pdfFiles[idx], targetsTextSet, targetsOCRSet, ocr2textMap, worker, cropTopPct);
+                    fileBuffers[idx] = fileArrayBuffer;
+                    pages.forEach(p => { 
+                        if(!mapping.has(p.trackingKeyText)) mapping.set(p.trackingKeyText, { fileIndex: idx, pageIndex: p.pageIndex }); 
+                    });
+                } catch (fileErr) {
+                    log(`❌ ไฟล์ ${pdfFiles[idx].name} มีปัญหา: ${fileErr.message}`);
+                }
+                
                 statFound.textContent = mapping.size;
                 progressBar.style.width = `${((idx+1)/pdfFiles.length)*100}%`;
             }
 
-            log('⏳ กำลังจัดเตรียมไฟล์ PDF ผลลัพธ์...');
+            log('📊 กำลังรวมไฟล์ PDF ตามลำดับใบงาน...');
             const merged = await PDFLib.PDFDocument.create(); 
             const docCache = new Map(); 
             const missing = [];
 
-            // ตรวจสอบและ Log รายชื่อที่ไม่พบ
-            log(`-----------------------------------`);
             for(const original of trackingNumbersRaw){
                 const key = normText(original);
                 if(mapping.has(key)){ 
@@ -1348,10 +1388,8 @@ window.waybillSorter = (() => {
                     merged.addPage(copied); 
                 } else { 
                     missing.push(original); 
-                    log(`   ❌ [${original}] ไม่พบในไฟล์ PDF`); // <-- พ่น Log ตรงนี้
                 }
             }
-            log(`-----------------------------------`);
 
             const outBytes = await merged.save(); 
             const blob = new Blob([outBytes], {type:'application/pdf'}); 
@@ -1361,7 +1399,7 @@ window.waybillSorter = (() => {
             a.click();
             
             if(missing.length > 0) {
-                log(`❌ ไม่พบใบปะหน้าทั้งหมด ${missing.length} รายการ`);
+                log(`⚠️ เสร็จสิ้น! พบใบปะหน้า ${mapping.size} รายการ, ไม่พบ ${missing.length} รายการ`);
                 downloadMissingBtn.disabled = false;
                 downloadMissingBtn.onclick = () => {
                     const csv = '\ufeffเลขพัสดุที่ไม่พบ\n' + missing.join('\n');
@@ -1370,10 +1408,20 @@ window.waybillSorter = (() => {
                     const link = document.createElement('a');
                     link.href = url; link.download = 'missing_tracking.csv'; link.click();
                 };
-            } else { log('✅ สำเร็จ! พบครบทุกรายการ'); }
+            } else { 
+                log('✅ สำเร็จ! พบใบปะหน้าครบทุกรายการ'); 
+            }
 
-        } catch (err) { log('❌ ผิดพลาด: ' + err.message); } 
-        finally { if (worker) await worker.terminate(); }
+        } catch (err) { 
+            console.error(err);
+            log('❌ เกิดข้อผิดพลาดร้ายแรง: ' + err.message); 
+        } 
+        finally { 
+            if (worker) {
+                await worker.terminate();
+                log('🧹 คืนค่าหน่วยความจำเรียบร้อย');
+            }
+        }
     }
 
     function start(workOrderName, allOrders) {
