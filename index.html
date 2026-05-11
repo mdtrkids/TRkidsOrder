@@ -3798,66 +3798,63 @@ function exportMasterStatusReport() {
 
             if (itemsInWorkOrder.length === 0) { alert('ไม่พบสินค้า'); return; }
 
-            // --- 1. กรองรายการที่ไม่ต้องการแสดงในใบเบิกกระดาษ/สรุป ---
+            // --- 1. แยกรายการสำหรับแสดงผล (PNG/Preview) ---
             const excludedCategories = ['UV', 'STK', 'TUBE'];
-            const filteredItems = itemsInWorkOrder.filter(item => {
+            const filteredItemsForDisplay = itemsInWorkOrder.filter(item => {
                 const cat = (item.product_category || '').toUpperCase();
                 const productName = (item.product_name || '').trim();
                 if (productName === "RLC ไม้บรรทัดใส 18cm") return true;
                 return !excludedCategories.some(ex => cat.includes(ex));
             });
 
-            // --- 2. จัดกลุ่มและนับจำนวน (Aggregate) ---
-            const mainItemsMap = {};
-            filteredItems.forEach(item => {
-                const key = item.product_id;
-                if (!mainItemsMap[key]) {
-                    const cat = (item.product_category || '').toUpperCase();
-                    const name = (item.product_name || '').trim();
-                    let dept = 'แผนกทั่วไป';
-                    if (cat.includes('STAMP')) dept = 'แผนก Stamp';
-                    else if (cat.includes('LASER')) dept = 'แผนก Laser';
-                    else if (cat.includes('UV') || cat.includes('SUBLIMATION') || name === 'RLC ไม้บรรทัดใส 18cm') dept = 'แผนก CTT';
+            // --- 2. ฟังก์ชันช่วยจัดกลุ่มและนับจำนวน (ใช้ทั้ง Display และ CSV) ---
+            function aggregateItems(itemsArray) {
+                const map = {};
+                itemsArray.forEach(item => {
+                    const key = item.product_id;
+                    if (!map[key]) {
+                        const cat = (item.product_category || '').toUpperCase();
+                        const name = (item.product_name || '').trim();
+                        let dept = 'แผนกทั่วไป';
+                        if (cat.includes('STAMP')) dept = 'แผนก Stamp';
+                        else if (cat.includes('LASER')) dept = 'แผนก Laser';
+                        else if (cat.includes('UV') || cat.includes('SUBLIMATION') || name === 'RLC ไม้บรรทัดใส 18cm') dept = 'แผนก CTT';
 
-                    mainItemsMap[key] = {
-                        woName: workOrderName,
-                        code: item.product_code || 'N/A',
-                        name: item.product_name,
-                        location: item.storage_location || 'N/A',
-                        category: cat,
-                        dept: dept,
-                        qty: 0
-                    };
-                }
-                mainItemsMap[key].qty += 1;
-            });
+                        map[key] = {
+                            woName: workOrderName,
+                            code: item.product_code || 'N/A',
+                            name: item.product_name,
+                            location: item.storage_location || 'N/A',
+                            category: cat,
+                            dept: dept,
+                            qty: 0
+                        };
+                    }
+                    map[key].qty += 1;
+                });
 
-            // --- 3. คำนวณจำนวนจริง (หาร 5 สำหรับ Condo Stamp) และเตรียมข้อมูลสำหรับ CSV ---
-            const aggregatedListForExport = [];
+                return Object.values(map).map(item => {
+                    let finalQty = item.qty;
+                    if (item.category.includes('CONDO STAMP')) {
+                        finalQty = Math.ceil(item.qty / 5);
+                    }
+                    return { ...item, finalQty: finalQty };
+                });
+            }
+
+            // ข้อมูลสำหรับสรุปในกระดาษ (Filtered)
+            const displayList = aggregateItems(filteredItemsForDisplay);
+            
+            // ข้อมูลสำหรับ CSV (Unfiltered - เอาทั้งหมด!)
+            const fullCsvList = aggregateItems(itemsInWorkOrder);
+
             const deptGroups = {};
-
-            Object.values(mainItemsMap).forEach(item => {
-                let finalQty = item.qty;
-                if (item.category.includes('CONDO STAMP')) {
-                    finalQty = Math.ceil(item.qty / 5); // หาร 5 และปัดขึ้น
-                }
-                item.finalQty = finalQty;
-
-                // สำหรับแสดงผลในตาราง Preview/PNG (จัดกลุ่มตามแผนก)
+            displayList.forEach(item => {
                 if (!deptGroups[item.dept]) deptGroups[item.dept] = [];
                 deptGroups[item.dept].push(item);
-
-                // สำหรับ Export CSV/XLSX
-                aggregatedListForExport.push({
-                    woName: item.woName,
-                    code: item.code,
-                    name: item.name,
-                    location: item.location,
-                    qty: item.finalQty
-                });
             });
 
-            // เรียงลำดับแผนกและเรียงจุดเก็บภายในแผนก
+            // เรียงลำดับแผนกและเรียงจุดเก็บ
             const sortedDepts = Object.keys(deptGroups).sort();
             sortedDepts.forEach(d => {
                 deptGroups[d].sort((a, b) => a.location.localeCompare(b.location));
@@ -3876,7 +3873,7 @@ function exportMasterStatusReport() {
 
             const today = new Date().toLocaleDateString('th-TH');
 
-            // --- ฟังก์ชัน Render Table ตามแผนก (สำหรับ Preview และ PNG) ---
+            // --- 3. Render HTML สำหรับ Preview และ PNG (ใช้ข้อมูล Filtered) ---
             const renderHtmlTables = (isForPNG = false) => {
                 const style = isForPNG ? 'border: 1px solid black; padding: 3px 5px; font-size: 11px;' : 'border: 1px solid #ddd; padding: 6px; font-size: 12px;';
                 const tableStyle = `style="width: 100%; border-collapse: collapse; margin-bottom: 15px; table-layout: fixed;"`;
@@ -3915,7 +3912,7 @@ function exportMasterStatusReport() {
                     });
                     html += `</tbody></table>`;
                 }
-
+                
                 if(isForPNG) {
                     html += `<div style="display:flex; justify-content:space-between; margin-top:20px; padding-top:10px;">
                                 <div style="border:1px solid black; width:48%; height:60px; display:flex; flex-direction:column; justify-content:space-between; padding:5px;">
@@ -3935,9 +3932,9 @@ function exportMasterStatusReport() {
             previewContainer.innerHTML = renderHtmlTables(false);
             pngContainer.innerHTML = renderHtmlTables(true);
 
-            // เมื่อกดปุ่ม Export ให้ส่งค่าที่ถูก Aggregate และหาร 5 แล้วไปใช้ทั้ง XLSX และ CSV
+            // ปุ่ม Export: ส่ง displayList ไปทำ XLSX และ fullCsvList ไปทำ CSV
             document.getElementById('export-all-picking-btn').onclick = () => {
-                exportAllPickingFinal(aggregatedListForExport, finalSpareList, workOrderName, aggregatedListForExport);
+                exportAllPickingFinal(displayList, finalSpareList, workOrderName, fullCsvList);
             };
 
             modal.style.display = 'flex';
