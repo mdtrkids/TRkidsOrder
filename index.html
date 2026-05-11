@@ -1778,13 +1778,23 @@ otherStatuses.forEach(status => {
 
                 const workOrdersFilter = filters.work_orders; const workOrdersSearch = searchTerms.work_orders;
                 allWorkOrdersData.forEach(wo => {
-                    const billsInWorkOrder = allOrdersData.filter(order => order.work_order_name === wo.work_order_name);
-                    if (workOrdersFilter !== 'all' && wo.channel_code !== workOrdersFilter) return;
-                    if (workOrdersSearch) { 
-                        const woNameMatches = wo.work_order_name.toLowerCase().includes(workOrdersSearch); 
-                        const anyBillMatches = billsInWorkOrder.some(bill => (bill.bill_no && bill.bill_no.toLowerCase().includes(workOrdersSearch)) || (bill.customer_name && bill.customer_name.toLowerCase().includes(workOrdersSearch)) || (bill.tracking_number && bill.tracking_number.toLowerCase().includes(workOrdersSearch))); 
-                        if (!woNameMatches && !anyBillMatches) return; 
-                    }
+    const billsInWorkOrder = allOrdersData.filter(order => order.work_order_name === wo.work_order_name);
+    
+    // ถ้ากำลังค้นหาแล้วไม่เจอบิลในใบงานนี้ และชื่อใบงานก็ไม่ตรง ให้ข้ามไปเลย
+    if (workOrdersSearch) { 
+        const woNameMatches = wo.work_order_name.toLowerCase().includes(workOrdersSearch); 
+        const anyBillMatches = billsInWorkOrder.some(bill => 
+            (bill.bill_no && bill.bill_no.toLowerCase().includes(workOrdersSearch)) || 
+            (bill.customer_name && bill.customer_name.toLowerCase().includes(workOrdersSearch))
+        ); 
+        if (!woNameMatches && !anyBillMatches) return; 
+    }
+    
+    // ป้องกันการโชว์ 0 บิล กรณีที่ข้อมูลยังโหลดไม่มา
+    if (!workOrdersSearch && billsInWorkOrder.length === 0) {
+        // ถ้าเป็นช่วงปกติแต่บิลหายไป (เพราะ allOrdersData ว่าง) ให้ข้ามการวาดไปก่อนเพื่อรอ fetch ใหม่
+        return; 
+    }
                     
                     const allHaveTracking = billsInWorkOrder.length > 0 && billsInWorkOrder.every(bill => bill.tracking_number && bill.tracking_number.trim() !== '');
                     const trackingStatusIcon = allHaveTracking ? '<span style="color: green; font-weight: bold; margin-left: 8px;">✓</span>' : '';
@@ -4385,31 +4395,40 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
 
                 const searchInputIds = ['search-waiting', 'search-complete', 'search-shipped', 'search-cancelled', 'search-work-orders'];
                 searchInputIds.forEach(id => {
-                    const el = container.querySelector(`#${id}`);
-                    if (el) {
-                        el.addEventListener('input', (e) => {
-                            const query = e.target.value; 
-                            searchInputIds.forEach(otherId => {
-                                const otherEl = container.querySelector(`#${otherId}`);
-                                if (otherEl && otherEl !== e.target) {
-                                    otherEl.value = query;
-                                }
-                            });
+    const el = container.querySelector(`#${id}`);
+    if (el) {
+        el.addEventListener('input', (e) => {
+            const query = e.target.value;
+            // ... (โค้ดส่วน sync ช่องค้นหาเดิม) ...
 
-                            renderAllTabs();
+            renderAllTabs();
 
-                            clearTimeout(searchDebounceTimer);
-                            searchDebounceTimer = setTimeout(async () => {
-                                const trimmedQuery = query.trim();
-                                if (trimmedQuery.length >= 3) {
-                                    await performDatabaseSearch(trimmedQuery);
-                                } else if (trimmedQuery.length === 0) {
-                                    await loadInitialData(true); 
-                                }
-                            }, 600);
-                        });
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(async () => {
+                const trimmedQuery = query.trim();
+                if (trimmedQuery.length >= 3) {
+                    await performDatabaseSearch(trimmedQuery);
+                } else if (trimmedQuery.length === 0) {
+                    // --- จุดที่แก้ไข: ตรวจสอบว่าอยู่ Tab ไหน แล้วโหลดข้อมูลของ Tab นั้นกลับมา ---
+                    const activeTab = container.querySelector('.tab-link.active').dataset.tab;
+                    const statusMap = {
+                        'tab-waiting': 'รอลงข้อมูล',
+                        'tab-complete': 'ลงข้อมูลเสร็จสิ้น',
+                        'tab-work-orders': 'ใบงาน (กำลังผลิต)',
+                        'tab-shipped': 'จัดส่งแล้ว',
+                        'tab-cancelled': 'ยกเลิก'
+                    };
+                    
+                    if (statusMap[activeTab]) {
+                        await fetchOrdersByStatus(statusMap[activeTab]);
+                    } else {
+                        await loadInitialData(true);
                     }
-                });
+                }
+            }, 600);
+        });
+    }
+});
                 document.getElementById('download-template-btn').addEventListener('click', downloadStandardOrderTemplate); document.getElementById('download-pgtr-template-btn')?.addEventListener('click', downloadPgtrTemplate); document.getElementById('download-wy-template-btn')?.addEventListener('click', downloadWyTemplate);
                 
                 importOrdersBtn.addEventListener('click', () => importOrdersFileInput.click()); 
