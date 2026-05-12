@@ -5161,12 +5161,28 @@ applyPackingFilters();
 
     function updateFinalizeButtonVisibility() {
         let hasPending = false;
-        completedIndices.forEach(idx => { if (aggregatedData[idx] && !aggregatedData[idx][0].isOrderComplete) hasPending = true; });
+        completedIndices.forEach(idx => { 
+            if (aggregatedData[idx] && !aggregatedData[idx][0].isOrderComplete) hasPending = true; 
+        });
+        
         if (shipAllScannedBtn) shipAllScannedBtn.style.display = hasPending ? 'inline-block' : 'none';
 
-        if (currentWorkOrderName && aggregatedData.length > 0 && completedIndices.size === aggregatedData.length) {
-            if (aggregatedData.every(g => g[0].isOrderComplete)) finalizeWoBtn.style.display = 'inline-block';
-        } else { finalizeWoBtn.style.display = 'none'; }
+        // --- ส่วนที่แก้ไขให้รองรับบิลยกเลิก ---
+        
+        // 1. นับเฉพาะบิลที่ "ไม่ใช่สถานะยกเลิก" (บิลที่ต้องส่งจริงๆ)
+        const activeBills = currentWOOrdersList.filter(o => o.status !== 'ยกเลิก');
+        const activeCount = activeBills.length; 
+
+        // 2. นับบิลที่ "จัดส่งแล้ว" ในบรรดาบิลที่ยังไม่ยกเลิก
+        const shippedCount = activeBills.filter(o => o.status === 'จัดส่งแล้ว').length;
+
+        // 3. ตรวจสอบเงื่อนไขการแสดงปุ่ม
+        if (currentWorkOrderName && activeCount > 0 && shippedCount === activeCount) {
+            // ถ้าบิลที่ยังใช้งานอยู่ (ไม่ยกเลิก) ส่งครบหมดแล้ว ให้แสดงปุ่มปิดใบงานได้เลย
+            finalizeWoBtn.style.display = 'inline-block';
+        } else { 
+            finalizeWoBtn.style.display = 'none'; 
+        }
     }
 
     const updateStatus = (t, c) => { statusMessage.textContent = t; statusMessage.className = `status-${c}`; };
