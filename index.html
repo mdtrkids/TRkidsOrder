@@ -1425,13 +1425,29 @@ window.waybillSorter = (() => {
     }
 
     function start(workOrderName, allOrders) {
-        const orders = allOrders.filter(o => o.work_order_name === workOrderName && o.tracking_number);
-        trackingNumbersRaw = orders.map(o => o.tracking_number.trim());
-        resetUI();
-        woNameEl.textContent = `ใบงาน: ${workOrderName}`;
-        statCsv.textContent = trackingNumbersRaw.length;
-        modal.style.display = 'flex';
-    }
+    // ดึงออร์เดอร์ที่อยู่ในใบงานนี้
+    const orders = allOrders.filter(o => o.work_order_name === workOrderName);
+    
+    // ดึงเลขพัสดุออกมา หากไม่มีเลขพัสดุ (แต่เป็น INFU) ให้ลองดึงจากช่องที่อยู่แทน
+    trackingNumbersRaw = orders.map(o => {
+        let t = o.tracking_number ? o.tracking_number.trim() : "";
+        
+        // ถ้าเลขพัสดุว่าง และเป็น INFU ให้เช็คว่าที่อยู่ขึ้นต้นด้วยรหัสขนส่งไหม
+        if (!t && o.channel_code === 'INFU' && o.customer_address) {
+            const addr = o.customer_address.trim().toUpperCase();
+            // ตรวจสอบ Prefix ขนส่งยอดฮิต
+            if (/^(TH|SPX|LEX|KER|KEX|SHP|88|66)/.test(addr)) {
+                t = addr;
+            }
+        }
+        return t;
+    }).filter(t => t !== ""); // กรองเอาเฉพาะที่มีข้อมูลเลขพัสดุ
+
+    resetUI();
+    woNameEl.textContent = `ใบงาน: ${workOrderName}`;
+    statCsv.textContent = trackingNumbersRaw.length;
+    modal.style.display = 'flex';
+}
 
     selectFolderBtn.onclick = () => folderInput.click();
     folderInput.onchange = (e) => processFiles(e.target.files);
@@ -1870,15 +1886,27 @@ otherStatuses.forEach(status => {
                     });
                     billsHTML += '</ul>';
 
-                    const waybillSortChannels = ['FSPTR', 'SPTR', 'TTTR', 'LZTR', 'SHOP']; 
-                    const isWaybillSortChannel = waybillSortChannels.includes(wo.channel_code);
-                    
-                    let actionButtonsHTML = `<button class="btn btn-success btn-sm picking-slip-btn" data-work-order-name="${wo.work_order_name}">📋 ทำใบเบิก</button><button class="btn btn-primary btn-sm export-production-btn" data-work-order-name="${wo.work_order_name}">📤 Export (ไฟล์ผลิต)</button><button class="btn btn-info btn-sm copy-production-btn" style="background-color: #17a2b8; color: white;" data-work-order-name="${wo.work_order_name}">📋 Copy (ไฟล์ผลิต)</button> <button class="btn btn-sm export-qc-btn" style="background-color: #6f42c1; color: white; border: none;" data-work-order-name="${wo.work_order_name}">🔍 Export for QC</button><button class="btn btn-sm export-barcode-btn" style="background-color: #3f51b5; color: white; border: none;" data-work-order-name="${wo.work_order_name}">🏷️ ทำ Barcode</button>`;
-                    if (isWaybillSortChannel) { 
-                        actionButtonsHTML += `<button class="btn btn-warning btn-sm export-waybill-sort-btn" data-work-order-name="${wo.work_order_name}">📤 เรียงใบปะหน้า</button>`;
-                    } else { 
-                        actionButtonsHTML += `<button class="btn btn-warning btn-sm prepare-waybill-btn" data-work-order-name="${wo.work_order_name}">📤 Export (ใบปะหน้า)</button><button class="btn btn-info btn-sm import-wo-csv-btn" data-work-order-name="${wo.work_order_name}">นำเข้าเลขพัสดุ</button>`; 
-                    }
+                    // --- แก้ไขส่วนการแสดงปุ่มสำหรับช่องทาง INFU ---
+const waybillSortChannels = ['FSPTR', 'SPTR', 'TTTR', 'LZTR', 'SHOP']; 
+const isWaybillSortChannel = waybillSortChannels.includes(wo.channel_code);
+
+let actionButtonsHTML = `<button class="btn btn-success btn-sm picking-slip-btn" data-work-order-name="${wo.work_order_name}">📋 ทำใบเบิก</button><button class="btn btn-primary btn-sm export-production-btn" data-work-order-name="${wo.work_order_name}">📤 Export (ไฟล์ผลิต)</button><button class="btn btn-info btn-sm copy-production-btn" style="background-color: #17a2b8; color: white;" data-work-order-name="${wo.work_order_name}">📋 Copy (ไฟล์ผลิต)</button> <button class="btn btn-sm export-qc-btn" style="background-color: #6f42c1; color: white; border: none;" data-work-order-name="${wo.work_order_name}">🔍 Export for QC</button><button class="btn btn-sm export-barcode-btn" style="background-color: #3f51b5; color: white; border: none;" data-work-order-name="${wo.work_order_name}">🏷️ ทำ Barcode</button>`;
+
+// กรณีพิเศษ: INFU ให้แสดงครบทุกปุ่ม
+if (wo.channel_code === 'INFU') {
+    actionButtonsHTML += `<button class="btn btn-warning btn-sm prepare-waybill-btn" data-work-order-name="${wo.work_order_name}">📤 Export (ใบปะหน้า)</button>`;
+    actionButtonsHTML += `<button class="btn btn-warning btn-sm export-waybill-sort-btn" data-work-order-name="${wo.work_order_name}">📤 เรียงใบปะหน้า</button>`;
+    actionButtonsHTML += `<button class="btn btn-info btn-sm import-wo-csv-btn" data-work-order-name="${wo.work_order_name}">นำเข้าเลขพัสดุ</button>`;
+} 
+// กรณี E-commerce: แสดงเรียงใบปะหน้าอย่างเดียว
+else if (isWaybillSortChannel) { 
+    actionButtonsHTML += `<button class="btn btn-warning btn-sm export-waybill-sort-btn" data-work-order-name="${wo.work_order_name}">📤 เรียงใบปะหน้า</button>`;
+} 
+// กรณีทั่วไป (Manual): แสดง Export ใบปะหน้า และ นำเข้าเลขพัสดุ
+else { 
+    actionButtonsHTML += `<button class="btn btn-warning btn-sm prepare-waybill-btn" data-work-order-name="${wo.work_order_name}">📤 Export (ใบปะหน้า)</button>`;
+    actionButtonsHTML += `<button class="btn btn-info btn-sm import-wo-csv-btn" data-work-order-name="${wo.work_order_name}">นำเข้าเลขพัสดุ</button>`; 
+}
                     
                     if (currentUserRole === 'superadmin' || currentUserRole === 'manager') { 
                         actionButtonsHTML += `<button class="btn btn-danger btn-sm cancel-wo-btn" data-work-order-name="${wo.work_order_name}">ยกเลิกใบงาน</button>`; 
@@ -4039,7 +4067,82 @@ function exportMasterStatusReport() {
         }
 
         function hidePickingSlipModal() { document.getElementById('picking-slip-modal').style.display = 'none'; }
+const isTrackingPattern = (text) => {
+                if (!text) return false;
+                const cleanText = text.trim().toUpperCase();
+                // ตรวจสอบ Prefix ขนส่ง (SPXTH, LEX, TH, KEX, 88, 66, อื่นๆ)
+                const regex = /^(SPXTH|LEX|TH|KEX|KER|SHP|88|66|J&T|6B|OB|P|FLASH|KRY)[A-Z0-9]+$/;
+                return regex.test(cleanText) && cleanText.length >= 9 && !cleanText.includes(" ");
+            };
 
+            async function handleSmartTrackingImport(workOrderName) {
+                const ordersInWO = allOrdersData.filter(o => o.work_order_name === workOrderName);
+                const toAutoUpdate = [];
+
+                ordersInWO.forEach(order => {
+                    const addr = (order.customer_address || "").trim();
+                    // ถ้าช่องเลขพัสดุว่าง และ ช่องที่อยู่มีลักษณะเป็นเลขพัสดุ
+                    if (!order.tracking_number && isTrackingPattern(addr)) {
+                        toAutoUpdate.push({ 
+                            id: order.id, 
+                            bill_no: order.bill_no, 
+                            channel_code: order.channel_code, // เพิ่มบรรทัดนี้เพื่อแก้ปัญหา NOT NULL
+                            tracking_number: addr.toUpperCase(), 
+                            customer_address: addr 
+                        });
+                    }
+                });
+
+                if (toAutoUpdate.length > 0) {
+                    if (confirm(`พบเลขพัสดุในช่องที่อยู่ ${toAutoUpdate.length} รายการ\nต้องการ "คัดลอก" ไปยังช่องเลขพัสดุหรือไม่?`)) {
+                        loadingOverlay.style.display = 'flex';
+                        try {
+                            // ส่ง id, bill_no, channel_code, tracking_number และ customer_address 
+                            const { error } = await supabaseClient.from('orders').upsert(
+                                toAutoUpdate.map(item => ({ 
+                                    id: item.id, 
+                                    bill_no: item.bill_no, 
+                                    channel_code: item.channel_code, // ส่งค่านี้กลับไปให้ DB ด้วย
+                                    tracking_number: item.tracking_number,
+                                    customer_address: item.customer_address 
+                                }))
+                            );
+                            
+                            if (error) throw error;
+                            
+                            // อัปเดตข้อมูลในตัวแปรเครื่อง (allOrdersData)
+                            toAutoUpdate.forEach(item => {
+                                const idx = allOrdersData.findIndex(o => o.id === item.id);
+                                if (idx > -1) {
+                                    allOrdersData[idx].tracking_number = item.tracking_number;
+                                }
+                            });
+
+                            alert(`คัดลอกเลขพัสดุสำเร็จ ${toAutoUpdate.length} รายการ`);
+                            renderAllTabs();
+                        } catch (err) { 
+                            console.error(err);
+                            alert("เกิดข้อผิดพลาด: " + err.message); 
+                        } 
+                        finally { loadingOverlay.style.display = 'none'; }
+                    }
+                }
+
+                // ส่วนที่เหลือ (เช็คว่าต้องเลือก Excel ต่อไหม)
+                const remaining = allOrdersData.filter(o => o.work_order_name === workOrderName && !o.tracking_number);
+                if (remaining.length > 0) {
+                    if (toAutoUpdate.length > 0) {
+                        if (confirm(`ยังมีอีก ${remaining.length} รายการที่ไม่มีเลขพัสดุในช่องที่อยู่\nต้องการเลือกไฟล์ Excel เพื่อนำเข้าต่อหรือไม่?`)) {
+                            document.getElementById('tracking-file-input').click();
+                        }
+                    } else {
+                        alert(`ไม่พบเลขพัสดุอัตโนมัติในช่องที่อยู่\nกรุณาเลือกไฟล์ Excel เพื่อนำเข้าข้อมูล`);
+                        document.getElementById('tracking-file-input').click();
+                    }
+                } else if (toAutoUpdate.length === 0 && ordersInWO.length > 0) {
+                    alert("บิลทั้งหมดในใบงานนี้มีเลขพัสดุครบถ้วนแล้ว");
+                }
+            }
         async function exportAllPickingFinal(mainData, spareData, workOrderName, fullCsvData) {
             loadingOverlay.style.display = 'flex';
             try {
@@ -4370,7 +4473,7 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
                             'export-barcode-btn': (btn) => exportForBarcode(btn.dataset.workOrderName), // ปุ่มใหม่
                             'prepare-waybill-btn': (btn) => prepareForWaybill(btn.dataset.workOrderName), 
                             'export-waybill-sort-btn': (btn) => window.waybillSorter.start(btn.dataset.workOrderName, allOrdersData), 
-                            'import-wo-csv-btn': () => trackingFileInput.click(), 
+                            'import-wo-csv-btn': (btn) => window.orderSystem.handleSmartTrackingImport(btn.dataset.workOrderName), 
                             'cancel-wo-btn': (btn) => cancelWorkOrder(btn.dataset.workOrderName) 
                         }; 
                         let actionTaken = false; 
@@ -4596,12 +4699,13 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
             }
 
             return { 
-    initializeApp, 
-    loadInitialData, 
-    getFullProductList: () => fullProductList,
-    getChannelList: () => channelList,      // เพิ่มบรรทัดนี้
-    getAllOrdersData: () => allOrdersData   // เพิ่มบรรทัดนี้
-};
+                initializeApp, 
+                loadInitialData, 
+                getFullProductList: () => fullProductList,
+                getChannelList: () => channelList,      
+                getAllOrdersData: () => allOrdersData,
+                handleSmartTrackingImport // <--- เพิ่มตรงนี้
+            };
         })();
 // --- PACKING SYSTEM MODULE (FULL VERSION WITH AUTO-RESET & SPEED OPTIMIZATION) ---
 window.packingSystem = (() => {
