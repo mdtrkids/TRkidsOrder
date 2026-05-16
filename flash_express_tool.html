@@ -178,7 +178,7 @@ return out.replace(reAny," ");
 }
 
 /* ================= Address Cues ================= */
-const CUE_LITERALS=["ร้าน","ห้าง","ห้างร้าน","ศูนย์การค้า","ห้างสรรพสินค้า","เดอะมอลล์","เซ็นทรัล","โรบินสัน","โลตัส","Tesco","บิ๊กซี","Big C","แม็คโคร","Makro","เทอร์มินอล 21","Terminal 21","Plaza","พลาซ่า","มอลล์","มาร์เก็ต","Market","ตลาด","ไนท์บาซาร์","Bazaar","คอนโด","คอนโดฯ","คอนโดมิเนียม","อาคารชุด","Condo","Condominium","Apartment","อพาร์ตเมนต์","อพาร์ทเม้นท์","Mansion","แมนชั่น","หอพัก","รีสอร์ท","Resort","โรงแรม","Hotel","โรงพยาบาล","รพ.","Hospital","คลินิก","Clinic","อาคาร","ตึก","บิสซิเนสเซ็นเตอร์","อาคารพาณิชย์","Office","ออฟฟิศ","ทาวเวอร์","Tower","Building","บิลดิ้ง","ศูนย์ราชการ","Government Complex","ศาลากลาง","โครงการ","หมู่บ้าน","หมู่บ้านจัดสรร","มบ.","หมู่ที่","หมู่","ม.","ชุมชน","ทาวน์โฮม","ทาวน์เฮ้าส์","บ้าน","ห้อง","Room","Unit","ยูนิต","ชั้น","Floor","Fl.","เลขที่","บ้านเลขที่","No.","House No.","บล็อก","บล๊อค","Block","แยก","ถนน","ถ.","Road","Rd.","Rama","พระราม","ศรีนครินทร์","เพชรบุรี","สุขุมวิท","วิภาวดี","งามวงศ์วาน","พหลโยธิน","รัชดา","ราชพฤกษ์","Bangna","บางนา","Sukhumvit","Ratchadaphisek","Ratchada","Srinakarin","ซอย","ซ.","Soi","ตรอก","สะพาน","วงแหวน","ทางด่วน","ด่วน","ดอนเมืองโทลล์เวย์","ด่วนศรีรัช","แขวง","เขต","ตำบล","ต.","อำเภอ","อ.","จังหวัด","จ.","กรุงเทพ","กทม","Bangkok","BKK","Province","District","Subdistrict","โรงเรียน","มหาวิทยาลัย","วิทยาลัย","คณะ","วัด","มัสยิด","โบสถ์","โกดัง","คลังสินค้า","คลัง","Warehouse","โรงงาน","Factory","นิคมอุตสาหกรรม","นิคม","Industrial Estate","สถานี","Station","ท่าเรือ","Pier","Port","สนามบิน","ท่าอากาศยาน","Airport","เทอร์มินอล","Terminal","เอสพลานาด","Esplanade","Fortune","เอ็มควอเทียร์","EmQuartier","เอ็มโพเรียม","Emporium","Iconsiam","ไอคอนสยาม","Siam Paragon","พารากอน","MBK","มาบุญครอง","Union Mall","ยูเนียนมอลล์"];
+const CUE_LITERALS=["ร้าน","ห้าง","ห้างร้าน","ศูนย์การค้า","ห้างสรรพสินค้า","เดอะมอลล์","เซ็นทรัล","โรบินสัน","โลตัส","Tesco","บิ๊กซี","Big C","แม็คโคร","Makro","เทอร์มินอล 21","Terminal 21","Plaza","พลาซ่า","มอลล์","มาร์เก็ต","Market","ตลาด","ไนท์บาซาร์","Bazaar","คอนโด","คอนโดฯ","คอนโดมิเนียม","อาคารชุด","Condo","Condominium","Apartment","อพาร์ตเมนต์","อพาร์ทเม้นท์","Mansion","แมนชั่น","ศาล","หอพัก","รีสอร์ท","Resort","โรงแรม","Hotel","โรงพยาบาล","รพ.","Hospital","คลินิก","Clinic","อาคาร","ตึก","บิสซิเนสเซ็นเตอร์","อาคารพาณิชย์","Office","ออฟฟิศ","ทาวเวอร์","Tower","Building","บิลดิ้ง","ศูนย์ราชการ","Government Complex","ศาลากลาง","โครงการ","หมู่บ้าน","หมู่บ้านจัดสรร","มบ.","หมู่ที่","หมู่","ม.","ชุมชน","ทาวน์โฮม","ทาวน์เฮ้าส์","บ้าน","ห้อง","Room","Unit","ยูนิต","ชั้น","Floor","Fl.","เลขที่","บ้านเลขที่","No.","House No.","บล็อก","บล๊อค","Block","แยก","ถนน","ถ.","Road","Rd.","Rama","พระราม","ศรีนครินทร์","เพชรบุรี","สุขุมวิท","วิภาวดี","งามวงศ์วาน","พหลโยธิน","รัชดา","ราชพฤกษ์","Bangna","บางนา","Sukhumvit","Ratchadaphisek","Ratchada","Srinakarin","ซอย","ซ.","Soi","ตรอก","สะพาน","วงแหวน","ทางด่วน","ด่วน","ดอนเมืองโทลล์เวย์","ด่วนศรีรัช","แขวง","เขต","ตำบล","ต.","อำเภอ","อ.","จังหวัด","จ.","กรุงเทพ","กทม","Bangkok","BKK","Province","District","Subdistrict","โรงเรียน","มหาวิทยาลัย","วิทยาลัย","คณะ","วัด","มัสยิด","โบสถ์","โกดัง","คลังสินค้า","คลัง","Warehouse","โรงงาน","Factory","นิคมอุตสาหกรรม","นิคม","Industrial Estate","สถานี","Station","ท่าเรือ","Pier","Port","สนามบิน","ท่าอากาศยาน","Airport","เทอร์มินอล","Terminal","เอสพลานาด","Esplanade","Fortune","เอ็มควอเทียร์","EmQuartier","เอ็มโพเรียม","Emporium","Iconsiam","ไอคอนสยาม","Siam Paragon","พารากอน","MBK","มาบุญครอง","Union Mall","ยูเนียนมอลล์"];
 const CUE_LITERAL_RES = CUE_LITERALS.map(lit => new RegExp(escapeRe(lit), "i"));
 const HOUSE_RE = /\b\d{1,5}(?:\s*\/\s*\d{1,5})?\b/;
 
@@ -207,16 +207,26 @@ if(mHouse) idx = (idx===-1? mHouse.index : Math.min(idx, mHouse.index));
 return idx>-1 ? line.slice(0,idx).trim() : line.trim();
 }
 function cleanName(n){
-let s=(n||"");
-for (const re of NAME_PREFIX_TRASH){ s = s.replace(re,""); }
-s = s
-.replace(new RegExp(`(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*.*$`,"i"),"")
-.replace(new RegExp(`(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*$`,"i"),"")
-.replace(/[ ,;:|\-]+$/,"")
-.trim();
-s = cutAtFirstCue(s);
-s = s.replace(/[^ก-๛A-Za-z0-9\s\.'\-]/g," ").replace(/\s{2,}/g," ").trim();
-return s;
+  let s=(n||"");
+  for (const re of NAME_PREFIX_TRASH){ s = s.replace(re,""); }
+
+  // --- ส่วนที่เพิ่มเข้ามาใหม่: สั่งให้ค้นหาเบอร์โทรศัพท์และลบออกจากชื่อทันที ---
+  const phones = collectPhones(s); // ใช้ฟังก์ชันที่มีอยู่แล้วหาเบอร์ในบรรทัดชื่อ
+  for(const p of phones) {
+    const re = phoneFlexRegex(p); // สร้าง Regex สำหรับเบอร์นั้นๆ
+    s = s.replace(re, " ");       // ลบเบอร์นั้นออกจากข้อความชื่อ
+  }
+  // -----------------------------------------------------------
+
+  s = s
+    .replace(new RegExp(`(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*.*$`,"i"),"")
+    .replace(new RegExp(`(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*$`,"i"),"")
+    .replace(/[ ,;:|\-]+$/,"")
+    .trim();
+  
+  s = cutAtFirstCue(s);
+  s = s.replace(/[^ก-๛A-Za-z0-9\s\.'\-]/g," ").replace(/\s{2,}/g," ").trim();
+  return s;
 }
 
 /* ================= Address extraction (patched) ================= */
