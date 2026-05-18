@@ -4144,54 +4144,54 @@ const isTrackingPattern = (text) => {
                 }
             }
         async function exportAllPickingFinal(mainData, spareData, workOrderName, fullCsvData) {
-            loadingOverlay.style.display = 'flex';
-            try {
-                // 1. Export PNG
-                const canvas = await html2canvas(document.getElementById("picking-slip-png-container"), { scale: 3 });
-                const pngLink = document.createElement('a');
-                pngLink.download = `ใบเบิก_${workOrderName}.png`;
-                pngLink.href = canvas.toDataURL("image/png");
-                pngLink.click();
+    loadingOverlay.style.display = 'flex';
+    try {
+        // 1. Export PNG (เหมือนเดิม)
+        const canvas = await html2canvas(document.getElementById("picking-slip-png-container"), { scale: 3 });
+        const pngLink = document.createElement('a');
+        pngLink.download = `ใบเบิก_${workOrderName}.png`;
+        pngLink.href = canvas.toDataURL("image/png");
+        pngLink.click();
 
-                // 2. Export XLSX (ใช้ข้อมูลที่กรองแล้วเหมือน PNG)
-                const wb = XLSX.utils.book_new();
-                const ws1Headers = [['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก']];
-                const ws1Rows = mainData.map(item => [item.woName, item.code, item.name, item.location, item.finalQty]);
-                const ws1 = XLSX.utils.aoa_to_sheet(ws1Headers.concat(ws1Rows));
-                XLSX.utils.book_append_sheet(wb, ws1, "รายการหยิบสินค้า");
+        // 2. Export XLSX (เหมือนเดิม)
+        const wb = XLSX.utils.book_new();
+        const ws1Headers = [['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก']];
+        const ws1Rows = mainData.map(item => [item.woName, item.code, item.name, item.location, item.finalQty]);
+        const ws1 = XLSX.utils.aoa_to_sheet(ws1Headers.concat(ws1Rows));
+        XLSX.utils.book_append_sheet(wb, ws1, "รายการหยิบสินค้า");
 
-                const ws2Headers = [['รายการอะไหล่', 'จำนวนรวม']];
-                const ws2Rows = spareData.map(item => [item.name, item.qty]);
-                const ws2 = XLSX.utils.aoa_to_sheet(ws2Headers.concat(ws2Rows));
-                XLSX.utils.book_append_sheet(wb, ws2, "สรุปอะไหล่");
-                XLSX.writeFile(wb, `ใบเบิก_${workOrderName}.xlsx`);
+        const ws2Headers = [['รายการอะไหล่', 'จำนวนรวม']];
+        const ws2Rows = spareData.map(item => [item.name, item.qty]);
+        const ws2 = XLSX.utils.aoa_to_sheet(ws2Headers.concat(ws2Rows));
+        XLSX.utils.book_append_sheet(wb, ws2, "สรุปอะไหล่");
+        XLSX.writeFile(wb, `ใบเบิก_${workOrderName}.xlsx`);
 
-                // 3. Export CSV (ใช้ fullCsvData - ข้อมูลดิบครบทุกรายการ)
-                const csvHeaders = ['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก'];
-                const csvRows = [csvHeaders.join(',')];
-                fullCsvData.forEach(item => {
-                    const row = [
-                        `"${item.woName}"`, 
-                        `"${item.code}"`, 
-                        `"${item.name.replace(/"/g, '""')}"`, 
-                        `"${item.location}"`, 
-                        item.qty
-                    ];
-                    csvRows.push(row.join(','));
-                });
-                const csvContent = "\uFEFF" + csvRows.join('\n');
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const csvLink = document.createElement("a");
-                csvLink.href = URL.createObjectURL(blob);
-                csvLink.download = `ใบเบิก_Full_${workOrderName}.csv`;
-                csvLink.click();
+        // 3. Export CSV (แก้ไขจาก item.qty เป็น item.finalQty)
+        const csvHeaders = ['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก'];
+        const csvRows = [csvHeaders.join(',')];
+        fullCsvData.forEach(item => {
+            const row = [
+                `"${item.woName}"`, 
+                `"${item.code}"`, 
+                `"${item.name.replace(/"/g, '""')}"`, 
+                `"${item.location}"`, 
+                item.finalQty // <--- เปลี่ยนจาก item.qty เป็น item.finalQty เพื่อให้หาร 5 สำหรับคอนโด
+            ];
+            csvRows.push(row.join(','));
+        });
+        const csvContent = "\uFEFF" + csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const csvLink = document.createElement("a");
+        csvLink.href = URL.createObjectURL(blob);
+        csvLink.download = `ใบเบิก_Full_${workOrderName}.csv`;
+        csvLink.click();
 
-            } catch (err) {
-                console.error(err);
-                alert("เกิดข้อผิดพลาดในการ Export: " + err.message);
-            }
-            loadingOverlay.style.display = 'none';
-        }
+    } catch (err) {
+        console.error(err);
+        alert("เกิดข้อผิดพลาดในการ Export: " + err.message);
+    }
+    loadingOverlay.style.display = 'none';
+}
             
             async function handleClaimSelectedOrders() {
                 const selectedIds = getSelectedOrderIds(container.querySelector('#tab-shipped .order-list'));
