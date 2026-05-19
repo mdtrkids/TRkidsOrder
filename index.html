@@ -4311,19 +4311,28 @@ const isTrackingPattern = (text) => {
                     if (orderError) throw orderError;
 
                     const originalItems = originalOrder.order_items || [];
-                    if (originalItems.length > 0) {
-                        let itemSequence = 1;
-                        const claimItemsToInsert = originalItems.map(item => {
-                            const newItem = { ...item };
-                            delete newItem.id;
-                            newItem.order_id = insertedOrder.id;
-                            newItem.bill_no = newBillNo;
-                            newItem.item_uid = `${newBillNo}-${itemSequence++}`;
-                            newItem.item_scan_time = null;
-                            newItem.packing_status = null;
-                            return newItem;
-                        });
-                        const { error: itemsError } = await supabaseClient.from('order_items').insert(claimItemsToInsert);
+if (originalItems.length > 0) {
+    let itemSequence = 1;
+
+    // สร้างข้อความรายละเอียดเคลม (จะเอาไปใส่หน้าหมายเหตุ)
+    const claimInfo = `[เคลม: ${claimData.claim_type}${claimData.claim_details ? ' - ' + claimData.claim_details : ''}]`;
+
+    const claimItemsToInsert = originalItems.map(item => {
+        const newItem = { ...item };
+        delete newItem.id;
+        newItem.order_id = insertedOrder.id;
+        newItem.bill_no = newBillNo;
+        newItem.item_uid = `${newBillNo}-${itemSequence++}`;
+        newItem.item_scan_time = null;
+        newItem.packing_status = null;
+
+        // --- ส่วนที่เพิ่มใหม่: เอาข้อมูลเคลมไปแปะไว้หน้าหมายเหตุเดิม ---
+        const oldNotes = item.notes || '';
+        newItem.notes = `${claimInfo} ${oldNotes}`.trim();
+        
+        return newItem;
+    });
+    const { error: itemsError } = await supabaseClient.from('order_items').insert(claimItemsToInsert);
                         if (itemsError) {
                             await supabaseClient.from('orders').delete().eq('id', insertedOrder.id);
                             throw itemsError;
