@@ -3326,131 +3326,117 @@ remainingBills.forEach(order => {
 }
 
             // 1. ฟังก์ชัน Export ไฟล์ผลิต (แก้ไข: รวมรายการทั้งใบงานแล้วเรียงตาม Item UID)
-            function exportForProduction(workOrderName) {
-                const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
+            async function exportForProduction(workOrderName) {
+                loadingOverlay.style.display = 'flex';
+                try {
+                    const { data: ordersInWorkOrder, error } = await supabaseClient
+                        .from('orders')
+                        .select('*, order_items(*)')
+                        .eq('work_order_name', workOrderName);
 
-                if (ordersInWorkOrder.length === 0) {
-                    alert("ไม่พบข้อมูล");
-                    return;
-                }
-
-                // รวบรวม Item จากทุกออร์เดอร์ในรอบนี้มาใส่ Array เดียวเพื่อเรียงลำดับใหม่ทั้งหมด
-                let allItemsInBatch = [];
-                ordersInWorkOrder.forEach(order => {
-                    if (order.order_items && order.order_items.length > 0) {
-                        order.order_items.forEach(item => {
-                            allItemsInBatch.push(item);
-                        });
+                    if (error) throw error;
+                    if (!ordersInWorkOrder || ordersInWorkOrder.length === 0) {
+                        alert("ไม่พบข้อมูล");
+                        return;
                     }
-                });
 
-                // เรียงลำดับรายการสินค้าทั้งหมดตาม Item UID แบบ Natural Sort (1, 2, 10)
-                allItemsInBatch.sort((a, b) => 
-                    (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true, sensitivity: 'base' })
-                );
+                    let allItemsInBatch = [];
+                    ordersInWorkOrder.forEach(order => {
+                        if (order.order_items) {
+                            order.order_items.forEach(item => allItemsInBatch.push(item));
+                        }
+                    });
 
-                const headers = ['ชื่อใบงาน', 'เลขบิล', 'Item UID', 'ชื่อสินค้า', 'สีหมึก', 'ชั้นที่', 'ลายการ์ตูน', 'ลายเส้น', 'ฟอนต์', 'บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3', 'จำนวน', 'หมายเหตุ', 'ไฟล์แนบ'];
-                const dataToExport = [];
-                
-                // ฟังก์ชันป้องกัน Excel เปลี่ยนเบอร์โทรหรือเครื่องหมาย + เป็นสูตร
-                const forceText = (val) => {
-                    const str = String(val || '').trim();
-                    if (str === '') return '';
-                    if (str.startsWith('+') || str.startsWith('0')) {
-                        return "\u200B" + str; 
-                    }
-                    return str;
-                };
+                    allItemsInBatch.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
 
-                allItemsInBatch.forEach(item => {
-                    const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
-                    dataToExport.push([
-                        workOrderName, 
-                        item.bill_no, 
-                        item.item_uid, 
-                        item.product_name,
-                        item.ink_color, 
-                        item.product_type, 
-                        item.cartoon_pattern, 
-                        item.line_pattern,
-                        item.font, 
-                        forceText(item.line_1),
-                        forceText(item.line_2),
-                        forceText(item.line_3),
-                        1,
-                        cleanNotes,
-                        item.file_attachment
-                    ]);
-                });
+                    const headers = ['ชื่อใบงาน', 'เลขบิล', 'Item UID', 'ชื่อสินค้า', 'สีหมึก', 'ชั้นที่', 'ลายการ์ตูน', 'ลายเส้น', 'ฟอนต์', 'บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3', 'จำนวน', 'หมายเหตุ', 'ไฟล์แนบ'];
+                    const dataToExport = [];
+                    
+                    const forceText = (val) => {
+                        const str = String(val || '').trim();
+                        return (str.startsWith('+') || str.startsWith('0')) ? "\u200B" + str : str;
+                    };
 
-                if (dataToExport.length === 0) {
-                    alert("ไม่พบรายการสินค้า");
-                    return;
+                    allItemsInBatch.forEach(item => {
+                        const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
+                        dataToExport.push([
+                            workOrderName, item.bill_no, item.item_uid, item.product_name,
+                            item.ink_color, item.product_type, item.cartoon_pattern, item.line_pattern,
+                            item.font, forceText(item.line_1), forceText(item.line_2), forceText(item.line_3),
+                            1, cleanNotes, item.file_attachment
+                        ]);
+                    });
+
+                    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
+                    const workbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(workbook, worksheet, "ProductionData");
+                    XLSX.writeFile(workbook, `Production_${workOrderName}.xlsx`);
+                } catch (err) {
+                    alert("เกิดข้อผิดพลาด: " + err.message);
+                } finally {
+                    loadingOverlay.style.display = 'none';
                 }
-
-                const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
-
-                // บังคับประเภทเซลล์ใน Excel ให้เป็นข้อความ (String) ป้องกันเลขอัตโนมัติเพี้ยน
-                const range = XLSX.utils.decode_range(worksheet['!ref']);
-                for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-                    for (let C = 9; C <= 11; ++C) {
-                        const cell_address = XLSX.utils.encode_cell({r: R, c: C});
-                        if (!worksheet[cell_address]) continue;
-                        worksheet[cell_address].t = 's';
-                    }
-                }
-
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "ProductionData");
-                XLSX.writeFile(workbook, `Production_${workOrderName}.xlsx`);
             }
 
-function copyForProduction(workOrderName) {
-    const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
-    if (ordersInWorkOrder.length === 0) { alert("ไม่พบข้อมูล"); return; }
+async function copyForProduction(workOrderName) {
+                loadingOverlay.style.display = 'flex';
+                try {
+                    // ดึงข้อมูลสดๆ จาก Database เฉพาะใบงานนี้
+                    const { data: ordersInWorkOrder, error } = await supabaseClient
+                        .from('orders')
+                        .select('*, order_items(*)')
+                        .eq('work_order_name', workOrderName);
 
-    let allItemsInBatch = [];
-    ordersInWorkOrder.forEach(order => {
-        if (order.order_items && order.order_items.length > 0) {
-            order.order_items.forEach(item => { allItemsInBatch.push(item); });
-        }
-    });
+                    if (error) throw error;
+                    if (!ordersInWorkOrder || ordersInWorkOrder.length === 0) {
+                        alert("ไม่พบข้อมูลในใบงานนี้");
+                        return;
+                    }
 
-    // เรียงลำดับตาม Item UID
-    allItemsInBatch.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
+                    let allItemsInBatch = [];
+                    ordersInWorkOrder.forEach(order => {
+                        if (order.order_items) {
+                            order.order_items.forEach(item => {
+                                allItemsInBatch.push(item);
+                            });
+                        }
+                    });
 
-    const rows = []; // เริ่มต้นเป็นอาเรย์ว่าง (ไม่ใส่หัวตาราง)
+                    // เรียงลำดับตาม Item UID
+                    allItemsInBatch.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
 
-    allItemsInBatch.forEach(item => {
-        const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
-        rows.push([
-            workOrderName, 
-            item.bill_no, 
-            item.item_uid, 
-            item.product_name,
-            item.ink_color, 
-            item.product_type, 
-            item.cartoon_pattern, 
-            item.line_pattern,
-            item.font, 
-            String(item.line_1 || '').trim(),
-            String(item.line_2 || '').trim(),
-            String(item.line_3 || '').trim(),
-            1,
-            cleanNotes,
-            item.file_attachment
-        ]);
-    });
+                    const rows = [];
+                    allItemsInBatch.forEach(item => {
+                        const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
+                        rows.push([
+                            workOrderName, 
+                            item.bill_no, 
+                            item.item_uid, 
+                            item.product_name,
+                            item.ink_color, 
+                            item.product_type, 
+                            item.cartoon_pattern, 
+                            item.line_pattern,
+                            item.font, 
+                            String(item.line_1 || '').trim(),
+                            String(item.line_2 || '').trim(),
+                            String(item.line_3 || '').trim(),
+                            1,
+                            cleanNotes,
+                            item.file_attachment
+                        ]);
+                    });
 
-    // แปลงเป็นข้อความคั่นด้วย Tab (\t) สำหรับวางใน Excel
-    const tsvContent = rows.map(row => row.join('\t')).join('\n');
-
-    navigator.clipboard.writeText(tsvContent).then(() => {
-        alert(`คัดลอกเฉพาะข้อมูล ${workOrderName} (ไม่มีหัวตาราง) เรียบร้อยแล้ว!`);
-    }).catch(err => {
-        alert('คัดลอกไม่สำเร็จ: ' + err);
-    });
-}
+                    const tsvContent = rows.map(row => row.join('\t')).join('\n');
+                    await navigator.clipboard.writeText(tsvContent);
+                    alert(`คัดลอกข้อมูลใบงาน ${workOrderName} จำนวน ${allItemsInBatch.length} รายการ เรียบร้อยแล้ว!`);
+                } catch (err) {
+                    console.error(err);
+                    alert('คัดลอกไม่สำเร็จ: ' + err.message);
+                } finally {
+                    loadingOverlay.style.display = 'none';
+                }
+            }
 
             // 2. ฟังก์ชัน Export สำหรับ QC (แก้ไข: เรียงลำดับตาม Item UID ให้ตรงกับไฟล์ผลิต)
             function exportForQC(workOrderName) {
