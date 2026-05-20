@@ -182,101 +182,144 @@ const CUE_LITERALS=["ร้าน","ห้าง","ห้างร้าน","�
 const CUE_LITERAL_RES = CUE_LITERALS.map(lit => new RegExp(escapeRe(lit), "i"));
 const HOUSE_RE = /\b\d{1,5}(?:\s*\/\s*\d{1,5})?\b/;
 
-/* ================= Name helpers ================= */
+/* ================= Name helpers (Fixed Version) ================= */
 const COMPANY_AS_ADDRESS_RE=/^\s*(?:บ\.|บจก\.|บจ\.|หจก\.|ห้างหุ้นส่วน|บริษัท|ร้าน)\s+.+จำกัด\b/i;
-const PERSON_TITLES_RE=/^(คุณ|นาย|นาง|น\.ส\.|นางสาว|ด\.ช\.|ด\.ญ\.|พ\.ต\.)\b/;
+
+// Regex ยศแบบละเอียดและรองรับคำว่า "หญิง"
+const PERSON_TITLES_RE=/^(คุณ|นาย|นาง|น\.ส\.|นางสาว|ด\.ช\.|ด\.ญ\.|นพ\.|พญ\.|ทพ\.|ทพญ\.|สพ\.|สพญ\.|ดร\.|ศ\.|รศ\.|ผศ\.|พล\.[อทต]\.[อทต]?\.|พ\.[อต]\.[อทต]?\.|ร\.[อต]\.[อทต]?\.|ด\.ต\.|จ\.ส\.[อทต]\.|ส\.[อต]\.[อต]?\.|ว่าที่\s*ร\.ต\.|ร\.อ\.|ร\.ท\.|ร\.ต\.|พ\.อ\.|พ\.ท\.|พ\.ต\.|พันเอก|พันโท|พันตรี|ร้อยเอก|ร้อยโท|ร้อยตรี|ม\.ล\.|ม\.ร\.ว\.|ม\.จ\.)(\s*หญิง)?/i;
+
 const NAME_PREFIX_TRASH=[/^ที่อยู่\s*:?\s*/i,/^address\s*:?\s*/i,/^addr\.?\s*/i,/^add\.?\s*/i,/^จัดส่ง\s*:?\s*/i,/^โปรด\s*จัดส่ง\s*/i,/^กรุณา\s*ส่ง\s*/i,/^รบกวน\s*ส่ง.*(ที่อยู่|ตามที่อยู่)/i,/^ส่งถึง\s*:?\s*/i,/^ถึง\s*:?\s*/i,/^ส่งมาตามที่อยู่\s*/i,/^การจัดส่ง\s*/i,/^โปรด\s*ส่ง\s*/i,/^ship\s*to\s*:?\s*/i,/^deliver\s*to\s*:?\s*/i,/^to\s*:?\s*/i];
 
 function looksLikePersonName(s){
-if(!s) return false;
-if(COMPANY_AS_ADDRESS_RE.test(s)) return false;
-if(/\d/.test(s)) return /^[ก-๛A-Za-z .'\-]+$/.test(s.split(/\s+\d/)[0] || "");
-const words=s.split(/\s+/);
-if(words.length>6 && !PERSON_TITLES_RE.test(s)) return false;
-return true;
+  if(!s) return false;
+  if(COMPANY_AS_ADDRESS_RE.test(s)) return false;
+  if(PERSON_TITLES_RE.test(s)) return true; // ถ้าขึ้นต้นด้วยยศ ให้มั่นใจว่าเป็นชื่อ
+  if(/\d/.test(s)) return /^[ก-๛A-Za-z .'\-]+$/.test(s.split(/\s+\d/)[0] || "");
+  const words=s.split(/\s+/);
+  return words.length <= 6;
 }
+
 function cutAtFirstCue(line){
-if(!line) return "";
-let idx = -1;
-for(const re of CUE_LITERAL_RES){
-const m = re.exec(line);
-if(m){ idx = (idx===-1? m.index : Math.min(idx, m.index)); }
+  if(!line) return "";
+  const rankM = line.match(PERSON_TITLES_RE);
+  const safeZone = rankM ? rankM[0].length : 0; // จุดที่ห้ามตัด (ความยาวของยศ)
+
+  let idx = -1;
+  // วนหาคำบอกที่อยู่
+  for(const re of CUE_LITERAL_RES){
+    let m;
+    while ((m = re.exec(line)) !== null) {
+      if (m.index >= safeZone) { // ต้องอยู่นอกเขตยศเท่านั้นถึงจะตัด
+        idx = (idx === -1 ? m.index : Math.min(idx, m.index));
+        break;
+      }
+      if (!re.global) break; 
+    }
+  }
+  
+  // เช็คเลขที่บ้าน (ต้องอยู่นอกเขตยศเช่นกัน)
+  const mHouse = line.match(HOUSE_RE);
+  if(mHouse && mHouse.index >= safeZone) {
+    idx = (idx === -1 ? mHouse.index : Math.min(idx, mHouse.index));
+  }
+  
+  return idx > -1 ? line.slice(0, idx).trim() : line.trim();
 }
-const mHouse = line.match(HOUSE_RE);
-if(mHouse) idx = (idx===-1? mHouse.index : Math.min(idx, mHouse.index));
-return idx>-1 ? line.slice(0,idx).trim() : line.trim();
-}
+
 function cleanName(n){
   let s=(n||"");
   for (const re of NAME_PREFIX_TRASH){ s = s.replace(re,""); }
-
-  // --- ส่วนที่เพิ่มเข้ามาใหม่: สั่งให้ค้นหาเบอร์โทรศัพท์และลบออกจากชื่อทันที ---
-  const phones = collectPhones(s); // ใช้ฟังก์ชันที่มีอยู่แล้วหาเบอร์ในบรรทัดชื่อ
+  const phones = collectPhones(s);
   for(const p of phones) {
-    const re = phoneFlexRegex(p); // สร้าง Regex สำหรับเบอร์นั้นๆ
-    s = s.replace(re, " ");       // ลบเบอร์นั้นออกจากข้อความชื่อ
+    s = s.replace(phoneFlexRegex(p), " ");
   }
-  // -----------------------------------------------------------
-
-  s = s
-    .replace(new RegExp(`(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*.*$`,"i"),"")
-    .replace(new RegExp(`(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*$`,"i"),"")
-    .replace(/[ ,;:|\-]+$/,"")
-    .trim();
+  s = s.replace(new RegExp(`(?:${PHONE_TOKEN_WORDS.map(fuzzyWord).join("|")})[\\s\\W_]*.*$`,"i"),"")
+       .replace(/[ ,;:|\-]+$/,"").trim();
   
-  s = cutAtFirstCue(s);
-  s = s.replace(/[^ก-๛A-Za-z0-9\s\.'\-]/g," ").replace(/\s{2,}/g," ").trim();
-  return s;
+  return cutAtFirstCue(s); // ส่งไปตัดคำโดยใช้กฎ Safe Zone
 }
 
-/* ================= Address extraction (patched) ================= */
+/* ================= Address extraction (Re-written) ================= */
 function extractNameAndAddressSmart(text){
-const s = normalizeInline(text);
-let lines = s.split("\n").map(t=>t.trim()).filter(Boolean);
-if (!lines.length) return { name:"", address:"" };
-while (lines.length && cleanName(lines[0])==="") { lines.shift(); }
-let first = lines[0] || "";
-let name = "";
-let addrStart = 0;
-const cueIdxs = CUE_LITERAL_RES.map(re=>{ const m=re.exec(first); return m?m.index:-1; }).filter(i=>i>=0);
-const houseM = first.match(HOUSE_RE);
-const earliest = Math.min(...(cueIdxs.length?cueIdxs:[Infinity]), houseM?houseM.index:Infinity);
-if (earliest!==Infinity && earliest>0){
-name = cleanName(first.slice(0, earliest).trim());
-first = first.slice(earliest).trim();
-lines[0] = first;
-addrStart = 0;
-} else {
-if (looksLikePersonName(first)){ name = cleanName(first); addrStart = 1; }
-else{ addrStart = 0; }
-}
-function isPhoneOnlyLine(t){
-const st = th2ar(t);
-const hasPhone = /\+?66[\s\-()]*\d(?:[\s\-()]*\d){7,9}\b|0[\s\-()]*\d(?:[\s\-()]*\d){8}\b/.test(st);
-const noRealWords = st.replace(/[0-9+\s\-\(\)]/g,"").trim()==="" || PHONE_TOKEN_START_RE.test(st);
-return hasPhone && noRealWords;
-}
-let addrLines = lines.slice(addrStart);
-while (addrLines.length && isPhoneOnlyLine(addrLines[0])) { addrLines.shift(); }
-let address = addrLines.join("\n");
-let end = address.length;
-const pIdx = findFirstPhoneIndex(address);
-if (pIdx >= 0) end = Math.min(end, pIdx);
-const pcIdx = findFirstPostcodeIndex(address);
-if (pcIdx >= 0) end = Math.min(end, pcIdx);
-address = address.slice(0, end);
-const phones = collectPhones(s);
-address = stripPhonesFromText(address, phones);
-const all5 = [...th2ar(s).matchAll(/\b(\d{5})\b/g)];
-const postcode = all5.length? all5[all5.length-1][1] : "";
-address = stripPostcodeTokens(address);
-address = stripSpecificPostcode(address, postcode);
-address = fixDanglingAdmin(address)
-.replace(/[ ,;:|\-]+$/mg,"")
-.replace(/\n{3,}/g,"\n\n")
-.replace(/[ \t\f\v]{2,}/g," ")
-.trim();
-return { name, address, postcode };
+  const s = normalizeInline(text);
+  let lines = s.split("\n").map(t=>t.trim()).filter(Boolean);
+  if (!lines.length) return { name:"", address:"", postcode:"" };
+
+  while (lines.length && cleanName(lines[0])==="") { lines.shift(); }
+  if (!lines.length) return { name:"", address:"", postcode:"" };
+
+  let first = lines[0];
+  let name = "";
+  let addrStart = 0;
+
+  const rankM = first.match(PERSON_TITLES_RE);
+  const safeZone = rankM ? rankM[0].length : 0;
+
+  // หาจุดตัดในบรรทัดแรก (โดยข้าม Safe Zone ของยศ)
+  let splitIdx = -1;
+  CUE_LITERAL_RES.forEach(re => {
+    let m;
+    while ((m = re.exec(first)) !== null) {
+      if (m.index >= safeZone) {
+        splitIdx = (splitIdx === -1 ? m.index : Math.min(splitIdx, m.index));
+        break;
+      }
+      if (!re.global) break;
+    }
+  });
+
+  const mHouse = first.match(HOUSE_RE);
+  if (mHouse && mHouse.index >= safeZone) {
+    splitIdx = (splitIdx === -1 ? mHouse.index : Math.min(splitIdx, mHouse.index));
+  }
+
+  // ถ้าบรรทัดแรกมีทั้งชื่อและที่อยู่ปนกัน
+  if (splitIdx > 0) {
+    name = cleanName(first.slice(0, splitIdx));
+    lines[0] = first.slice(splitIdx).trim();
+    addrStart = 0;
+  } else {
+    // ถ้าบรรทัดแรกเป็นชื่ออย่างเดียว
+    if (looksLikePersonName(first)) {
+      name = cleanName(first);
+      addrStart = 1;
+    } else {
+      addrStart = 0;
+    }
+  }
+
+  function isPhoneOnlyLine(t){
+    const st = th2ar(t);
+    const hasPhone = /\+?66[\s\-()]*\d(?:[\s\-()]*\d){7,9}\b|0[\s\-()]*\d(?:[\s\-()]*\d){8}\b/.test(st);
+    const noRealWords = st.replace(/[0-9+\s\-\(\)]/g,"").trim()==="" || PHONE_TOKEN_START_RE.test(st);
+    return hasPhone && noRealWords;
+  }
+
+  let addrLines = lines.slice(addrStart);
+  while (addrLines.length && isPhoneOnlyLine(addrLines[0])) { addrLines.shift(); }
+  
+  let fullAddrText = addrLines.join("\n");
+  let address = fullAddrText;
+  
+  // ตัดเบอร์และรหัสไปรษณีย์ออกจากที่อยู่
+  const phones = collectPhones(s);
+  const pIdx = findFirstPhoneIndex(address);
+  const pcIdx = findFirstPostcodeIndex(address);
+  let end = address.length;
+  if (pIdx >= 0) end = Math.min(end, pIdx);
+  if (pcIdx >= 0) end = Math.min(end, pcIdx);
+  address = address.slice(0, end);
+
+  address = stripPhonesFromText(address, phones);
+  const all5 = [...th2ar(s).matchAll(/\b(\d{5})\b/g)];
+  const postcode = all5.length ? all5[all5.length-1][1] : "";
+  
+  address = stripPostcodeTokens(address);
+  address = stripSpecificPostcode(address, postcode);
+  
+  address = address.replace(/[ ,;:|\-]+$/mg,"").replace(/\n{3,}/g,"\n\n").trim();
+
+  return { name, address, postcode };
 }
 
 function fixDanglingAdmin(address){
