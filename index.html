@@ -3573,7 +3573,7 @@ remainingBills.forEach(order => {
                 }
             }
 
-            // 3. ฟังก์ชันทำ Barcode (แก้ไข: ดึงข้อมูลวนลูปจาก Database จนครบ)
+            // 3. ฟังก์ชันทำ Barcode (แก้ไข: รวมบรรทัด 1 และ 2 เข้าด้วยกันหากมีข้อมูล)
             async function exportForBarcode(workOrderName) {
                 loadingOverlay.style.display = 'flex';
                 try {
@@ -3625,11 +3625,20 @@ remainingBills.forEach(order => {
                         const productDetails = fullProductList.find(p => p.id === item.product_id);
                         const category = productDetails ? (productDetails.product_category || 'N/A') : 'N/A';
 
+                        // --- ส่วนที่แก้ไข: รวมบรรทัด 1 และ 2 ---
+                        let line1 = String(item.line_1 || '').trim();
+                        let line2 = String(item.line_2 || '').trim();
+                        let combinedText = line1;
+                        
+                        if (line2) {
+                            combinedText += (combinedText ? " // " : "") + line2;
+                        }
+
                         dataToExport.push([
                             item.item_uid,
                             item.product_name,
                             item.ink_color,
-                            item.line_1 ? "\u200B" + item.line_1 : "",
+                            combinedText ? "\u200B" + combinedText : "", // ใส่ตัวอักษรพิเศษกัน Excel ตัดเลข 0 หน้า
                             category
                         ]);
                     });
