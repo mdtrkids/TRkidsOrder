@@ -3478,131 +3478,174 @@ remainingBills.forEach(order => {
                 }
             }
 
-            // 2. ฟังก์ชัน Export สำหรับ QC (แก้ไข: เรียงลำดับตาม Item UID ให้ตรงกับไฟล์ผลิต)
-            function exportForQC(workOrderName) {
-                const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
+            // 2. ฟังก์ชัน Export สำหรับ QC (แก้ไข: ดึงข้อมูลวนลูปจาก Database จนครบ)
+            async function exportForQC(workOrderName) {
+                loadingOverlay.style.display = 'flex';
+                try {
+                    // --- 1. ดึงข้อมูล orders ทั้งหมดในใบงานนี้ ---
+                    let allOrders = [];
+                    let fromO = 0;
+                    while (true) {
+                        const { data: oPart, error: oErr } = await supabaseClient
+                            .from('orders')
+                            .select('id, bill_no, status, claim_type, claim_details')
+                            .eq('work_order_name', workOrderName)
+                            .range(fromO, fromO + 999);
+                        
+                        if (oErr) throw oErr;
+                        allOrders = allOrders.concat(oPart);
+                        if (oPart.length < 1000) break;
+                        fromO += 1000;
+                    }
 
-                if (ordersInWorkOrder.length === 0) {
-                    alert("ไม่พบข้อมูล");
-                    return;
+                    if (allOrders.length === 0) {
+                        alert("ไม่พบข้อมูลออร์เดอร์ในใบงานนี้");
+                        return;
+                    }
+
+                    // --- 2. ดึง order_items ทั้งหมด ---
+                    const orderIds = allOrders.map(o => o.id);
+                    let allItemsInBatch = [];
+                    let fromI = 0;
+                    while (true) {
+                        const { data: iPart, error: iErr } = await supabaseClient
+                            .from('order_items')
+                            .select('*')
+                            .in('order_id', orderIds)
+                            .range(fromI, fromI + 999);
+                        
+                        if (iErr) throw iErr;
+                        allItemsInBatch = allItemsInBatch.concat(iPart);
+                        if (iPart.length < 1000) break;
+                        fromI += 1000;
+                    }
+
+                    // เรียงลำดับตาม Item UID
+                    allItemsInBatch.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
+
+                    const forceText = (val) => {
+                        const str = String(val || '').trim();
+                        return (str.startsWith('+') || str.startsWith('0')) ? "\u200B" + str : str;
+                    };
+
+                    const headers = ['ชื่อใบงาน', 'เลขบิล', 'Item UID', 'รหัสสินค้า', 'ชื่อสินค้า', 'หมวดหมู่สินค้า', 'สีหมึก', 'ชั้นที่', 'ลายการ์ตูน', 'ลายเส้น', 'ฟอนต์', 'บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3', 'จำนวน', 'หมายเหตุ', 'ไฟล์แนบ', 'ประเภทเคลม', 'รายละเอียดเคลม'];
+                    const dataToExport = [];
+
+                    allItemsInBatch.forEach(item => {
+                        const parentOrder = allOrders.find(o => o.id === item.order_id);
+                        const productDetails = fullProductList.find(p => p.id === item.product_id);
+                        const productCode = productDetails ? productDetails.product_code : 'N/A';
+                        const productCategory = productDetails ? productDetails.product_category : 'N/A';
+                        const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
+
+                        dataToExport.push([
+                            workOrderName, 
+                            item.bill_no, 
+                            item.item_uid, 
+                            productCode,
+                            item.product_name,
+                            productCategory,
+                            item.ink_color, 
+                            item.product_type, 
+                            item.cartoon_pattern, 
+                            item.line_pattern,
+                            item.font, 
+                            forceText(item.line_1),
+                            forceText(item.line_2),
+                            forceText(item.line_3),
+                            1,
+                            cleanNotes,
+                            item.file_attachment,
+                            parentOrder ? (parentOrder.claim_type || '') : '',
+                            parentOrder ? (parentOrder.claim_details || '') : ''
+                        ]);
+                    });
+
+                    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
+                    const workbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(workbook, worksheet, "QC_Data");
+                    XLSX.writeFile(workbook, `QC_${workOrderName}.xlsx`);
+                } catch (err) {
+                    console.error(err);
+                    alert("เกิดข้อผิดพลาด: " + err.message);
+                } finally {
+                    loadingOverlay.style.display = 'none';
                 }
-                
-                let allItemsInBatch = [];
-                ordersInWorkOrder.forEach(order => {
-                    if (order.order_items && order.order_items.length > 0) {
-                        order.order_items.forEach(item => {
-                            allItemsInBatch.push(item);
-                        });
-                    }
-                });
-
-                allItemsInBatch.sort((a, b) => 
-                    (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true })
-                );
-
-                const forceText = (val) => {
-                    const str = String(val || '').trim();
-                    if (str === '') return '';
-                    if (str.startsWith('+') || str.startsWith('0')) {
-                        return "\u200B" + str;
-                    }
-                    return str;
-                };
-
-                const headers = ['ชื่อใบงาน', 'เลขบิล', 'Item UID', 'รหัสสินค้า', 'ชื่อสินค้า', 'หมวดหมู่สินค้า', 'สีหมึก', 'ชั้นที่', 'ลายการ์ตูน', 'ลายเส้น', 'ฟอนต์', 'บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3', 'จำนวน', 'หมายเหตุ', 'ไฟล์แนบ'];
-                const dataToExport = [];
-
-                allItemsInBatch.forEach(item => {
-                    const cleanNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
-                    const productDetails = fullProductList.find(p => p.id === item.product_id);
-                    const productCode = productDetails ? productDetails.product_code : 'N/A';
-                    const productCategory = productDetails ? productDetails.product_category : 'N/A';
-
-                    dataToExport.push([
-                        workOrderName, 
-                        item.bill_no, 
-                        item.item_uid, 
-                        productCode,
-                        item.product_name,
-                        productCategory,
-                        item.ink_color, 
-                        item.product_type, 
-                        item.cartoon_pattern, 
-                        item.line_pattern,
-                        item.font, 
-                        forceText(item.line_1),
-                        forceText(item.line_2),
-                        forceText(item.line_3),
-                        1,
-                        cleanNotes,
-                        item.file_attachment
-                    ]);
-                });
-
-                const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
-                const range = XLSX.utils.decode_range(worksheet['!ref']);
-                for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-                    for (let C = 11; C <= 13; ++C) {
-                        const cell_address = XLSX.utils.encode_cell({r: R, c: C});
-                        if (!worksheet[cell_address]) continue;
-                        worksheet[cell_address].t = 's';
-                    }
-                }
-
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "QC_Data");
-                XLSX.writeFile(workbook, `QC_${workOrderName}.xlsx`);
             }
 
-            // 3. ฟังก์ชันทำ Barcode (แก้ไข: เรียงลำดับตาม Item UID)
-            function exportForBarcode(workOrderName) {
-                const ordersInWorkOrder = allOrdersData.filter(order => order.work_order_name === workOrderName);
-
-                if (ordersInWorkOrder.length === 0) {
-                    alert("ไม่พบข้อมูล");
-                    return;
-                }
-
-                let allItemsInBatch = [];
-                ordersInWorkOrder.forEach(order => {
-                    if (order.order_items && order.order_items.length > 0) {
-                        order.order_items.forEach(item => {
-                            allItemsInBatch.push(item);
-                        });
+            // 3. ฟังก์ชันทำ Barcode (แก้ไข: ดึงข้อมูลวนลูปจาก Database จนครบ)
+            async function exportForBarcode(workOrderName) {
+                loadingOverlay.style.display = 'flex';
+                try {
+                    // --- 1. ดึงข้อมูล orders ทั้งหมดในใบงานนี้ ---
+                    let allOrders = [];
+                    let fromO = 0;
+                    while (true) {
+                        const { data: oPart, error: oErr } = await supabaseClient
+                            .from('orders')
+                            .select('id, bill_no')
+                            .eq('work_order_name', workOrderName)
+                            .range(fromO, fromO + 999);
+                        
+                        if (oErr) throw oErr;
+                        allOrders = allOrders.concat(oPart);
+                        if (oPart.length < 1000) break;
+                        fromO += 1000;
                     }
-                });
 
-                allItemsInBatch.sort((a, b) => 
-                    (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true })
-                );
+                    if (allOrders.length === 0) {
+                        alert("ไม่พบข้อมูลออร์เดอร์ในใบงานนี้");
+                        return;
+                    }
 
-                const headers = ['Item UID', 'ชื่อสินค้า', 'สีหมึก', 'บรรทัด 1', 'หมวด'];
-                const dataToExport = [];
+                    // --- 2. ดึง order_items ทั้งหมด ---
+                    const orderIds = allOrders.map(o => o.id);
+                    let allItemsInBatch = [];
+                    let fromI = 0;
+                    while (true) {
+                        const { data: iPart, error: iErr } = await supabaseClient
+                            .from('order_items')
+                            .select('*')
+                            .in('order_id', orderIds)
+                            .range(fromI, fromI + 999);
+                        
+                        if (iErr) throw iErr;
+                        allItemsInBatch = allItemsInBatch.concat(iPart);
+                        if (iPart.length < 1000) break;
+                        fromI += 1000;
+                    }
 
-                allItemsInBatch.forEach(item => {
-                    const productDetails = fullProductList.find(p => p.id === item.product_id);
-                    const category = productDetails ? (productDetails.product_category || 'N/A') : 'N/A';
+                    // เรียงลำดับตาม Item UID
+                    allItemsInBatch.sort((a, b) => (a.item_uid || "").localeCompare(b.item_uid || "", undefined, { numeric: true }));
 
-                    dataToExport.push([
-                        item.item_uid,
-                        item.product_name,
-                        item.ink_color,
-                        item.line_1 ? "\u200B" + item.line_1 : "",
-                        category
-                    ]);
-                });
+                    const headers = ['Item UID', 'ชื่อสินค้า', 'สีหมึก', 'บรรทัด 1', 'หมวด'];
+                    const dataToExport = [];
 
-                if (dataToExport.length === 0) {
-                    alert("ไม่พบรายการสินค้า");
-                    return;
+                    allItemsInBatch.forEach(item => {
+                        const productDetails = fullProductList.find(p => p.id === item.product_id);
+                        const category = productDetails ? (productDetails.product_category || 'N/A') : 'N/A';
+
+                        dataToExport.push([
+                            item.item_uid,
+                            item.product_name,
+                            item.ink_color,
+                            item.line_1 ? "\u200B" + item.line_1 : "",
+                            category
+                        ]);
+                    });
+
+                    const csvContent = "\uFEFF" + [headers, ...dataToExport].map(e => e.map(val => `"${String(val || '').replace(/"/g, '""')}"`).join(",")).join("\n");
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `Barcode_${workOrderName}.csv`;
+                    link.click();
+                } catch (err) {
+                    console.error(err);
+                    alert("เกิดข้อผิดพลาด: " + err.message);
+                } finally {
+                    loadingOverlay.style.display = 'none';
                 }
-
-                const csvContent = "\uFEFF" + [headers, ...dataToExport].map(e => e.map(val => `"${String(val || '').replace(/"/g, '""')}"`).join(",")).join("\n");
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement("a");
-                link.href = URL.createObjectURL(blob);
-                link.download = `Barcode_${workOrderName}.csv`;
-                link.click();
             }
 
             // 4. ฟังก์ชัน Export ข้อมูลที่ส่งแล้ว (นิยามใหม่เพื่อแก้ Error exportShippedData is not defined)
