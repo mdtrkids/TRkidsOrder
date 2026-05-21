@@ -5431,12 +5431,12 @@ applyPackingFilters();
     shipAllScannedBtn.addEventListener("click", shipAllScannedOrders);
     finalizeWoBtn.addEventListener('click', async () => {
     if (!confirm('ปิดใบงานนี้?')) return;
+    
+    // 1. อัปเดตสถานะใบงานเป็นจัดส่งแล้ว
     await supabaseClient.from('work_orders').update({ status: 'จัดส่งแล้ว' }).eq('work_order_name', currentWorkOrderName);
     
-    // แก้ไขตรงนี้: จาก jobs เป็น plan_jobs
-    // (หมายเหตุ: ตาราง plan_jobs ปกติไม่มีคอลัมน์ status ให้ใช้การลบออก หรือปล่อยไว้ก็ได้ครับ)
-    // แนะนำให้ลบออกไปเลยถ้าผลิตเสร็จแล้ว:
-    await supabaseClient.from('plan_jobs').delete().eq('name', currentWorkOrderName);
+    // 2. ❌ ลบบรรทัดนี้ทิ้ง หรือใส่ // ไว้ข้างหน้า
+    // await supabaseClient.from('plan_jobs').delete().eq('name', currentWorkOrderName); 
     
     alert("ปิดใบงานเรียบร้อย"); 
     loadWorkOrdersForPacking();
