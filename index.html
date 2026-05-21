@@ -2888,50 +2888,50 @@ remainingBills.forEach(order => {
             async function revertSelectedBills(buttonElement, newStatus) { const workOrderName = buttonElement.dataset.workOrderName; const groupEl = buttonElement.closest('.work-order-group'); const selectedIds = getSelectedOrderIds(groupEl); if (selectedIds.length === 0) return alert('กรุณาเลือกบิล'); if (!confirm(`ต้องการคืน ${selectedIds.length} บิล ไปที่ "${newStatus}"?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: newStatus, work_order_name: null }).in('id', selectedIds); if (updateError) throw updateError; await updateWorkOrderCount(workOrderName); await updatePlannerJob(workOrderName, selectedIds); alert('คืนสถานะสำเร็จ!');  await loadInitialData(true);} catch (error) { console.error('Error reverting:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
             async function cancelSelectedBillsFromWorkOrder(buttonElement) { const workOrderName = buttonElement.dataset.workOrderName; const groupEl = buttonElement.closest('.work-order-group'); const selectedIds = getSelectedOrderIds(groupEl); if (selectedIds.length === 0) return alert('กรุณาเลือกบิล'); if (!confirm(`ต้องการ **ยกเลิก** ${selectedIds.length} บิล?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: 'ยกเลิก', work_order_name: null }).in('id', selectedIds); if (updateError) throw updateError; await updateWorkOrderCount(workOrderName); await updatePlannerJob(workOrderName, selectedIds); alert('ยกเลิกสำเร็จ!'); await loadInitialData(true); } catch (error) { console.error('Error cancelling:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
             async function cancelWorkOrder(workOrderName) { 
-                if (!confirm(`ต้องการ **ยกเลิกใบงาน** "${workOrderName}"?\n(ข้อมูลจะถูกลบออกจากแผนผลิตด้วย)`)) return; 
-                loadingOverlay.style.display = 'flex'; 
-                try { 
-                    // 1. คืนสถานะบิลในตาราง orders
-                    await supabaseClient.from('orders').update({ status: 'ลงข้อมูลเสร็จสิ้น', work_order_name: null }).eq('work_order_name', workOrderName); 
-                    // 2. ลบออกจากประวัติ work_orders
-                    await supabaseClient.from('work_orders').delete().eq('work_order_name', workOrderName); 
-                    // 3. ลบออกจากแผนผลิตในตาราง plan_jobs
-                    await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
-                    
-                    alert(`ยกเลิกใบงาน "${workOrderName}" เรียบร้อย`);
-                    await loadInitialData(true); 
-                } catch (error) { 
-                    alert(`เกิดพลาด: ${error.message}`); 
-                } finally { 
-                    loadingOverlay.style.display = 'none'; 
-                } 
-            }
+    if (!confirm(`ต้องการ **ยกเลิกใบงาน** "${workOrderName}"?\n(ข้อมูลจะถูกลบออกจากแผนผลิตด้วย)`)) return; 
+    loadingOverlay.style.display = 'flex'; 
+    try { 
+        // 1. คืนสถานะบิลในตาราง orders
+        await supabaseClient.from('orders').update({ status: 'ลงข้อมูลเสร็จสิ้น', work_order_name: null }).eq('work_order_name', workOrderName); 
+        // 2. ลบออกจากประวัติ work_orders
+        await supabaseClient.from('work_orders').delete().eq('work_order_name', workOrderName); 
+        
+        // 3. แก้ไขตรงนี้: ลบออกจากแผนผลิตในตาราง plan_jobs (ไม่ใช่ jobs)
+        await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
+        
+        alert(`ยกเลิกใบงาน "${workOrderName}" เรียบร้อย`);
+        await loadInitialData(true); 
+    } catch (error) { 
+        alert(`เกิดพลาด: ${error.message}`); 
+    } finally { 
+        loadingOverlay.style.display = 'none'; 
+    } 
+}
 
             async function updatePlannerJob(workOrderName, selectedIds = []) { 
-                const remainingBills = allOrdersData.filter(order => order.work_order_name === workOrderName && !selectedIds.includes(String(order.id))); 
-                if (remainingBills.length > 0) { 
-                    // คำนวณจำนวนใหม่จากบิลที่เหลือ
-                    const qty = { "เบิก": 0, "STAMP": 0, "STK": 0, "CTT": 0, "LASER": 0, "TUBE": 0, "QC": remainingBills.length, "PACK": remainingBills.length };
-                    remainingBills.forEach(order => {
-                        (order.order_items || []).forEach(item => {
-                            const product = fullProductList.find(p => p.id === item.product_id);
-                            if (product && product.product_category) {
-                                const cat = product.product_category.toUpperCase();
-                                if (cat.includes('STAMP')) { qty["STAMP"]++; qty["เบิก"]++; }
-                                if (cat.includes('STK')) qty["STK"]++;
-                                if (cat.includes('UV') || cat.includes('SUBLIMATION')) qty["CTT"]++; 
-                                if (cat.includes('LASER')) { qty["LASER"]++; qty["เบิก"]++; }
-                                if (cat.includes('TUBE')) qty["TUBE"]++;
-                            }
-                        });
-                    });
-                    // อัปเดตในตาราง plan_jobs
-                    await supabaseClient.from('plan_jobs').update({ qty: qty }).eq('name', workOrderName); 
-                } else { 
-                    // ถ้าไม่เหลือบิลเลย ให้ลบใบงานทิ้งจากแผนผลิต
-                    await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
-                } 
-            }
+    const remainingBills = allOrdersData.filter(order => order.work_order_name === workOrderName && !selectedIds.includes(String(order.id))); 
+    if (remainingBills.length > 0) { 
+        const qty = { "เบิก": 0, "STAMP": 0, "STK": 0, "CTT": 0, "LASER": 0, "TUBE": 0, "QC": remainingBills.length, "PACK": remainingBills.length };
+        remainingBills.forEach(order => {
+            (order.order_items || []).forEach(item => {
+                const product = fullProductList.find(p => p.id === item.product_id);
+                if (product && product.product_category) {
+                    const cat = product.product_category.toUpperCase();
+                    if (cat.includes('STAMP')) { qty["STAMP"]++; qty["เบิก"]++; }
+                    if (cat.includes('STK')) qty["STK"]++;
+                    if (cat.includes('UV') || cat.includes('SUBLIMATION')) qty["CTT"]++; 
+                    if (cat.includes('LASER')) { qty["LASER"]++; qty["เบิก"]++; }
+                    if (cat.includes('TUBE')) qty["TUBE"]++;
+                }
+            });
+        });
+        // อัปเดตในตาราง plan_jobs
+        await supabaseClient.from('plan_jobs').update({ qty: qty }).eq('name', workOrderName); 
+    } else { 
+        // ถ้าไม่เหลือบิลเลย ให้ลบใบงานทิ้งจากแผนผลิต plan_jobs
+        await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
+    } 
+}
             
             function validateOrderForCompletion(order) {
                 if (!order) return { isValid: false, reason: "ไม่พบข้อมูลออร์เดอร์" };
@@ -5430,11 +5430,17 @@ applyPackingFilters();
     
     shipAllScannedBtn.addEventListener("click", shipAllScannedOrders);
     finalizeWoBtn.addEventListener('click', async () => {
-        if (!confirm('ปิดใบงานนี้?')) return;
-        await supabaseClient.from('work_orders').update({ status: 'จัดส่งแล้ว' }).eq('work_order_name', currentWorkOrderName);
-        await supabaseClient.from('jobs').update({ status: 'DONE' }).eq('name', currentWorkOrderName);
-        alert("ปิดใบงานเรียบร้อย"); loadWorkOrdersForPacking();
-    });
+    if (!confirm('ปิดใบงานนี้?')) return;
+    await supabaseClient.from('work_orders').update({ status: 'จัดส่งแล้ว' }).eq('work_order_name', currentWorkOrderName);
+    
+    // แก้ไขตรงนี้: จาก jobs เป็น plan_jobs
+    // (หมายเหตุ: ตาราง plan_jobs ปกติไม่มีคอลัมน์ status ให้ใช้การลบออก หรือปล่อยไว้ก็ได้ครับ)
+    // แนะนำให้ลบออกไปเลยถ้าผลิตเสร็จแล้ว:
+    await supabaseClient.from('plan_jobs').delete().eq('name', currentWorkOrderName);
+    
+    alert("ปิดใบงานเรียบร้อย"); 
+    loadWorkOrdersForPacking();
+});
 
     return { loadWorkOrdersForPacking };
 })();
