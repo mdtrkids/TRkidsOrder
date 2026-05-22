@@ -476,13 +476,12 @@
             <nav>
                 <ul>
                     <li><a href="#" class="nav-link active" data-target="order-system-container"><span class="icon">📝</span><span class="nav-text">ระบบจัดการออร์เดอร์</span></a></li>
-                  <li id="nav-planner"><a href="#" class="nav-link" data-target="planner-system-container"><span class="icon">🗓️</span><span class="nav-text">ใบงาน (Export)</span></a></li>
-                  <li><a href="#" class="nav-link" data-target="packing-system-container"><span class="icon">📦</span><span class="nav-text">ระบบจัดของ</span></a></li>
+                    <li id="nav-planner"><a href="#" class="nav-link" data-target="planner-system-container"><span class="icon">🗓️</span><span class="nav-text">ใบงาน (Export)</span></a></li>
+                    <li><a href="#" class="nav-link" data-target="packing-system-container"><span class="icon">📦</span><span class="nav-text">ระบบจัดของ</span></a></li>
 	<li id="nav-transport"><a href="#" class="nav-link" data-target="transport-system-container"><span class="icon">🚚</span><span class="nav-text">ระบบขนส่ง (Transport)</span></a></li>
-                  <li id="nav-product"><a href="#" class="nav-link" data-target="product-system-container"><span class="icon">🏷️</span><span class="nav-text">ระบบจัดการสินค้า</span></a></li>
+                    <li id="nav-product"><a href="#" class="nav-link" data-target="product-system-container"><span class="icon">🏷️</span><span class="nav-text">ระบบจัดการสินค้า</span></a></li>
 	<li id="nav-pattern"><a href="#" class="nav-link" data-target="pattern-system-container"><span class="icon">🖼️</span><span class="nav-text">จัดการลายการ์ตูน</span></a></li>
-                  <li id="nav-sales-report"><a href="#" class="nav-link" data-target="sales-report-system-container"><span class="icon">📈</span><span class="nav-text">รายงานยอดขาย</span></a></li>
-	<li id="nav-claim-report"><a href="#" class="nav-link" data-target="claim-report-system-container"><span class="icon">🚩</span><span class="nav-text">ตรวจสอบงานเคลม</span></a></li>
+                    <li id="nav-sales-report"><a href="#" class="nav-link" data-target="sales-report-system-container"><span class="icon">📈</span><span class="nav-text">รายงานยอดขาย</span></a></li>
                     <li id="nav-accounting"><a href="accounting.html" class="nav-link"><span class="icon">📊</span><span class="nav-text">ระบบบัญชี</span></a></li>
                 </ul>
             </nav>
@@ -966,53 +965,6 @@
                     </div>
                 </div>
 
-<!-- ==================== CLAIM REPORT SYSTEM ==================== -->
-<div id="claim-report-system-container" class="system-content">
-    <div class="container">
-        <h1>รายงานตรวจสอบงานเคลม</h1>
-        <div class="report-controls" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; margin-bottom: 25px; padding: 20px; background-color: #fff5f5; border-radius: 8px; border: 1px solid #feb2b2;">
-            <div class="control-group">
-                <label>ตั้งแต่วันที่</label>
-                <input type="date" id="claim-report-start-date">
-            </div>
-            <div class="control-group">
-                <label>ถึงวันที่</label>
-                <input type="date" id="claim-report-end-date">
-            </div>
-            <div class="control-group">
-                <label>เลือกแอดมิน (ผู้ลงงาน)</label>
-                <select id="claim-report-admin-filter" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; min-width: 180px;">
-                    <option value="all">ทั้งหมด</option>
-                </select>
-            </div>
-            <button id="generate-claim-report-btn" class="btn btn-danger">🔍 ดึงข้อมูลเคลม</button>
-            <button id="export-claim-report-btn" class="btn btn-success" style="display: none; margin-left: auto;">📥 Export Excel</button>
-        </div>
-
-        <div style="margin-bottom: 15px; font-size: 18px;">
-            จำนวนบิลที่เคลมทั้งหมด: <strong id="total-claim-count" style="color: #dc3545; font-size: 24px;">0</strong> บิล
-        </div>
-
-        <div class="report-results-container" style="max-height: 60vh; overflow-y: auto;">
-            <table id="claim-report-table" style="width: 100%; border-collapse: collapse;">
-                <thead>
-    <tr style="background-color: #f8d7da; position: sticky; top: 0; z-index: 10;">
-        <th style="padding: 12px; border: 1px solid #dee2e6; width: 120px;">วันที่ลงใบงาน</th>
-        <th style="padding: 12px; border: 1px solid #dee2e6; width: 150px;">แอดมิน (คนเดิม)</th>
-        <th style="padding: 12px; border: 1px solid #dee2e6; width: 180px;">เลขบิลเคลม</th>
-        <th style="padding: 12px; border: 1px solid #dee2e6;">ลูกค้า</th>
-        <th style="padding: 12px; border: 1px solid #dee2e6; width: 180px;">ประเภทเคลม</th>
-        <th style="padding: 12px; border: 1px solid #dee2e6;">รายละเอียดเคลม</th>
-    </tr>
-</thead>
-                <tbody id="claim-report-tbody">
-                    <tr><td colspan="6" style="text-align: center; padding: 30px; color: #666;">กรุณาเลือกช่วงวันที่แล้วกดปุ่มค้นหา</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
 <!-- ==================== TRANSPORT SYSTEM (BIG FONT & EXPORT) ==================== -->
                 <div id="transport-system-container" class="system-content">
                     <div class="container" style="background: transparent; border: none; box-shadow: none; padding-top: 10px;">
@@ -1154,8 +1106,8 @@
             
             systemContents.forEach(content => content.classList.toggle('active', content.id === targetId));
 
-	if (targetId === 'packing-system-container') { window.packingSystem.loadWorkOrdersForPacking(); }
-	if (targetId === 'claim-report-system-container') { window.claimReportSystem.initializeApp(); }
+            if (targetId === 'packing-system-container') { window.packingSystem.loadWorkOrdersForPacking(); }
+            
 	if (targetId === 'transport-system-container') { window.transportSystem.initialize(); }
 
             if (window.innerWidth <= 768) { document.body.classList.add('sidebar-collapsed'); }
@@ -1177,7 +1129,6 @@
                     else if (target === 'product' && loggedInUserRole === 'superadmin') { window.productSystem.initializeApp(); }
                     else if (target === 'planner' && (loggedInUserRole === 'superadmin' || loggedInUserRole === 'production')) { window.plannerSystem.initializeApp(loggedInUserRole); }
                     else if (target === 'sales-report' && loggedInUserRole === 'superadmin') { window.salesReportSystem.initializeApp(); }
-	else if (target === 'claim-report' && (loggedInUserRole === 'superadmin' || loggedInUserRole === 'manager')) { window.claimReportSystem.initializeApp(); }
                 }
             }
             localStorage.removeItem('navigateTo');
@@ -1203,7 +1154,6 @@
                 document.getElementById('nav-pattern').style.display = (isSuperAdmin || isManager) ? '' : 'none';
                 document.getElementById('nav-planner').style.display = (isSuperAdmin || isProduction || isManager) ? '' : 'none';
                 document.getElementById('nav-sales-report').style.display = (isSuperAdmin || isManager|| isStore) ? '' : 'none';
-	document.getElementById('nav-claim-report').style.display = (isSuperAdmin || isManager) ? '' : 'none';
                 document.getElementById('nav-accounting').style.display = isSuperAdmin ? '' : 'none';
 
                 loginOverlay.style.display = 'none'; 
@@ -3778,10 +3728,6 @@ function exportMasterStatusReport() {
         return alert('กรุณาเลือกช่วงวันที่สำหรับ Export สถานะรวม');
     }
 
-    if (!startDate || !endDate) {
-        return alert('กรุณาเลือกช่วงวันที่สำหรับ Export สถานะรวม');
-    }
-
     const statusesToExport = ['ลงข้อมูลเสร็จสิ้น', 'ใบงาน (กำลังผลิต)', 'จัดส่งแล้ว'];
     
     const ordersToExport = allOrdersData.filter(order => {
@@ -6149,82 +6095,77 @@ window.patternSystem = (() => {
             }
 
             async function generateReport() {
-    const start = document.getElementById('report-start-date').value; // แก้เป็น report-
-    const end = document.getElementById('report-end-date').value; // แก้เป็น report-
-
-    if (!start || !end) {
-        alert("กรุณาเลือกวันที่ให้ครบถ้วน");
-        return;
-    }
-                
+                const startDate = startDateInput.value;
+                const endDate = endDateInput.value;
+                if (!startDate || !endDate) {
+                    alert('กรุณาเลือกวันที่เริ่มต้นและสิ้นสุด');
+                    return;
+                }
                 loadingOverlay.style.display = 'flex';
+                reportPlaceholder.textContent = 'กำลังดึงข้อมูล...';
+                reportTbody.innerHTML = '';
+                exportBtn.style.display = 'none';
+
                 try {
-                    // --- แก้ไขส่วนนี้: ดึงข้อมูลแบบวนลูปจนกว่าจะครบ (เพื่อแก้ปัญหา Limit 1,000 แถว) ---
-                    let allOriginals = [];
+                    let allData = [];
                     let from = 0;
                     let to = 999;
                     let hasMore = true;
 
+                    // --- วนลูปดึงข้อมูลทีละ 1,000 จนกว่าจะหมด ---
                     while (hasMore) {
-                        const { data: batch, error: originError } = await supabaseClient
-                            .from('orders')
-                            .select('bill_no, entry_date, admin_user, customer_name')
-                            .neq('channel_code', 'CLAIM')
-                            .gte('entry_date', start)
-                            .lte('entry_date', end)
-                            .range(from, to); // ดึงทีละ 1,000 แถว
+                        const { data, error } = await supabaseClient.from('orders')
+                            .select('channel_code, order_items(*, products(product_code, product_category))')
+                            .in('status', ['จัดส่งแล้ว', 'ลงข้อมูลเสร็จสิ้น', 'ใบงาน (กำลังผลิต)'])
+                            .gte('entry_date', startDate)
+                            .lte('entry_date', endDate)
+                            .range(from, to); // ใช้ range แทน limit เพื่อดึงข้อมูลเป็นชุดๆ
 
-                        if (originError) throw originError;
+                        if (error) throw error;
+
+                        allData = allData.concat(data);
                         
-                        allOriginals = allOriginals.concat(batch);
-                        
-                        if (batch.length < 1000) {
-                            hasMore = false; // ถ้าดึงมาได้ไม่ถึง 1,000 แปลว่าหมดแล้ว
+                        if (data.length < 1000) {
+                            hasMore = false; // ถ้าได้ข้อมูลมาไม่ถึง 1,000 แสดงว่าหมดแล้ว
                         } else {
                             from += 1000;
                             to += 1000;
                         }
                     }
-                    // ----------------------------------------------------------------------
+                    
+                    const productMap = new Map();
+                    const channelSet = new Set();
 
-                    if (allOriginals.length === 0) {
-                        reportData = [];
-                        renderTable();
-                        return;
-                    }
-
-                    // ขั้นตอนที่ 2: ดึงรายการเคลมทั้งหมด (ควรดึงแบบวนลูปเช่นกันถ้าบิลเคลมเยอะ)
-                    let allClaims = [];
-                    from = 0; to = 999; hasMore = true;
-                    while (hasMore) {
-                        const { data: claimBatch, error: claimError } = await supabaseClient
-                            .from('orders')
-                            .select('*')
-                            .eq('channel_code', 'CLAIM')
-                            .range(from, to);
-                        if (claimError) throw claimError;
-                        allClaims = allClaims.concat(claimBatch);
-                        if (claimBatch.length < 1000) hasMore = false;
-                        else { from += 1000; to += 1000; }
-                    }
-
-                    // ขั้นตอนที่ 3: จับคู่ข้อมูล
-                    const matchedClaims = [];
-                    allOriginals.forEach(orig => {
-                        const relatedClaims = allClaims.filter(c => c.bill_no.endsWith(`-${orig.bill_no}`));
-                        relatedClaims.forEach(claim => {
-                            matchedClaims.push({
-                                ...claim,
-                                original_date: orig.entry_date,
-                                original_admin: orig.admin_user
-                            });
+                    // ใช้ allData ที่ดึงมาครบแล้วในการคำนวณ
+                    allData.forEach(order => {
+                        const channel = (order.channel_code || 'N/A').toUpperCase();
+                        channelSet.add(channel);
+                        (order.order_items || []).forEach(item => {
+                            if (item.products) {
+                                const productId = item.product_id;
+                                if (!productMap.has(productId)) {
+                                    productMap.set(productId, {
+                                        code: item.products.product_code,
+                                        name: item.product_name,
+                                        category: item.products.product_category,
+                                        channels: {},
+                                        total: 0
+                                    });
+                                }
+                                const pData = productMap.get(productId);
+                                pData.channels[channel] = (pData.channels[channel] || 0) + 1;
+                                pData.total += 1;
+                            }
                         });
                     });
 
-                    reportData = matchedClaims;
-                    renderTable();
-                    document.getElementById('export-claim-report-btn').style.display = reportData.length > 0 ? 'inline-block' : 'none';
+                    allChannels = Array.from(channelSet).sort();
+                    reportData = Array.from(productMap.values());
+                    renderReportTable();
+
                 } catch (err) {
+                    console.error('Error generating report:', err);
+                    reportPlaceholder.textContent = 'เกิดข้อผิดพลาดในการสร้างรายงาน: ' + err.message;
                     alert('เกิดข้อผิดพลาด: ' + err.message);
                 } finally {
                     loadingOverlay.style.display = 'none';
@@ -6335,162 +6276,6 @@ window.patternSystem = (() => {
                 
                 XLSX.writeFile(workbook, `SalesReport_${startDate}_to_${endDate}.xlsx`);
             }
-            return { initializeApp };
-        })();
-
-// --- CLAIM REPORT SYSTEM MODULE (FULL & FIXED VERSION) ---
-        window.claimReportSystem = (() => {
-            let isInitialized = false;
-            let reportData = [];
-
-            function initializeApp() {
-                if (isInitialized) return;
-                
-                const today = new Date().toISOString().split('T')[0];
-                document.getElementById('claim-report-start-date').value = today;
-                document.getElementById('claim-report-end-date').value = today;
-
-                document.getElementById('generate-claim-report-btn').onclick = generateReport;
-                document.getElementById('export-claim-report-btn').onclick = exportExcel;
-                document.getElementById('claim-report-admin-filter').onchange = renderTable;
-
-                loadAdmins();
-                isInitialized = true;
-            }
-
-            async function loadAdmins() {
-                const { data, error } = await supabaseClient.from('users').select('username').order('username');
-                if (!error && data) {
-                    const select = document.getElementById('claim-report-admin-filter');
-                    // ล้างค่าเก่าก่อน (ยกเว้น "ทั้งหมด")
-                    select.innerHTML = '<option value="all">ทั้งหมด</option>';
-                    data.forEach(user => {
-                        const opt = document.createElement('option');
-                        opt.value = user.username;
-                        opt.textContent = user.username;
-                        select.appendChild(opt);
-                    });
-                }
-            }
-
-            async function generateReport() {
-    const start = document.getElementById('claim-report-start-date').value;
-    const end = document.getElementById('claim-report-end-date').value;
-
-    // เพิ่มบรรทัดดัก Error นี้เข้าไปครับ
-    if (!start || !end) {
-        alert("กรุณาเลือกวันที่เริ่มและสิ้นสุดก่อนค้นหา");
-        return;
-    }
-                
-                loadingOverlay.style.display = 'flex';
-                try {
-                    // 1. ดึงบิลปกติ (ไม่ใช่ CLAIM) ที่ลงงานในช่วงวันที่เลือก
-                    let allOriginals = [];
-                    let from = 0;
-                    let hasMore = true;
-
-                    while (hasMore) {
-                        const { data: batch, error: originError } = await supabaseClient
-                            .from('orders')
-                            .select('bill_no, entry_date, admin_user')
-                            .neq('channel_code', 'CLAIM')
-                            .gte('entry_date', start)
-                            .lte('entry_date', end)
-                            .range(from, from + 999);
-
-                        if (originError) throw originError;
-                        allOriginals = allOriginals.concat(batch);
-                        if (batch.length < 1000) hasMore = false;
-                        else from += 1000;
-                    }
-
-                    if (allOriginals.length === 0) {
-                        reportData = [];
-                        renderTable();
-                        return;
-                    }
-
-                    // 2. ดึงรายการเคลมทั้งหมดมาเทียบ
-                    let allClaims = [];
-                    from = 0; hasMore = true;
-                    while (hasMore) {
-                        const { data: claimBatch, error: claimError } = await supabaseClient
-                            .from('orders')
-                            .select('*')
-                            .eq('channel_code', 'CLAIM')
-                            .range(from, from + 999);
-                        if (claimError) throw claimError;
-                        allClaims = allClaims.concat(claimBatch);
-                        if (claimBatch.length < 1000) hasMore = false;
-                        else from += 1000;
-                    }
-
-                    // 3. Match บิลต้นฉบับกับบิลเคลม
-                    const matchedClaims = [];
-                    allOriginals.forEach(orig => {
-                        const relatedClaims = allClaims.filter(c => c.bill_no.endsWith(`-${orig.bill_no}`));
-                        relatedClaims.forEach(claim => {
-                            matchedClaims.push({
-                                ...claim,
-                                original_date: orig.entry_date,
-                                original_admin: orig.admin_user
-                            });
-                        });
-                    });
-
-                    reportData = matchedClaims.sort((a, b) => a.original_date.localeCompare(b.original_date));
-                    renderTable();
-                    document.getElementById('export-claim-report-btn').style.display = reportData.length > 0 ? 'inline-block' : 'none';
-                } catch (err) {
-                    alert('เกิดข้อผิดพลาด: ' + err.message);
-                } finally {
-                    loadingOverlay.style.display = 'none';
-                }
-            }
-
-            function renderTable() {
-                const tbody = document.getElementById('claim-report-tbody');
-                const adminFilter = document.getElementById('claim-report-admin-filter').value;
-                tbody.innerHTML = '';
-
-                const filtered = reportData.filter(d => adminFilter === 'all' || d.original_admin === adminFilter);
-                document.getElementById('total-claim-count').textContent = filtered.length;
-
-                if (filtered.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#999;">ไม่พบข้อมูลประวัติการเคลมในช่วงวันที่เลือก</td></tr>';
-                    return;
-                }
-
-                filtered.forEach(row => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td style="padding: 10px; border: 1px solid #eee; text-align: center;">${row.original_date}</td>
-                        <td style="padding: 10px; border: 1px solid #eee; font-weight: bold; color: #d9534f; text-align: center;">${row.original_admin}</td>
-                        <td style="padding: 10px; border: 1px solid #eee;">${row.bill_no}</td>
-                        <td style="padding: 10px; border: 1px solid #eee;">${row.customer_name}</td>
-                        <td style="padding: 10px; border: 1px solid #eee; color: #dc3545; font-weight: bold;">${row.claim_type || '-'}</td>
-                        <td style="padding: 10px; border: 1px solid #eee;">${row.claim_details || '-'}</td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-            }
-
-            function exportExcel() {
-                const adminFilter = document.getElementById('claim-report-admin-filter').value;
-                const filtered = reportData.filter(d => adminFilter === 'all' || d.original_admin === adminFilter);
-                
-                const headers = [["วันที่ลงใบงาน", "แอดมินคนเดิม", "เลขบิลเคลม", "ชื่อลูกค้า", "ประเภทการเคลม", "รายละเอียดการเคลม"]];
-                const dataRows = filtered.map(d => [
-                    d.original_date, d.original_admin, d.bill_no, d.customer_name, d.claim_type, d.claim_details
-                ]);
-
-                const ws = XLSX.utils.aoa_to_sheet(headers.concat(dataRows));
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "ClaimReport");
-                XLSX.writeFile(wb, `รายงานเคลม_${document.getElementById('claim-report-start-date').value}.xlsx`);
-            }
-
             return { initializeApp };
         })();
 
