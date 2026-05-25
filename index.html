@@ -2495,6 +2495,15 @@ async function fetchOrdersByStatus(status) {
                     'tab-cancelled': 'ยกเลิก'
                 };
 
+    if (tabName === 'tab-work-orders') {
+        const { data: woData } = await supabaseClient
+            .from('work_orders')
+            .select('*')
+            .eq('status', 'กำลังผลิต')
+            .order('created_at', { ascending: false });
+        allWorkOrdersData = woData || [];
+    }
+
                 // ถ้าคลิก Tab ที่มีสถานะ ให้ดึงข้อมูลใหม่ทันที
                 if (statusMap[tabName]) {
                     await fetchOrdersByStatus(statusMap[tabName]);
