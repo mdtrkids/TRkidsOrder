@@ -100,14 +100,15 @@
             <div class="sidebar-header"> <h2>TR Kids</h2> </div>
             <nav>
                 <ul>
-                    <li><a href="index.html" class="nav-link"><span class="icon">📝</span><span class="nav-text">ระบบจัดการออร์เดอร์</span></a></li>
-                    <li><a href="#" class="nav-link" id="nav-planner"><span class="icon">🗓️</span><span class="nav-text">ใบงาน (Export)</span></a></li>
-                    <li><a href="#" class="nav-link" id="nav-packing"><span class="icon">📦</span><span class="nav-text">ระบบจัดของ</span></a></li>
+	<li><a href="index.html" class="nav-link"><span class="icon">📝</span><span class="nav-text">ระบบจัดการออร์เดอร์</span></a></li>
+	<li><a href="#" class="nav-link" id="nav-planner"><span class="icon">🗓️</span><span class="nav-text">ใบงาน (Export)</span></a></li>
+	<li><a href="#" class="nav-link" id="nav-packing"><span class="icon">📦</span><span class="nav-text">ระบบจัดของ</span></a></li>
 	<li><a href="#" class="nav-link" id="nav-shipping-verify"><span class="icon">🚚</span><span class="nav-text">ทวนสอบขนส่ง</span></a></li>
-                    <li><a href="#" class="nav-link" id="nav-product"><span class="icon">🏷️</span><span class="nav-text">ระบบจัดการสินค้า</span></a></li>
-    <li><a href="#" class="nav-link" id="nav-pattern"><span class="icon">🖼️</span><span class="nav-text">จัดการลายการ์ตูน</span></a></li>
-                    <li><a href="#" class="nav-link" id="nav-sales-report"><span class="icon">📈</span><span class="nav-text">รายงานยอดขาย</span></a></li>
-                    <li><a href="accounting.html" class="nav-link active"><span class="icon">📊</span><span class="nav-text">ระบบบัญชี</span></a></li>
+	<li><a href="#" class="nav-link" id="nav-product"><span class="icon">🏷️</span><span class="nav-text">ระบบจัดการสินค้า</span></a></li>
+	<li><a href="#" class="nav-link" id="nav-pattern"><span class="icon">🖼️</span><span class="nav-text">จัดการลายการ์ตูน</span></a></li>
+	<li><a href="#" class="nav-link" id="nav-sales-report"><span class="icon">📈</span><span class="nav-text">รายงานยอดขาย</span></a></li>
+	<li><a href="#" class="nav-link" id="nav-claim-report"><span class="icon">🚩</span><span class="nav-text">ตรวจสอบงานเคลม</span></a></li>
+	<li><a href="accounting.html" class="nav-link active"><span class="icon">📊</span><span class="nav-text">ระบบบัญชี</span></a></li>
                 </ul>
             </nav>
         </div>
@@ -263,11 +264,13 @@
                 localStorage.setItem('navigateTo', target);
                 window.location.href = 'index.html';
             }
-            document.getElementById('nav-planner').addEventListener('click', (e) => { e.preventDefault(); navigateTo('planner-system-container'); });
-            document.getElementById('nav-packing').addEventListener('click', (e) => { e.preventDefault(); navigateTo('packing-system-container'); });
-           document.getElementById('nav-shipping-verify').addEventListener('click', (e) => { e.preventDefault(); navigateTo('shipping-verification-system-container'); });
-            document.getElementById('nav-product').addEventListener('click', (e) => { e.preventDefault(); navigateTo('product-system-container'); });
-            document.getElementById('nav-sales-report').addEventListener('click', (e) => { e.preventDefault(); navigateTo('sales-report-system-container'); });
+	document.getElementById('nav-planner').addEventListener('click', (e) => { e.preventDefault(); navigateTo('planner-system-container'); });
+	document.getElementById('nav-packing').addEventListener('click', (e) => { e.preventDefault(); navigateTo('packing-system-container'); });
+	document.getElementById('nav-shipping-verify').addEventListener('click', (e) => { e.preventDefault(); navigateTo('shipping-verification-system-container'); });
+	document.getElementById('nav-product').addEventListener('click', (e) => { e.preventDefault(); navigateTo('product-system-container'); });
+	document.getElementById('nav-sales-report').addEventListener('click', (e) => { e.preventDefault(); navigateTo('sales-report-system-container'); });
+	document.getElementById('nav-claim-report').addEventListener('click', (e) => { e.preventDefault(); navigateTo('claim-report-system-container'); });
+
            document.getElementById('nav-pattern').addEventListener('click', (e) => { e.preventDefault(); navigateTo('pattern-system-container'); });
             
             const today = new Date().toISOString().slice(0, 10);
