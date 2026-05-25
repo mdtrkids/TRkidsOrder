@@ -5923,12 +5923,11 @@ window.patternSystem = (() => {
     return { initializeApp, remove, edit };
 })();
 
-       // --- PLANNER SYSTEM MODULE (OMS SUMMARY VIEW - VIEW ONLY) ---
+      // --- PLANNER SYSTEM MODULE (OMS SUMMARY VIEW - FIXED LIMIT & MATCHING) ---
         window.plannerSystem = (() => {
-            let state = { settings: { departments: [] }, jobs: [] };
+            let state = { jobs: [], workOrders: [] };
 
             async function initializeApp(role) {
-                // ผูกเหตุการณ์ Filter
                 const clearBtn = document.getElementById('j_clear');
                 if (clearBtn) {
                     clearBtn.onclick = () => {
@@ -5946,8 +5945,8 @@ window.patternSystem = (() => {
 
                 await loadPlannerData();
                 
-                // Realtime Sync ติดตามการเปลี่ยนแปลงจาก Database
-                supabaseClient.channel('planner-realtime-oms-viewonly')
+                // Realtime Sync
+                supabaseClient.channel('planner-realtime-sync')
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_jobs' }, loadPlannerData)
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'work_orders' }, loadPlannerData)
                     .subscribe();
@@ -5955,18 +5954,34 @@ window.patternSystem = (() => {
 
             async function loadPlannerData() {
                 try {
-                    // ดึงข้อมูลแผนงาน และ สถานะใบงาน
-                    const [jobRes, woRes] = await Promise.all([
-                        supabaseClient.from('plan_jobs').select('*').order('order_index', { ascending: false }),
-                        supabaseClient.from('work_orders').select('work_order_name, status')
-                    ]);
+                    // 1. ดึงข้อมูลแผนงาน (plan_jobs) มาทั้งหมดก่อน
+                    const { data: jobs, error: jobErr } = await supabaseClient
+                        .from('plan_jobs')
+                        .select('*')
+                        .order('order_index', { ascending: false });
                     
-                    state.jobs = jobRes.data || [];
-                    state.workOrders = woRes.data || [];
+                    if (jobErr) throw jobErr;
+                    state.jobs = jobs || [];
+
+                    // 2. ดึงสถานะจาก work_orders เฉพาะที่มีชื่อตรงกับแผนงานที่ดึงมา
+                    // วิธีนี้จะแก้ปัญหา Limit 1,000 แถว เพราะเราดึงเฉพาะที่จำเป็น
+                    const jobNames = state.jobs.map(j => j.name).filter(Boolean);
+                    
+                    if (jobNames.length > 0) {
+                        const { data: woStatuses, error: woErr } = await supabaseClient
+                            .from('work_orders')
+                            .select('work_order_name, status')
+                            .in('work_order_name', jobNames);
+                        
+                        if (woErr) throw woErr;
+                        state.workOrders = woStatuses || [];
+                    }
                     
                     populateDateFilter(); 
                     renderPlannerView();  
-                } catch (e) { console.error("Planner load error", e); }
+                } catch (e) { 
+                    console.error("Planner load error", e); 
+                }
             }
 
             function populateDateFilter() {
@@ -5991,104 +6006,102 @@ window.patternSystem = (() => {
             }
 
             function renderPlannerView() {
-    const tableContainer = document.getElementById('tableJobs');
-    const summaryStatsContainer = document.getElementById('planner-summary-stats');
-    const summaryHeader = document.getElementById('planner-summary-header');
-    
-    if (!tableContainer) return;
+                const tableContainer = document.getElementById('tableJobs');
+                const summaryStatsContainer = document.getElementById('planner-summary-stats');
+                
+                if (!tableContainer) return;
 
-    const selectedDate = document.getElementById('j_date').value;
-    const searchTerm = document.getElementById('j_search').value.toLowerCase();
+                const selectedDate = document.getElementById('j_date').value;
+                const searchTerm = document.getElementById('j_search').value.toLowerCase();
 
-    const filteredJobs = state.jobs.filter(j => {
-        const dateMatch = !selectedDate || j.date === selectedDate;
-        const searchMatch = !searchTerm || j.name.toLowerCase().includes(searchTerm);
-        return dateMatch && searchMatch;
-    });
+                const filteredJobs = state.jobs.filter(j => {
+                    const dateMatch = !selectedDate || j.date === selectedDate;
+                    const searchMatch = !searchTerm || j.name.toLowerCase().includes(searchTerm);
+                    return dateMatch && searchMatch;
+                });
 
-    // --- ส่วนคำนวณยอดรวม (Sum totals) ---
-    const totalByDept = {};
-    filteredJobs.forEach(j => {
-        if (j.qty) {
-            Object.entries(j.qty).forEach(([dept, count]) => {
-                totalByDept[dept] = (totalByDept[dept] || 0) + count;
-            });
-        }
-    });
+                // Dashboard สรุปยอด
+                const totalByDept = {};
+                filteredJobs.forEach(j => {
+                    if (j.qty) {
+                        Object.entries(j.qty).forEach(([dept, count]) => {
+                            totalByDept[dept] = (totalByDept[dept] || 0) + count;
+                        });
+                    }
+                });
 
-    // วาดส่วนสรุปยอดรวมด้านบน
-    if (summaryStatsContainer) {
-        summaryStatsContainer.innerHTML = '';
-        if (Object.keys(totalByDept).length > 0) {
-            Object.entries(totalByDept).forEach(([dept, count]) => {
-                const badge = document.createElement('div');
-                badge.style.cssText = "background: #1d2b3a; color: white; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: bold;";
-                badge.innerHTML = `${dept}: <span style="color: #ffc107;">${count.toLocaleString()}</span>`;
-                summaryStatsContainer.appendChild(badge);
-            });
-        }
-    }
-    
-    if (summaryHeader) {
-        summaryHeader.textContent = selectedDate ? `สรุปยอดงานประจำวันที่: ${selectedDate}` : 'สรุปยอดงานทั้งหมด';
-    }
+                if (summaryStatsContainer) {
+                    summaryStatsContainer.innerHTML = '';
+                    Object.entries(totalByDept).forEach(([dept, count]) => {
+                        const badge = document.createElement('div');
+                        badge.style.cssText = "background: #1d2b3a; color: white; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: bold;";
+                        badge.innerHTML = `${dept}: <span style="color: #ffc107;">${count.toLocaleString()}</span>`;
+                        summaryStatsContainer.appendChild(badge);
+                    });
+                }
 
-    // --- ส่วนวาดตารางใบงาน (เหมือนเดิม) ---
-    let html = `
-    <thead>
-        <tr style="background:#f8f9fa;">
-            <th style="border:1px solid #ddd; padding:12px; min-width:200px; text-align:left;">ชื่อใบงาน</th>
-            <th style="border:1px solid #ddd; padding:12px; width:100px; text-align:center;">เวลาตัด</th>
-            <th style="border:1px solid #ddd; padding:12px; width:150px; text-align:center;">สถานะ</th>
-            <th style="border:1px solid #ddd; padding:12px; text-align:left;">จำนวนงานแยกตามแผนก</th>
-        </tr>
-    </thead>
-    <tbody>`;
+                let html = `
+                <thead>
+                    <tr style="background:#f8f9fa;">
+                        <th style="border:1px solid #ddd; padding:12px; min-width:200px; text-align:left;">ชื่อใบงาน</th>
+                        <th style="border:1px solid #ddd; padding:12px; width:100px; text-align:center;">เวลาตัด</th>
+                        <th style="border:1px solid #ddd; padding:12px; width:150px; text-align:center;">สถานะ (จากใบงาน)</th>
+                        <th style="border:1px solid #ddd; padding:12px; text-align:left;">จำนวนงาน</th>
+                    </tr>
+                </thead>
+                <tbody>`;
 
-    if (filteredJobs.length > 0) {
-        filteredJobs.forEach(j => {
-            const cutDisplay = (j.cut && j.cut.length >= 5) ? j.cut.substring(0, 5) : (j.cut || '-');
-            const wo = state.workOrders.find(w => w.work_order_name === j.name);
-            const statusText = wo ? wo.status : 'กำลังผลิต';
-            const statusColor = statusText === 'จัดส่งแล้ว' ? '#28a745' : '#0071e3';
+                if (filteredJobs.length > 0) {
+                    filteredJobs.forEach(j => {
+                        const cutDisplay = (j.cut && j.cut.length >= 5) ? j.cut.substring(0, 5) : (j.cut || '-');
+                        
+                        // --- ดึงสถานะโดยตรงจากตาราง work_orders (เพิ่ม .trim() เพื่อความแม่นยำ) ---
+                        const wo = state.workOrders.find(w => 
+                            String(w.work_order_name).trim() === String(j.name).trim()
+                        );
+                        const statusText = wo ? wo.status : 'กำลังผลิต';
+                        
+                        let statusColor = '#0071e3'; // ฟ้า
+                        if (statusText === 'จัดส่งแล้ว') statusColor = '#28a745'; // เขียว
+                        if (statusText === 'ยกเลิก') statusColor = '#dc3545'; // แดง
 
-            let qtyHtml = '';
-            if (j.qty) {
-                qtyHtml = Object.entries(j.qty)
-                    .filter(([dept, count]) => count > 0)
-                    .map(([dept, count]) => `
-                        <span style="display:inline-block; background:#f0f7ff; border:1px solid #cce3ff; color:#0056b3; padding:2px 8px; border-radius:4px; margin:2px; font-size:11px; font-weight:bold;">
-                            ${dept}: <span style="color:#d9534f;">${count}</span>
-                        </span>
-                    `).join('');
+                        let qtyHtml = '';
+                        if (j.qty) {
+                            qtyHtml = Object.entries(j.qty)
+                                .filter(([dept, count]) => count > 0)
+                                .map(([dept, count]) => `
+                                    <span style="display:inline-block; background:#f0f7ff; border:1px solid #cce3ff; color:#0056b3; padding:2px 8px; border-radius:4px; margin:2px; font-size:11px; font-weight:bold;">
+                                        ${dept}: <span style="color:#d9534f;">${count}</span>
+                                    </span>
+                                `).join('');
+                        }
+
+                        html += `
+                        <tr>
+                            <td style="border:1px solid #ddd; padding:12px;">
+                                <div style="font-weight:bold; color:#1a1a1a; font-size:14px;">${j.name}</div>
+                                <div style="font-size:10px; color:#888;">วันที่แผนงาน: ${j.date}</div>
+                            </td>
+                            <td style="border:1px solid #ddd; padding:12px; text-align:center; font-size:16px; font-weight:900; color:#d9534f;">
+                                ${cutDisplay}
+                            </td>
+                            <td style="border:1px solid #ddd; padding:12px; text-align:center;">
+                                <span style="background:${statusColor}; color:white; padding:5px 12px; border-radius:15px; font-size:12px; font-weight:bold; display:inline-block; min-width:110px;">
+                                    ${statusText}
+                                </span>
+                            </td>
+                            <td style="border:1px solid #ddd; padding:12px;">
+                                ${qtyHtml || '-'}
+                            </td>
+                        </tr>`;
+                    });
+                } else {
+                    html += `<tr><td colspan="4" style="padding:60px; text-align:center; color:#999; font-style:italic;">-- ไม่พบข้อมูลใบงาน --</td></tr>`;
+                }
+
+                html += `</tbody>`;
+                tableContainer.innerHTML = html;
             }
-
-            html += `
-            <tr>
-                <td style="border:1px solid #ddd; padding:12px;">
-                    <div style="font-weight:bold; color:#1a1a1a; font-size:14px;">${j.name}</div>
-                    <div style="font-size:10px; color:#888;">วันที่ใบงาน: ${j.date}</div>
-                </td>
-                <td style="border:1px solid #ddd; padding:12px; text-align:center; font-size:16px; font-weight:900; color:#d9534f;">
-                    ${cutDisplay}
-                </td>
-                <td style="border:1px solid #ddd; padding:12px; text-align:center;">
-                    <span style="background:${statusColor}; color:white; padding:5px 12px; border-radius:15px; font-size:11px; font-weight:bold; display:inline-block; min-width:100px;">
-                        ${statusText}
-                    </span>
-                </td>
-                <td style="border:1px solid #ddd; padding:12px;">
-                    ${qtyHtml || '<span style="color:#ccc;">-</span>'}
-                </td>
-            </tr>`;
-        });
-    } else {
-        html += `<tr><td colspan="4" style="padding:60px; text-align:center; color:#999; font-style:italic;">-- ไม่พบข้อมูลใบงาน --</td></tr>`;
-    }
-
-    html += `</tbody>`;
-    tableContainer.innerHTML = html;
-}
 
             return { initializeApp, loadData: loadPlannerData };
         })();
