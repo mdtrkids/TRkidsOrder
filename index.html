@@ -3232,7 +3232,22 @@ remainingBills.forEach(order => {
                                 line_pattern: row.querySelector('.item-line_pattern').value,
                                 font: row.querySelector('.item-font').value, line_1: row.querySelector('.item-line_1').value,
                                 line_2: row.querySelector('.item-line_2').value, line_3: row.querySelector('.item-line_3').value,
-                                notes: row.querySelector('.item-notes').value, file_attachment: row.querySelector('.item-file_attachment').value
+                                notes: (() => {
+    let rowNotes = row.querySelector('.item-notes').value;
+    // ถ้าเป็นช่องทางเคลม ให้เอา ประเภท และ รายละเอียด มาต่อหัวหมายเหตุ
+    if (channelCode === 'CLAIM') {
+        const cType = document.getElementById('claim_type').value.trim();
+        const cDetails = document.getElementById('claim_details').value.trim();
+        if (cType) {
+            const prefix = `[เคลม: ${cType}${cDetails ? ' - ' + cDetails : ''}]`;
+            // ป้องกันการบันทึกซ้ำซ้อนถ้ามีข้อความนี้อยู่แล้ว
+            if (!rowNotes.includes(prefix)) {
+                rowNotes = `${prefix} ${rowNotes}`.trim();
+            }
+        }
+    }
+    return rowNotes;
+})(), file_attachment: row.querySelector('.item-file_attachment').value
                             };
                             for (let i = 0; i < quantity; i++) allItemsToInsert.push({ ...baseItemData, item_uid: `${billNo}-${itemSequence++}` });
                         }
@@ -4458,21 +4473,25 @@ if (originalItems.length > 0) {
     // สร้างข้อความรายละเอียดเคลม (จะเอาไปใส่หน้าหมายเหตุ)
     const claimInfo = `[เคลม: ${claimData.claim_type}${claimData.claim_details ? ' - ' + claimData.claim_details : ''}]`;
 
-    const claimItemsToInsert = originalItems.map(item => {
-        const newItem = { ...item };
-        delete newItem.id;
-        newItem.order_id = insertedOrder.id;
-        newItem.bill_no = newBillNo;
-        newItem.item_uid = `${newBillNo}-${itemSequence++}`;
-        newItem.item_scan_time = null;
-        newItem.packing_status = null;
+const claimItemsToInsert = originalItems.map(item => {
+    const newItem = { ...item };
+    delete newItem.id;
+    newItem.order_id = insertedOrder.id;
+    newItem.bill_no = newBillNo;
+    newItem.item_uid = `${newBillNo}-${itemSequence++}`;
+    newItem.item_scan_time = null;
+    newItem.packing_status = null;
 
-        // --- ส่วนที่เพิ่มใหม่: เอาข้อมูลเคลมไปแปะไว้หน้าหมายเหตุเดิม ---
-        const oldNotes = item.notes || '';
+    // แก้ไขตรงนี้ให้นำข้อมูลเคลมไปแปะไว้หน้าหมายเหตุเดิม
+    const oldNotes = item.notes || '';
+    if (!oldNotes.includes(claimInfo)) {
         newItem.notes = `${claimInfo} ${oldNotes}`.trim();
-        
-        return newItem;
-    });
+    } else {
+        newItem.notes = oldNotes;
+    }
+    
+    return newItem;
+});
     const { error: itemsError } = await supabaseClient.from('order_items').insert(claimItemsToInsert);
                         if (itemsError) {
                             await supabaseClient.from('orders').delete().eq('id', insertedOrder.id);
