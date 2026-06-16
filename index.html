@@ -1146,7 +1146,7 @@
             // เช็คสิทธิ์การเข้าถึงเมนูต่างๆ
             if (targetId === 'product-system-container' && !(loggedInUserRole === 'superadmin' || loggedInUserRole === 'manager'|| loggedInUserRole === 'store')) return;
             if (targetId === 'pattern-system-container' && !(loggedInUserRole === 'superadmin' || loggedInUserRole === 'manager')) return;
-            if (targetId === 'planner-system-container' && !(loggedInUserRole === 'superadmin' || loggedInUserRole === 'production' || loggedInUserRole === 'manager')) return;
+            if (targetId === 'planner-system-container' && !(loggedInUserRole === 'superadmin' || loggedInUserRole === 'manager' || loggedInUserRole === 'store')) return;
             if (targetId === 'sales-report-system-container' && !(loggedInUserRole === 'superadmin' || loggedInUserRole === 'manager'|| loggedInUserRole === 'store')) return;
 
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
@@ -1201,7 +1201,7 @@
                 // ควบคุมการมองเห็นเมนู
                 document.getElementById('nav-product').style.display = (isSuperAdmin || isManager|| isStore) ? '' : 'none';
                 document.getElementById('nav-pattern').style.display = (isSuperAdmin || isManager) ? '' : 'none';
-                document.getElementById('nav-planner').style.display = (isSuperAdmin || isProduction || isManager) ? '' : 'none';
+                document.getElementById('nav-planner').style.display = (isSuperAdmin || isManager || isStore) ? '' : 'none';
                 document.getElementById('nav-sales-report').style.display = (isSuperAdmin || isManager|| isStore) ? '' : 'none';
 	document.getElementById('nav-claim-report').style.display = (isSuperAdmin || isManager) ? '' : 'none';
                 document.getElementById('nav-accounting').style.display = isSuperAdmin ? '' : 'none';
@@ -1219,6 +1219,7 @@
 	} else if (isStore) {
     window.productSystem.initializeApp();
     window.salesReportSystem.initializeApp();
+	window.plannerSystem.initializeApp(loggedInUserRole);
                 } else if (isProduction) {
                     document.querySelector('.nav-link.active')?.classList.remove('active');
                     document.querySelector('.system-content.active')?.classList.remove('active');
