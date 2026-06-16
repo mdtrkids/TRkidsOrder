@@ -6075,6 +6075,7 @@ window.patternSystem = (() => {
                         <th style="border:1px solid #ddd; padding:12px; width:100px; text-align:center;">เวลาตัด</th>
                         <th style="border:1px solid #ddd; padding:12px; width:150px; text-align:center;">สถานะ (จากใบงาน)</th>
                         <th style="border:1px solid #ddd; padding:12px; text-align:left;">จำนวนงาน</th>
+	      <th style="border:1px solid #ddd; padding:12px; width:120px; text-align:center;">ดาวน์โหลด</th>
                     </tr>
                 </thead>
                 <tbody>`;
@@ -6119,8 +6120,13 @@ window.patternSystem = (() => {
                                 </span>
                             </td>
                             <td style="border:1px solid #ddd; padding:12px;">
-                                ${qtyHtml || '-'}
-                            </td>
+    ${qtyHtml || '-'}
+</td>
+<td style="border:1px solid #ddd; padding:12px; text-align:center;">
+    <button class="btn btn-info btn-sm" onclick="window.plannerSystem.exportPickingCsv('${j.name}')" style="font-size:11px; padding:4px 8px;">
+        📦 CSV เบิก
+    </button>
+</td>
                         </tr>`;
                     });
                 } else {
@@ -6131,7 +6137,56 @@ window.patternSystem = (() => {
                 tableContainer.innerHTML = html;
             }
 
-            return { initializeApp, loadData: loadPlannerData };
+            return { 
+    initializeApp, 
+    loadData: loadPlannerData,
+    exportPickingCsv: async function(workOrderName) {
+        loadingOverlay.style.display = 'flex';
+        try {
+            // 1. ดึง ID ของออร์เดอร์ที่อยู่ในใบงานนี้
+            const { data: orders, error: oErr } = await supabaseClient
+                .from('orders').select('id').eq('work_order_name', workOrderName);
+            if (oErr) throw oErr;
+            if (!orders || orders.length === 0) throw new Error("ไม่พบข้อมูล");
+
+            // 2. ดึงรายการสินค้า
+            const { data: items, error: iErr } = await supabaseClient
+                .from('order_items').select('*').in('order_id', orders.map(o => o.id));
+            if (iErr) throw iErr;
+
+            // 3. จัดกลุ่มสินค้าและคำนวณจำนวนเบิก
+            const fullProd = window.orderSystem.getFullProductList();
+            const map = {};
+            items.forEach(item => {
+                const p = fullProd.find(x => x.id === item.product_id);
+                if (!map[item.product_id]) {
+                    map[item.product_id] = {
+                        code: p ? p.product_code : 'N/A',
+                        name: item.product_name,
+                        loc: p ? p.storage_location : 'N/A',
+                        cat: (p && p.product_category) ? p.product_category.toUpperCase() : '',
+                        qty: 0
+                    };
+                }
+                map[item.product_id].qty++;
+            });
+
+            // 4. สร้าง CSV
+            const csvRows = [['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก']];
+            Object.values(map).forEach(i => {
+                let finalQty = i.qty;
+                if (i.cat.includes('CONDO STAMP')) finalQty = Math.ceil(i.qty / 5);
+                csvRows.push([`"${workOrderName}"`, `"${i.code}"`, `"${i.name}"`, `"${i.loc}"`, finalQty]);
+            });
+
+            const blob = new Blob(["\uFEFF" + csvRows.map(r => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `Picking_${workOrderName}.csv`;
+            link.click();
+        } catch (e) { alert(e.message); } finally { loadingOverlay.style.display = 'none'; }
+    }
+};
         })();
         
         // --- SALES REPORT SYSTEM MODULE ---
