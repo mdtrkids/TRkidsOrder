@@ -1155,6 +1155,7 @@
             systemContents.forEach(content => content.classList.toggle('active', content.id === targetId));
 
 	if (targetId === 'packing-system-container') { window.packingSystem.loadWorkOrdersForPacking(); }
+	if (targetId === 'planner-system-container') { window.plannerSystem.loadData(); }
 	if (targetId === 'claim-report-system-container') { window.claimReportSystem.initializeApp(); }
 	if (targetId === 'transport-system-container') { window.transportSystem.initialize(); }
 
