@@ -463,24 +463,10 @@ row["*Phone_number\n(เบอร์โทรศัพท์)"] = phone1;
 row["Phone_number2\n(เบอร์โทรศัพท์)"] = phone2;
 row["COD\n(ยอดเรียกเก็บ)"] = codRaw;
 
-row[H[0]] = orderNo; 
-row[H[1]] = name; 
-row[H[2]] = address; 
-row[H[3]] = finalPostcode || "";
-row[H[4]] = phone1; 
-row[H[5]] = phone2; 
-row[H[6]] = "1"; 
-row[H[7]] = codRaw; 
-row[H[8]] = "";
-row[H[9]] = ""; 
-row[H[10]] = ""; 
-row[H[11]] = ""; 
-row[H[12]] = "";
-row[H[13]] = "อื่นๆ"; 
-row[H[14]] = "0.1"; 
-row[H[15]] = "1"; 
-row[H[16]] = "1"; 
-row[H[17]] = "1"; // สูง
+row[H[0]] = orderNo; row[H[1]] = name; row[H[2]] = address; row[H[3]] = finalPostcode || "";
+row[H[4]] = phone1; row[H[5]] = phone2; row[H[6]] = "1"; row[H[7]] = codRaw; row[H[8]] = "";
+row[H[9]] = ""; row[H[10]] = ""; row[H[11]] = ""; row[H[12]] = "";
+row[H[13]] = "อื่นๆ"; row[H[14]] = "0.1"; row[H[15]] = "1"; row[H[16]] = "1"; row[H[17]] = "1"; // สูง
 row[H[18]] = "";  // Flash_care (เว้นว่าง)
 row[H[19]] = "";  // Flash_care_plus (เว้นว่าง)
 row[H[20]] = "";  // มูลค่าสินค้า (เดิมคือ 18)
@@ -491,7 +477,8 @@ row[H[24]] = paymentFixed; // วิธีชำระเงิน (เดิม
 row[H[25]] = orderNo; // หมายเหตุ (เดิมคือ 23)
 
 out.push(row);
-return out;}
+}
+return out;
 }
 
 document.getElementById("btnExport").addEventListener("click", ()=>{
