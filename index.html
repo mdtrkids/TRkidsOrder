@@ -6088,9 +6088,80 @@ window.patternSystem = (() => {
             }
 
             // --- ส่วน EXPORT ที่แก้ไข Syntax แล้ว ---
-            return {
+                        return {
                 initializeApp,
                 loadData: loadPlannerData,
+                // เพิ่มฟังก์ชันสำหรับปุ่มรายแถวที่หายไป
+                exportPickingCsv: async function(workOrderName) {
+                    loadingOverlay.style.display = 'flex';
+                    try {
+                        // 1. ดึงข้อมูลออร์เดอร์ในใบงานนี้
+                        const { data: orders, error: oErr } = await supabaseClient
+                            .from('orders')
+                            .select('id')
+                            .eq('work_order_name', workOrderName);
+                        
+                        if (oErr) throw oErr;
+                        if (!orders || orders.length === 0) throw new Error("ไม่พบข้อมูลออร์เดอร์ในใบงานนี้");
+
+                        const orderIds = orders.map(o => o.id);
+
+                        // 2. ดึงรายการสินค้า
+                        const { data: items, error: iErr } = await supabaseClient
+                            .from('order_items')
+                            .select('*')
+                            .in('order_id', orderIds);
+                        
+                        if (iErr) throw iErr;
+
+                        // 3. จัดกลุ่มและสรุปยอด
+                        const fullProd = window.orderSystem.getFullProductList();
+                        const summaryMap = {};
+
+                        items.forEach(item => {
+                            if (!summaryMap[item.product_id]) {
+                                const p = fullProd.find(x => x.id === item.product_id);
+                                summaryMap[item.product_id] = {
+                                    code: p ? p.product_code : 'N/A',
+                                    name: item.product_name,
+                                    loc: (p && p.storage_location) ? p.storage_location : 'N/A',
+                                    cat: (p && p.product_category) ? p.product_category.toUpperCase() : '',
+                                    qty: 0
+                                };
+                            }
+                            summaryMap[item.product_id].qty++;
+                        });
+
+                        // 4. สร้าง CSV
+                        const csvHeaders = ['รหัสทำรายการ', 'รหัสสินค้า', 'รายการสินค้า', 'จุดเก็บ', 'จำนวนเบิก'];
+                        const rows = [csvHeaders.join(',')];
+                        
+                        Object.values(summaryMap).sort((a, b) => (a.loc || "").localeCompare(b.loc || "")).forEach(i => {
+                            let finalQty = i.qty;
+                            if (i.cat.includes('CONDO STAMP')) finalQty = Math.ceil(i.qty / 5);
+                            
+                            rows.push([
+                                `"${workOrderName}"`, 
+                                `"${i.code}"`, 
+                                `"${i.name.replace(/"/g, '""')}"`, 
+                                `"${i.loc}"`, 
+                                finalQty
+                            ].join(','));
+                        });
+
+                        // 5. Download ไฟล์
+                        const blob = new Blob(["\uFEFF" + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+                        const link = document.createElement("a");
+                        link.href = URL.createObjectURL(blob);
+                        link.download = `เบิกสินค้า_${workOrderName}.csv`;
+                        link.click();
+
+                    } catch (e) {
+                        alert("เกิดข้อผิดพลาด: " + e.message);
+                    } finally {
+                        loadingOverlay.style.display = 'none';
+                    }
+                },
                 exportDailySummaryCsv: async function(date) {
                     loadingOverlay.style.display = 'flex';
                     try {
