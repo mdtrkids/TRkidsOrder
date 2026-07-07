@@ -2851,8 +2851,24 @@ if (mode === 'edit' && order) {
                             const { error: woError } = await supabaseClient.from('work_orders').insert({ work_order_name: workOrderName, channel_code: channelCode, production_date: workOrderDate, batch_number: batchNumber, order_count: groupSelectedIds.length, created_by: loggedInUsername, status: 'กำลังผลิต' }); 
                             if (woError) throw woError; 
 
-                            const { error: updateError } = await supabaseClient.from('orders').update({ status: 'ใบงาน (กำลังผลิต)', work_order_name: workOrderName }).in('id', groupSelectedIds); 
-                            if (updateError) throw updateError; 
+                            // ป้องกันปัญหาตัดใบงานพร้อมกัน 2 คน แล้วบิลชุดเดียวกันถูกดึงไปอยู่ใบงานหลัง (ใบงานแรกว่างเปล่า)
+                            // อัปเดตเฉพาะบิลที่ยังเป็น "ลงข้อมูลเสร็จสิ้น" และยังไม่ถูกผูกกับใบงานอื่นเท่านั้น
+                            const { data: updatedOrdersForWO, error: updateError } = await supabaseClient
+                                .from('orders')
+                                .update({ status: 'ใบงาน (กำลังผลิต)', work_order_name: workOrderName })
+                                .in('id', groupSelectedIds)
+                                .eq('status', 'ลงข้อมูลเสร็จสิ้น')
+                                .is('work_order_name', null)
+                                .select('id');
+                            if (updateError) throw updateError;
+
+                            if (!updatedOrdersForWO || updatedOrdersForWO.length !== groupSelectedIds.length) {
+                                // มีบิลบางส่วน (หรือทั้งหมด) ถูกตัดใบงานไปแล้วโดยผู้ใช้อื่นในเวลาไล่เลี่ยกัน
+                                // ยกเลิกใบงานนี้ทันทีเพื่อไม่ให้เกิดใบงานว่างเปล่าค้างอยู่ในระบบ
+                                await supabaseClient.from('work_orders').delete().eq('work_order_name', workOrderName);
+                                const grabbedCount = groupSelectedIds.length - (updatedOrdersForWO ? updatedOrdersForWO.length : 0);
+                                throw new Error(`มี ${grabbedCount} บิลถูกผู้ใช้อื่นตัดใบงานไปพร้อมกันแล้ว (ใบงาน "${workOrderName}" ถูกยกเลิกอัตโนมัติ) กรุณาโหลดข้อมูลใหม่แล้วลองอีกครั้ง`);
+                            }
 
                             const billsInWorkOrder = ordersByChannel[channelCode];
                             const qty = { "เบิก": 0, "STAMP": 0, "STK": 0, "CTT": 0, "LASER": 0, "TUBE": 0, "QC": billsInWorkOrder.length, "PACK": billsInWorkOrder.length };
@@ -4429,8 +4445,17 @@ const isTrackingPattern = (text) => {
                     });
                     
                     loadingOverlay.style.display = 'flex';
-                    const existingClaims = allOrdersData.filter(o => o.bill_no.endsWith(`-${originalBillNo}`) && o.bill_no.startsWith('C'));
-                    const nextClaimNumber = existingClaims.length + 1;
+                    // นับเฉพาะบิลเคลมที่ "ยังไม่ถูกยกเลิก" เพื่อให้เลขเคลมเริ่มที่ C1 ใหม่ หากเคลมก่อนหน้าถูกยกเลิกไปหมดแล้ว
+                    const allClaimsForBill = allOrdersData.filter(o => o.bill_no.endsWith(`-${originalBillNo}`) && o.bill_no.startsWith('C'));
+                    const activeClaimsForBill = allClaimsForBill.filter(o => o.status !== 'ยกเลิก');
+                    let nextClaimNumber = activeClaimsForBill.length + 1;
+                    // กันชนกับเลขที่เคยถูกใช้ไปแล้ว (แม้จะถูกยกเลิก) เพื่อไม่ให้ bill_no ซ้ำกันใน DB
+                    const usedClaimNumbers = new Set(
+                        allClaimsForBill
+                            .map(o => { const m = o.bill_no.match(/^C(\d+)-/); return m ? parseInt(m[1], 10) : null; })
+                            .filter(n => n !== null)
+                    );
+                    while (usedClaimNumbers.has(nextClaimNumber)) { nextClaimNumber++; }
                     const newBillNo = `C${nextClaimNumber}-${originalBillNo}`;
 
                     if (!confirm(`ต้องการสร้างบิลเคลมสำหรับ ${originalBillNo}?\nเลขบิลใหม่: ${newBillNo}\nประเภท: ${claimData.claim_type}`)) {
@@ -6588,6 +6613,7 @@ window.patternSystem = (() => {
                             .from('orders')
                             .select('*')
                             .eq('channel_code', 'CLAIM')
+                            .neq('status', 'ยกเลิก')
                             .range(from, from + 999);
                         if (claimError) throw claimError;
                         allClaims = allClaims.concat(claimBatch);
