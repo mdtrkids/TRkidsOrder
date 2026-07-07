@@ -423,6 +423,90 @@
         #sales-report-system-container #report-table th, #sales-report-system-container #report-table td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; }
         #sales-report-system-container #report-table th { background-color: #e9ecef; position: sticky; top: 0; z-index: 1; }
         #sales-report-system-container #report-table tr:nth-child(even) { background-color: #f8f9fa; }
+
+        /* --- CLAIM REPORT SYSTEM SPECIFIC STYLES --- */
+        #claim-report-system-container .container { max-width: 1400px; }
+        #claim-report-system-container h1 { font-size: 22px; font-weight: 700; color: #333; margin-bottom: 20px; }
+        #claim-report-system-container .report-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            align-items: flex-end;
+            margin-bottom: 25px;
+            padding: 20px 22px;
+            background: linear-gradient(#fff, #fff6f6);
+            border-radius: 10px;
+            border: 1px solid #f3c2c2;
+            box-shadow: 0 2px 6px rgba(220, 53, 69, 0.06);
+        }
+        #claim-report-system-container .control-group { display: flex; flex-direction: column; gap: 6px; }
+        #claim-report-system-container .control-group label {
+            font-size: 13px;
+            font-weight: 700;
+            color: #a94442;
+            letter-spacing: .2px;
+            margin: 0;
+        }
+        #claim-report-system-container .control-group input[type="date"],
+        #claim-report-system-container .control-group select {
+            height: 42px;
+            padding: 0 12px;
+            border: 1px solid #dfc2c2;
+            border-radius: 6px;
+            font-size: 15px;
+            font-family: inherit;
+            background-color: #fff;
+            box-sizing: border-box;
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+        #claim-report-system-container .control-group input[type="date"]:focus,
+        #claim-report-system-container .control-group select:focus {
+            outline: none;
+            border-color: #dc3545;
+            box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.15);
+        }
+        #claim-report-system-container #claim-report-admin-filter { min-width: 200px; }
+        #claim-report-system-container .report-controls .btn { height: 42px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+        #claim-report-system-container .claim-summary-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+            padding: 14px 20px;
+            background-color: #fff;
+            border: 1px solid #eee;
+            border-left: 4px solid #dc3545;
+            border-radius: 8px;
+            font-size: 16px;
+            color: #444;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        #claim-report-system-container .claim-summary-bar strong { color: #dc3545; font-size: 22px; }
+        #claim-report-system-container .report-results-container {
+            max-height: 60vh;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+        #claim-report-system-container #claim-report-table { width: 100%; border-collapse: collapse; }
+        #claim-report-system-container #claim-report-table th {
+            padding: 12px;
+            border-bottom: 2px solid #f1b0b7;
+            background-color: #fbeaec;
+            color: #842029;
+            text-align: left;
+            font-size: 14px;
+        }
+        #claim-report-system-container #claim-report-table td { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: top; }
+        #claim-report-system-container #claim-report-table tbody tr:hover { background-color: #fff8f8; }
+        #claim-report-system-container #claim-report-table tbody tr:last-child td { border-bottom: none; }
+        @media (max-width: 768px) {
+            #claim-report-system-container .report-controls { align-items: stretch; }
+            #claim-report-system-container .control-group { width: 100%; }
+            #claim-report-system-container #claim-report-admin-filter { min-width: 0; width: 100%; }
+            #claim-report-system-container .report-controls .btn { width: 100%; justify-content: center; }
+            #claim-report-system-container #export-claim-report-btn { margin-left: 0 !important; }
+        }
         #sales-report-system-container #report-table td:last-child { font-weight: bold; text-align: center; }
         #sales-report-system-container #report-placeholder { text-align: center; color: #6c757d; padding: 40px; font-style: italic; }
 .packing-product-img {
@@ -971,7 +1055,7 @@
 <div id="claim-report-system-container" class="system-content">
     <div class="container">
         <h1>รายงานตรวจสอบงานเคลม</h1>
-        <div class="report-controls" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; margin-bottom: 25px; padding: 20px; background-color: #fff5f5; border-radius: 8px; border: 1px solid #feb2b2;">
+        <div class="report-controls">
             <div class="control-group">
                 <label>ตั้งแต่วันที่</label>
                 <input type="date" id="claim-report-start-date">
@@ -982,7 +1066,7 @@
             </div>
             <div class="control-group">
                 <label>เลือกแอดมิน (ผู้ลงงาน)</label>
-                <select id="claim-report-admin-filter" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; min-width: 180px;">
+                <select id="claim-report-admin-filter">
                     <option value="all">ทั้งหมด</option>
                 </select>
             </div>
@@ -990,20 +1074,20 @@
             <button id="export-claim-report-btn" class="btn btn-success" style="display: none; margin-left: auto;">📥 Export Excel</button>
         </div>
 
-        <div style="margin-bottom: 15px; font-size: 18px;">
-            จำนวนบิลที่เคลมทั้งหมด: <strong id="total-claim-count" style="color: #dc3545; font-size: 24px;">0</strong> บิล
+        <div class="claim-summary-bar">
+            จำนวนบิลที่เคลมทั้งหมด: <strong id="total-claim-count">0</strong> บิล
         </div>
 
-        <div class="report-results-container" style="max-height: 60vh; overflow-y: auto;">
-            <table id="claim-report-table" style="width: 100%; border-collapse: collapse;">
+        <div class="report-results-container">
+            <table id="claim-report-table">
                 <thead>
-    <tr style="background-color: #f8d7da; position: sticky; top: 0; z-index: 10;">
-        <th style="padding: 12px; border: 1px solid #dee2e6; width: 120px;">วันที่ลงใบงาน</th>
-        <th style="padding: 12px; border: 1px solid #dee2e6; width: 150px;">แอดมิน (คนเดิม)</th>
-        <th style="padding: 12px; border: 1px solid #dee2e6; width: 180px;">เลขบิลเคลม</th>
-        <th style="padding: 12px; border: 1px solid #dee2e6;">ลูกค้า</th>
-        <th style="padding: 12px; border: 1px solid #dee2e6; width: 180px;">ประเภทเคลม</th>
-        <th style="padding: 12px; border: 1px solid #dee2e6;">รายละเอียดเคลม</th>
+    <tr style="position: sticky; top: 0; z-index: 10;">
+        <th style="width: 120px;">วันที่ลงใบงาน</th>
+        <th style="width: 150px;">แอดมิน (คนเดิม)</th>
+        <th style="width: 180px;">เลขบิลเคลม</th>
+        <th>ลูกค้า</th>
+        <th style="width: 180px;">ประเภทเคลม</th>
+        <th>รายละเอียดเคลม</th>
     </tr>
 </thead>
                 <tbody id="claim-report-tbody">
@@ -6548,23 +6632,32 @@ window.patternSystem = (() => {
                 document.getElementById('export-claim-report-btn').onclick = exportExcel;
                 document.getElementById('claim-report-admin-filter').onchange = renderTable;
 
-                loadAdmins();
                 isInitialized = true;
             }
 
-            async function loadAdmins() {
-                const { data, error } = await supabaseClient.from('users').select('username').order('username');
-                if (!error && data) {
-                    const select = document.getElementById('claim-report-admin-filter');
-                    // ล้างค่าเก่าก่อน (ยกเว้น "ทั้งหมด")
-                    select.innerHTML = '<option value="all">ทั้งหมด</option>';
-                    data.forEach(user => {
-                        const opt = document.createElement('option');
-                        opt.value = user.username;
-                        opt.textContent = user.username;
-                        select.appendChild(opt);
-                    });
-                }
+            function populateAdminFilter(data) {
+                const select = document.getElementById('claim-report-admin-filter');
+                const previousValue = select.value || 'all';
+
+                // นับจำนวนบิลเคลมต่อแอดมิน โดยใช้เฉพาะแอดมินที่มีข้อมูลจริงในผลลัพธ์
+                const counts = {};
+                data.forEach(row => {
+                    const admin = row.original_admin || '-';
+                    counts[admin] = (counts[admin] || 0) + 1;
+                });
+
+                const admins = Object.keys(counts).sort((a, b) => a.localeCompare(b, 'th'));
+
+                select.innerHTML = `<option value="all">ทั้งหมด (${data.length})</option>`;
+                admins.forEach(admin => {
+                    const opt = document.createElement('option');
+                    opt.value = admin;
+                    opt.textContent = `${admin} (${counts[admin]})`;
+                    select.appendChild(opt);
+                });
+
+                // คงค่าตัวกรองเดิมไว้ ถ้าแอดมินคนนั้นยังมีอยู่ในผลลัพธ์ใหม่
+                select.value = (previousValue !== 'all' && counts[previousValue] !== undefined) ? previousValue : 'all';
             }
 
             async function generateReport() {
@@ -6601,6 +6694,7 @@ window.patternSystem = (() => {
 
                     if (allOriginals.length === 0) {
                         reportData = [];
+                        populateAdminFilter(reportData);
                         renderTable();
                         return;
                     }
@@ -6635,6 +6729,7 @@ window.patternSystem = (() => {
                     });
 
                     reportData = matchedClaims.sort((a, b) => a.original_date.localeCompare(b.original_date));
+                    populateAdminFilter(reportData);
                     renderTable();
                     document.getElementById('export-claim-report-btn').style.display = reportData.length > 0 ? 'inline-block' : 'none';
                 } catch (err) {
@@ -6660,12 +6755,12 @@ window.patternSystem = (() => {
                 filtered.forEach(row => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td style="padding: 10px; border: 1px solid #eee; text-align: center;">${row.original_date}</td>
-                        <td style="padding: 10px; border: 1px solid #eee; font-weight: bold; color: #d9534f; text-align: center;">${row.original_admin}</td>
-                        <td style="padding: 10px; border: 1px solid #eee;">${row.bill_no}</td>
-                        <td style="padding: 10px; border: 1px solid #eee;">${row.customer_name}</td>
-                        <td style="padding: 10px; border: 1px solid #eee; color: #dc3545; font-weight: bold;">${row.claim_type || '-'}</td>
-                        <td style="padding: 10px; border: 1px solid #eee;">${row.claim_details || '-'}</td>
+                        <td style="text-align: center;">${row.original_date}</td>
+                        <td style="font-weight: bold; color: #d9534f; text-align: center;">${row.original_admin}</td>
+                        <td>${row.bill_no}</td>
+                        <td>${row.customer_name}</td>
+                        <td style="color: #dc3545; font-weight: bold;">${row.claim_type || '-'}</td>
+                        <td>${row.claim_details || '-'}</td>
                     `;
                     tbody.appendChild(tr);
                 });
