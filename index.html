@@ -6684,6 +6684,7 @@ window.patternSystem = (() => {
                             .neq('channel_code', 'CLAIM')
                             .gte('entry_date', start)
                             .lte('entry_date', end)
+                            .order('id', { ascending: true })
                             .range(from, from + 999);
 
                         if (originError) throw originError;
@@ -6708,6 +6709,7 @@ window.patternSystem = (() => {
                             .select('*')
                             .eq('channel_code', 'CLAIM')
                             .neq('status', 'ยกเลิก')
+                            .order('id', { ascending: true })
                             .range(from, from + 999);
                         if (claimError) throw claimError;
                         allClaims = allClaims.concat(claimBatch);
