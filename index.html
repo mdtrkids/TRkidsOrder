@@ -2915,6 +2915,18 @@ if (mode === 'edit' && order) {
                         let workOrderNameCreated = null;
                         let linkedOrderIds = [];
                         try { 
+                            // เช็คก่อนตั้งแต่ต้นว่าบิลที่เลือกยังว่างอยู่จริงหรือไม่ (ถ้าคนอื่นตัดไปแล้ว ให้เบรกทันที
+                            // โดยไม่ต้องสร้าง work_orders/plan_jobs ขึ้นมาก่อนแล้วมา rollback ทีหลัง)
+                            const { data: preCheck, error: preCheckError } = await supabaseClient
+                                .from('orders')
+                                .select('id, bill_no, status, work_order_name')
+                                .in('id', groupSelectedIds);
+                            if (preCheckError) throw preCheckError;
+                            const alreadyTaken = (preCheck || []).filter(o => o.status !== 'ลงข้อมูลเสร็จสิ้น' || o.work_order_name !== null);
+                            if (alreadyTaken.length > 0) {
+                                throw new Error(`มี ${alreadyTaken.length} บิล (${alreadyTaken.map(o => o.bill_no).join(', ')}) ถูกผู้ใช้อื่นตัดใบงานไปแล้ว กรุณาโหลดข้อมูลใหม่แล้วลองอีกครั้ง`);
+                            }
+
                             const today = new Date(); 
 	// สร้างวันที่ YYYY-MM-DD จากเวลาเครื่อง (Local Time)
 		const localY = today.getFullYear();
