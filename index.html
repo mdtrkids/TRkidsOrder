@@ -2910,6 +2910,10 @@ if (mode === 'edit' && order) {
 
                     for (const channelCode of channelGroups) { 
                         const groupSelectedIds = ordersByChannel[channelCode].map(o => o.id); 
+                        // ตัวแปรเก็บสถานะที่สร้าง/ผูกไปแล้วในรอบนี้ ใช้สำหรับ compensating rollback หากขั้นตอนใดพลาดกลางทาง
+                        let workOrderId = null;
+                        let workOrderNameCreated = null;
+                        let linkedOrderIds = [];
                         try { 
                             const today = new Date(); 
 	// สร้างวันที่ YYYY-MM-DD จากเวลาเครื่อง (Local Time)
@@ -2930,10 +2934,25 @@ if (mode === 'edit' && order) {
     		.order('batch_number', { ascending: false })
     		.limit(1);
 		if (woReadError) throw woReadError;
-		const batchNumber = (woData && woData.length > 0 ? woData[0].batch_number : 0) + 1; 
-		const workOrderName = `${channelCode}-${datePart}-R${batchNumber}`;
-                            const { error: woError } = await supabaseClient.from('work_orders').insert({ work_order_name: workOrderName, channel_code: channelCode, production_date: workOrderDate, batch_number: batchNumber, order_count: groupSelectedIds.length, created_by: loggedInUsername, status: 'กำลังผลิต' }); 
-                            if (woError) throw woError; 
+		let batchNumber = (woData && woData.length > 0 ? woData[0].batch_number : 0) + 1; 
+		let workOrderName = `${channelCode}-${datePart}-R${batchNumber}`;
+
+                            // สร้างใบงานใหม่ พร้อม retry หากเลขชนกับใบงานที่ผู้ใช้อื่นสร้างพร้อมกัน (unique constraint บน work_order_name)
+                            let woInsertError = null;
+                            for (let attempt = 0; attempt < 5; attempt++) {
+                                const { data: insertedWO, error: woError } = await supabaseClient
+                                    .from('work_orders')
+                                    .insert({ work_order_name: workOrderName, channel_code: channelCode, production_date: workOrderDate, batch_number: batchNumber, order_count: groupSelectedIds.length, created_by: loggedInUsername, status: 'กำลังผลิต' })
+                                    .select('id')
+                                    .single();
+                                if (!woError) { workOrderId = insertedWO.id; workOrderNameCreated = workOrderName; woInsertError = null; break; }
+                                const isDuplicate = woError.code === '23505' || /duplicate key/i.test(woError.message || '');
+                                if (!isDuplicate) throw woError;
+                                woInsertError = woError;
+                                batchNumber++;
+                                workOrderName = `${channelCode}-${datePart}-R${batchNumber}`;
+                            }
+                            if (workOrderId === null) throw (woInsertError || new Error('ไม่สามารถสร้างใบงานได้ กรุณาลองใหม่อีกครั้ง'));
 
                             // ป้องกันปัญหาตัดใบงานพร้อมกัน 2 คน แล้วบิลชุดเดียวกันถูกดึงไปอยู่ใบงานหลัง (ใบงานแรกว่างเปล่า)
                             // อัปเดตเฉพาะบิลที่ยังเป็น "ลงข้อมูลเสร็จสิ้น" และยังไม่ถูกผูกกับใบงานอื่นเท่านั้น
@@ -2946,11 +2965,12 @@ if (mode === 'edit' && order) {
                                 .select('id');
                             if (updateError) throw updateError;
 
-                            if (!updatedOrdersForWO || updatedOrdersForWO.length !== groupSelectedIds.length) {
+                            linkedOrderIds = (updatedOrdersForWO || []).map(o => o.id);
+
+                            if (linkedOrderIds.length !== groupSelectedIds.length) {
                                 // มีบิลบางส่วน (หรือทั้งหมด) ถูกตัดใบงานไปแล้วโดยผู้ใช้อื่นในเวลาไล่เลี่ยกัน
-                                // ยกเลิกใบงานนี้ทันทีเพื่อไม่ให้เกิดใบงานว่างเปล่าค้างอยู่ในระบบ
-                                await supabaseClient.from('work_orders').delete().eq('work_order_name', workOrderName);
-                                const grabbedCount = groupSelectedIds.length - (updatedOrdersForWO ? updatedOrdersForWO.length : 0);
+                                // โยน error ออกไปให้ catch ด้านล่างทำ compensating rollback ทั้งหมดให้ (คืนสถานะบิลที่ผูกไปบางส่วน + ลบใบงาน)
+                                const grabbedCount = groupSelectedIds.length - linkedOrderIds.length;
                                 throw new Error(`มี ${grabbedCount} บิลถูกผู้ใช้อื่นตัดใบงานไปพร้อมกันแล้ว (ใบงาน "${workOrderName}" ถูกยกเลิกอัตโนมัติ) กรุณาโหลดข้อมูลใหม่แล้วลองอีกครั้ง`);
                             }
 
@@ -2998,6 +3018,20 @@ if (mode === 'edit' && order) {
                         } catch (error) { 
                             console.error(error); 
                             errorMessages.push(`พลาดกับช่องทาง ${channelCode}: ${error.message}`); 
+                            // Compensating rollback: คืนทุกอย่างที่สร้าง/ผูกไปแล้วในรอบนี้กลับเป็นก่อนเริ่ม
+                            // เพื่อไม่ให้เหลือข้อมูลค้างครึ่งๆ กลางๆ (work_orders/plan_jobs ไม่มีบิล หรือบิลถูกผูกแต่หาใบงานไม่เจอ)
+                            try {
+                                if (linkedOrderIds.length > 0) {
+                                    await supabaseClient.from('orders').update({ status: 'ลงข้อมูลเสร็จสิ้น', work_order_name: null }).in('id', linkedOrderIds);
+                                }
+                                if (workOrderId !== null) {
+                                    await supabaseClient.from('plan_jobs').delete().eq('name', workOrderNameCreated);
+                                    await supabaseClient.from('work_orders').delete().eq('id', workOrderId);
+                                }
+                            } catch (cleanupErr) {
+                                console.error('Cleanup failed:', cleanupErr);
+                                errorMessages.push(`คำเตือน: ล้างข้อมูลใบงานช่องทาง ${channelCode} ไม่สำเร็จอัตโนมัติ (${cleanupErr.message}) กรุณาตรวจสอบข้อมูลด้วยตนเอง`);
+                            }
                         } 
                     }
                 } catch (generalError) {
