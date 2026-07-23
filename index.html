@@ -4055,14 +4055,29 @@ function exportMasterStatusReport() {
             }
             function checkAndApplyStampInkLogic(rowElement) { const linkedInkRowUid = rowElement.dataset.linkedInkRowUid; if (linkedInkRowUid) { const oldInkRow = itemsTbody.querySelector(`tr[data-row-uid="${linkedInkRowUid}"]`); if (oldInkRow) { $(oldInkRow).find('.item-product').select2('destroy'); oldInkRow.remove(); } } rowElement.removeAttribute('data-linked-ink-row-uid'); const productId = $(rowElement).find('.item-product').val(); const inkColor = $(rowElement).find('.item-ink_color').val(); const product = fullProductList.find(p => p.id == productId); if (!product || !product.product_category || !product.product_category.toUpperCase().includes('STAMP')) { return; } const targetColors = { 'เขียว': 'เขียว', 'ดำ': 'ดำ', 'แดง': 'แดง', 'น้ำเงิน': 'น้ำเงิน' }; const matchedColor = Object.keys(targetColors).find(c => inkColor.includes(c) && inkColor.includes('พลาสติก')); if (!matchedColor) { return; } const inkProductName = `หมึกแฟลชพลาสติก 5 ml. (${matchedColor})`; const inkProductToAdd = fullProductList.find(p => p.product_name === inkProductName); if (!inkProductToAdd) { console.warn(`Could not find product: ${inkProductName}`); return; } const newInkRowUid = 'ink-' + Date.now() + Math.random(); const newInkRow = addItemRow({ product_id: inkProductToAdd.id, quantity: 1 }, newInkRowUid); newInkRow.dataset.isAutoAdded = "true"; newInkRow.style.backgroundColor = '#f0fff0'; rowElement.dataset.linkedInkRowUid = newInkRowUid; }
             
+            function getCondoStampFloorCount(category) {
+                const normalizedCategory = String(category || '')
+                    .replace(/[\u00A0_-]+/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                    .toUpperCase();
+                const match = normalizedCategory.match(/^CONDO STAMP\b.*?([25])\s*(?:FL|FLOOR)\b/);
+                if (match) return Number(match[1]);
+                return null;
+            }
+            window.getCondoStampFloorCount = getCondoStampFloorCount;
+
             function addCondoStampSet(productId) {
                 if (window.isExpandingCondo) return;
+                const product = fullProductList.find(p => p.id == productId);
+                const floorCount = getCondoStampFloorCount(product?.product_category);
+                if (!floorCount) return;
+
                 window.isExpandingCondo = true;
-                
                 const productData = { product_id: productId };
                 const groupId = 'condo-group-' + Date.now();
 
-                for (let i = 1; i <= 5; i++) {
+                for (let i = 1; i <= floorCount; i++) {
                     const newItemRow = addItemRow(productData);
                     newItemRow.querySelector('.item-shelf_location').value = i.toString();
                     newItemRow.dataset.isCondoPart = 'true';
@@ -4080,7 +4095,8 @@ function exportMasterStatusReport() {
                 const productId = $(changedRow).find('.item-product').val(); 
                 if (!productId) return; 
                 const product = fullProductList.find(p => p.id == productId); 
-                if (product && product.product_category && product.product_category.trim().toUpperCase() === 'CONDO STAMP') { 
+                const floorCount = getCondoStampFloorCount(product?.product_category);
+                if (floorCount) {
                     if (window.isExpandingCondo) return; 
                     window.isExpandingCondo = true; 
                     const templateItem = { product_id: product.id }; 
@@ -4093,7 +4109,7 @@ function exportMasterStatusReport() {
                     qtyInput.value = 1; 
                     qtyInput.readOnly = true; 
                     
-                    for (let i = 2; i <= 5; i++) { 
+                    for (let i = 2; i <= floorCount; i++) {
                         const newItemRow = addItemRow(templateItem); 
                         newItemRow.querySelector('.item-shelf_location').value = i.toString(); 
                         newItemRow.dataset.isCondoPart = 'true';
@@ -4160,9 +4176,8 @@ function exportMasterStatusReport() {
                     // 1. ใส่รายการสินค้าหลัก
                     Object.values(aggregatedItems).forEach(item => {
                         let displayQty = item.qty;
-                        if (item.category === 'CONDO STAMP') {
-                            displayQty = Math.ceil(item.qty / 5);
-                        }
+                        const floorCount = getCondoStampFloorCount(item.category);
+                        if (floorCount) displayQty = Math.ceil(item.qty / floorCount);
                         const savedPrice = existingPrices[item.name] || '0.00';
                         addTaxRow(item.name, displayQty, savedPrice);
                     });
@@ -4267,9 +4282,8 @@ function exportMasterStatusReport() {
 
                 return Object.values(map).map(item => {
                     let finalQty = item.qty;
-                    if (item.category.includes('CONDO STAMP')) {
-                        finalQty = Math.ceil(item.qty / 5);
-                    }
+                    const floorCount = getCondoStampFloorCount(item.category);
+                    if (floorCount) finalQty = Math.ceil(item.qty / floorCount);
                     return { ...item, finalQty: finalQty };
                 });
             }
@@ -4839,7 +4853,7 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
                     if (lastRow && lastRow.dataset.isCondoPart) {
                         const lastProductId = $(lastRow.querySelector('.item-product')).val();
                         const product = fullProductList.find(p => p.id == lastProductId);
-                        if (product && product.product_category && product.product_category.trim().toUpperCase() === 'CONDO STAMP') {
+                        if (product && getCondoStampFloorCount(product.product_category)) {
                             addCondoStampSet(lastProductId);
                             return;
                         }
@@ -6293,7 +6307,8 @@ window.patternSystem = (() => {
                         
                         Object.values(summaryMap).sort((a, b) => (a.loc || "").localeCompare(b.loc || "")).forEach(i => {
                             let finalQty = i.qty;
-                            if (i.cat.includes('CONDO STAMP')) finalQty = Math.ceil(i.qty / 5);
+                            const floorCount = window.getCondoStampFloorCount(i.cat);
+                            if (floorCount) finalQty = Math.ceil(i.qty / floorCount);
                             
                             rows.push([
                                 `"${workOrderName}"`, 
@@ -6395,7 +6410,8 @@ window.patternSystem = (() => {
 
                         sortedData.forEach(i => {
                             let finalQty = i.qty;
-                            if (i.cat.includes('CONDO STAMP')) finalQty = Math.ceil(i.qty / 5);
+                            const floorCount = window.getCondoStampFloorCount(i.cat);
+                            if (floorCount) finalQty = Math.ceil(i.qty / floorCount);
                             
                             csvRows.push([
                                 `"${i.cutTime}"`, 
