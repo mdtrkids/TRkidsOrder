@@ -77,15 +77,16 @@
 	#items-table th:nth-child(3) { width: 80px; }  /* ชั้นที่ */
 	#items-table th:nth-child(4) { width: 100px; } /* ลายการ์ตูน */
 	#items-table th:nth-child(5) { width: 100px; } /* ลายเส้น */
-	#items-table th:nth-child(6) { width: 80px; } /* ฟอนต์ */
-	#items-table th:nth-child(7) { width: 65px; }  /* ไม่รับชื่อ */
-	#items-table th:nth-child(8) { width: 150px; } /* บรรทัด 1 */
-	#items-table th:nth-child(9) { width: 150px; } /* บรรทัด 2 */
-	#items-table th:nth-child(10) { width: 150px; } /* บรรทัด 3 */
-	#items-table th:nth-child(11) { width: 60px; }  /* จำนวน */
-	#items-table th:nth-child(12) { width: 180px; } /* หมายเหตุ */
-	#items-table th:nth-child(13) { width: 180px; } /* ไฟล์แนบ */
-	#items-table th:nth-child(14) { width: 50px; }  /* ปุ่มลบ */
+	#items-table th:nth-child(6) { width: 80px; }  /* ปก */
+	#items-table th:nth-child(7) { width: 80px; } /* ฟอนต์ */
+	#items-table th:nth-child(8) { width: 65px; }  /* ไม่รับชื่อ */
+	#items-table th:nth-child(9) { width: 150px; } /* บรรทัด 1 */
+	#items-table th:nth-child(10) { width: 150px; } /* บรรทัด 2 */
+	#items-table th:nth-child(11) { width: 150px; } /* บรรทัด 3 */
+	#items-table th:nth-child(12) { width: 60px; }  /* จำนวน */
+	#items-table th:nth-child(13) { width: 180px; } /* หมายเหตุ */
+	#items-table th:nth-child(14) { width: 180px; } /* ไฟล์แนบ */
+	#items-table th:nth-child(15) { width: 50px; }  /* ปุ่มลบ */
         #order-system-container #items-table input,#order-system-container #items-table select{width:100%;font-size:14px;padding:6px;border:none;background:0 0;box-sizing:border-box}#order-system-container #items-table input:focus,#order-system-container #items-table select:focus{outline:2px solid #0071e3;background:#fff}
         #order-system-container #items-table .select2-container{width:100%!important}
         #order-system-container #items-table .select2-selection--single{height:32px!important;border:none!important; display: flex; align-items: center;}
@@ -644,7 +645,7 @@
                                     <button type="button" id="download-wy-template-btn" class="btn btn-info">📥 Template (WY)</button>
                                     <button type="button" id="import-orders-btn" class="btn btn-success">📤 Import Orders from File</button>
                                 </div>
-                                <div class="items-table-container"><table id="items-table"><thead><tr><th>ชื่อสินค้า</th><th>สีหมึก</th><th>ชั้นที่</th><th>ลายการ์ตูน</th><th>ปก</th><th>ฟอนต์</th><th>ไม่รับชื่อ</th><th>บรรทัด 1</th><th>บรรทัด 2</th><th>บรรทัด 3</th><th>จำนวน</th><th>หมายเหตุ</th><th>ไฟล์แนบ</th><th></th></tr></thead><tbody id="items-tbody"></tbody></table></div><button type="button" id="add-item-btn" class="btn btn-secondary">+ เพิ่มแถว</button><hr>
+                                <div class="items-table-container"><table id="items-table"><thead><tr><th>ชื่อสินค้า</th><th>สีหมึก</th><th>ชั้นที่</th><th>ลายการ์ตูน</th><th>ลายเส้น</th><th>ปก</th><th>ฟอนต์</th><th>ไม่รับชื่อ</th><th>บรรทัด 1</th><th>บรรทัด 2</th><th>บรรทัด 3</th><th>จำนวน</th><th>หมายเหตุ</th><th>ไฟล์แนบ</th><th></th></tr></thead><tbody id="items-tbody"></tbody></table></div><button type="button" id="add-item-btn" class="btn btn-secondary">+ เพิ่มแถว</button><hr>
                                 
                                 <div id="payment-info-section">
     <h3 style="margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 8px; font-size: 18px; color: #333;">ข้อมูลการชำระเงิน</h3>
@@ -2819,7 +2820,7 @@ if (mode === 'edit' && order) {
     }
     // ---------------------------------------------------
 
-    row.innerHTML = `<td><select class="item-product"></select></td><td><select class="item-ink_color"><option value="">--เลือกสี--</option></select></td><td><select class="item-shelf_location"><option value="">--เลือก--</option>${shelfOptions}</select></td><td><input type="text" class="item-cartoon_pattern"></td><td><input type="text" class="item-line_pattern"></td><td><select class="item-font">${fontOptions}</select></td><td style="text-align:center;"><input type="checkbox" class="item-no-name-cb" style="width:18px;height:18px;cursor:pointer;"></td><td><input type="text" class="item-line_1"></td><td><input type="text" class="item-line_2"></td><td><input type="text" class="item-line_3"></td><td><input type="number" class="item-quantity quantity-input" value="1" min="1"></td><td><input type="text" class="item-notes"></td><td><input type="text" class="item-file_attachment"></td><td class="action-cell"><button type="button" class="btn btn-danger remove-item-btn">X</button></td>`;
+    row.innerHTML = `<td><select class="item-product"></select></td><td><select class="item-ink_color"><option value="">--เลือกสี--</option></select></td><td><select class="item-shelf_location"><option value="">--เลือก--</option>${shelfOptions}</select></td><td><input type="text" class="item-cartoon_pattern"></td><td><input type="text" class="item-line_pattern"></td><td><input type="text" class="item-cover" placeholder="เช่น W4"></td><td><select class="item-font">${fontOptions}</select></td><td style="text-align:center;"><input type="checkbox" class="item-no-name-cb" style="width:18px;height:18px;cursor:pointer;"></td><td><input type="text" class="item-line_1"></td><td><input type="text" class="item-line_2"></td><td><input type="text" class="item-line_3"></td><td><input type="number" class="item-quantity quantity-input" value="1" min="1"></td><td><input type="text" class="item-notes"></td><td><input type="text" class="item-file_attachment"></td><td class="action-cell"><button type="button" class="btn btn-danger remove-item-btn">X</button></td>`;
                 
                 const noNameCb = row.querySelector('.item-no-name-cb');
                 const lineInputs = [row.querySelector('.item-line_1'), row.querySelector('.item-line_2'), row.querySelector('.item-line_3')];
@@ -2879,7 +2880,12 @@ if (mode === 'edit' && order) {
                             input.style.backgroundColor = "#e9ecef";
                         });
                     }
-                    const displayNotes = notesValue.replace(/\[SET-.*?\]/g, '').trim();
+                    const coverMatch = notesValue.match(/\[ปก\s+([^\]]+)\]/);
+                    row.querySelector('.item-cover').value = coverMatch ? coverMatch[1].trim() : '';
+                    const displayNotes = notesValue
+                        .replace(/\[SET-.*?\]/g, '')
+                        .replace(/\[ปก\s+[^\]]+\]/g, '')
+                        .trim();
                     row.querySelector('.item-notes').value = displayNotes;
                     row.querySelector('.item-file_attachment').value = item.file_attachment || ''; 
                     row.querySelector('.item-quantity').value = item.quantity || 1; 
@@ -3383,7 +3389,11 @@ remainingBills.forEach(order => {
                                 font: row.querySelector('.item-font').value, line_1: row.querySelector('.item-line_1').value,
                                 line_2: row.querySelector('.item-line_2').value, line_3: row.querySelector('.item-line_3').value,
                                 notes: (() => {
-    let rowNotes = row.querySelector('.item-notes').value;
+    let rowNotes = row.querySelector('.item-notes').value.trim();
+    const coverValue = row.querySelector('.item-cover').value.trim();
+    if (coverValue) {
+        rowNotes = `${rowNotes} [ปก ${coverValue}]`.trim();
+    }
     // ถ้าเป็นช่องทางเคลม ให้เอา ประเภท และ รายละเอียด มาต่อหัวหมายเหตุ
     if (channelCode === 'CLAIM') {
         const cType = document.getElementById('claim_type').value.trim();
