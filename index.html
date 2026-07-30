@@ -5305,7 +5305,21 @@ window.packingSystem = (() => {
                         }
                     }
 
-                    // 4. รวมข้อมูลเข้าสู่ Flat Array
+                    // 4. ดึงรหัสปกจากหมายเหตุ เช่น "[ปก W4]"
+                    // ปกมีลำดับความสำคัญสูงสุด จึงใช้รูปปกแทนรูปสินค้า/ลาย/เส้น
+                    const coverMatch = String(item.notes || '').match(/\[ปก\s+([^\]]+)\]/i);
+                    const coverPattern = coverMatch ? coverMatch[1].trim() : '';
+                    if (coverPattern && window.cartoonPatternList) {
+                        const searchCoverName = coverPattern.toLowerCase();
+                        const foundCoverPattern = window.cartoonPatternList.find(p =>
+                            String(p.pattern_name).trim().toLowerCase() === searchCoverName
+                        );
+                        if (foundCoverPattern && foundCoverPattern.image_url) {
+                            finalImageUrl = foundCoverPattern.image_url;
+                        }
+                    }
+
+                    // 5. รวมข้อมูลเข้าสู่ Flat Array
                     flatData.push({
                         'tracking_number': order.tracking_number,
                         'customer_name': order.customer_name,
@@ -5318,6 +5332,7 @@ window.packingSystem = (() => {
                         'shelf_location': item.product_type,
                         'cartoon_pattern': item.cartoon_pattern,
                         'line_pattern': item.line_pattern,
+                        'cover_pattern': coverPattern,
                         'font': item.font,
                         'item_uid': item.item_uid,
                         'scanned': item.packing_status === 'สแกนแล้ว',
@@ -5420,7 +5435,7 @@ applyPackingFilters();
             <tbody>`;
         
         orderGroup.forEach(item => {
-            const combinedPattern = [item.cartoon_pattern, item.line_pattern].filter(Boolean).join(" // ");
+            const combinedPattern = [item.cartoon_pattern, item.line_pattern, item.cover_pattern].filter(Boolean).join(" // ");
             const displayNotes = (item.notes || '').replace(/\[SET-.*?\]/g, '').trim();
             const fileLink = (item.file_attachment && (item.file_attachment.startsWith('http') || item.file_attachment.includes('www.'))) 
                 ? `<a href="${item.file_attachment.startsWith('http') ? item.file_attachment : 'https://' + item.file_attachment}" target="_blank" style="color: #0071e3; text-decoration: underline; font-weight: bold;">เปิดลิงก์</a>`
