@@ -753,15 +753,27 @@ function parseCSVLine(line) {
                     statusText.textContent = `กำลังดึงข้อมูลใบงานช่วงวันที่ ${minDate} ถึง ${maxDate}...`;
 
                     // 2. ดึงข้อมูล Orders จาก Database (ตามช่องทางที่เลือก)
-                    const { data: orders, error: orderError } = await supabaseClient
-                        .from('orders')
-                        .select('bill_no, payment_date, payment_time, total_amount, channel_code')
-                        .gte('payment_date', minDate)
-                        .lte('payment_date', maxDate)
-                        .in('channel_code', selectedChannels)
-                        .not('status', 'eq', 'ยกเลิก');
+                    // ต้องดึง payment_details ด้วย เพราะวันที่/เวลา/ยอดของการโอนรอบที่ 2
+                    // ไม่ได้อยู่ใน payment_date, payment_time และ total_amount
+                    // ไม่กรองด้วย payment_date เพราะคอลัมน์นั้นเก็บเฉพาะการโอนแถวแรก
+                    // และใช้ pagination เพื่อไม่ให้ติดเพดาน 1,000 แถวของ Supabase
+                    const orders = [];
+                    const orderBatchSize = 1000;
+                    let orderFrom = 0;
+                    while (true) {
+                        const { data: orderBatch, error: orderError } = await supabaseClient
+                            .from('orders')
+                            .select('id, bill_no, payment_date, payment_time, total_amount, channel_code, payment_details')
+                            .in('channel_code', selectedChannels)
+                            .neq('status', 'ยกเลิก')
+                            .order('id', { ascending: true })
+                            .range(orderFrom, orderFrom + orderBatchSize - 1);
 
-                    if (orderError) throw orderError;
+                        if (orderError) throw orderError;
+                        orders.push(...(orderBatch || []));
+                        if (!orderBatch || orderBatch.length < orderBatchSize) break;
+                        orderFrom += orderBatchSize;
+                    }
 
                     // 3. เริ่มขั้นตอนการจับคู่
                     statusText.textContent = 'กำลังเปรียบเทียบข้อมูลและบันทึกลงฐานข้อมูล...';
