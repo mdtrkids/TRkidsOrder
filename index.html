@@ -1653,6 +1653,12 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
             let searchDebounceTimer; 
             let eventListenersInitialized = false; 
             let productList = [], cartoonPatternList = [], fullProductList = [], channelList = [], allOrdersData = [], allWorkOrdersData = [], inkTypeList = [], promotionList = [], currentEditingOrderId = null;
+            // ทะเบียนบิลของใบงานที่กำลังผลิต (ทุกสถานะ) ใช้เฉพาะแท็บ "ใบงาน"
+            // จำเป็นเพราะ allOrdersData เก็บเฉพาะบิลของสถานะที่แท็บนั้นเปิดอยู่
+            // ทำให้ใบงานที่บิลถูกส่ง/ยกเลิกไปหมดแล้ว "หายไป" จากหน้าจอทั้งที่ยังไม่ได้ปิดใบงาน
+            let workOrderBillRoster = [];
+            // สถานะของชุดข้อมูลที่อยู่ใน allOrdersData ตอนนี้ (ใช้เช็คว่าข้อมูลของแท็บใบงานโหลดมาแล้วจริง)
+            let loadedOrdersStatus = null;
             let currentUserRole = null;
 
 // --- เพิ่มฟังก์ชันสำหรับกรองสินค้าตามเงื่อนไขรหัส 22 ---
@@ -1743,6 +1749,7 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
 
                     if (data && data.length > 0) {
                         allOrdersData = data;
+                        loadedOrdersStatus = null; // ชุดข้อมูลนี้เป็นผลค้นหา ไม่ใช่ของสถานะใดสถานะหนึ่ง
                         renderAllTabs();
                     }
                 } catch (err) {
@@ -1834,6 +1841,7 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
 
                     // เคลียร์ข้อมูลออร์เดอร์ในเครื่องให้ว่างไว้ก่อน (จะโหลดเมื่อคลิก Tab)
                     allOrdersData = [];
+                    loadedOrdersStatus = null;
 
                     if (productsRes.error) throw new Error('Could not load products');
                     fullProductList = productsRes.data;
@@ -1858,8 +1866,12 @@ function addPaymentRecordRow(data = { amount: 0, date: '', time: '' }) {
                     if (workOrdersRes.error) throw workOrdersRes.error;
                     allWorkOrdersData = workOrdersRes.data;
                     
-                    // หลังจากโหลด Meta เสร็จ ให้โหลดข้อมูล Tab แรกอัตโนมัติ (รอลงข้อมูล)
-                    await fetchOrdersByStatus('รอลงข้อมูล');
+                    // โหลดข้อมูลของ "แท็บที่เปิดอยู่" ไม่ใช่แท็บแรกเสมอ
+                    // ไม่งั้นหลังยกเลิก/คืนบิล หน้าใบงานจะว่างเปล่าเพราะได้ข้อมูลของสถานะอื่นมาแทน
+                    const activeTabNow = container.querySelector('.tab-link.active')?.dataset.tab;
+                    const statusToLoad = tabToStatus[activeTabNow] || 'รอลงข้อมูล';
+                    if (statusToLoad === 'ใบงาน (กำลังผลิต)') { await fetchWorkOrderBillRoster(); }
+                    await fetchOrdersByStatus(statusToLoad);
 
                 } catch(err) { 
                     console.error(err); 
@@ -1981,24 +1993,36 @@ otherStatuses.forEach(status => {
 
                 const workOrdersFilter = filters.work_orders; const workOrdersSearch = searchTerms.work_orders;
                 allWorkOrdersData.forEach(wo => {
-    const billsInWorkOrder = allOrdersData.filter(order => order.work_order_name === wo.work_order_name);
-    
+    const activeBills = allOrdersData.filter(order => order.work_order_name === wo.work_order_name);
+    // บิลทั้งหมดที่ยังผูกกับใบงานนี้ (ทุกสถานะ รวมที่ส่งแล้ว/ยกเลิกแล้ว)
+    const rosterBills = workOrderBillRoster.filter(order => order.work_order_name === wo.work_order_name);
+
+    // ถ้าเลือกกรองตามช่องทาง ให้ดูจากช่องทางของใบงานเอง
+    if (workOrdersFilter && workOrdersFilter !== 'all' && wo.channel_code && wo.channel_code !== workOrdersFilter) return;
+
+    // ใบงานที่ไม่เหลือบิลรอผลิตแล้ว (ส่งครบ/ถูกยกเลิกไปหมด) แต่ยังไม่ได้ปิดใบงาน
+    // ตัดสินได้เฉพาะตอนที่ allOrdersData เป็นข้อมูลของแท็บใบงานจริงๆ เท่านั้น
+    const woTabDataLoaded = (loadedOrdersStatus === 'ใบงาน (กำลังผลิต)');
+    const isFinished = woTabDataLoaded && activeBills.length === 0 && rosterBills.length > 0;
+    const billsInWorkOrder = activeBills.length > 0 ? activeBills : (isFinished ? rosterBills : []);
+
     // ถ้ากำลังค้นหาแล้วไม่เจอบิลในใบงานนี้ และชื่อใบงานก็ไม่ตรง ให้ข้ามไปเลย
-    if (workOrdersSearch) { 
-        const woNameMatches = wo.work_order_name.toLowerCase().includes(workOrdersSearch); 
-        const anyBillMatches = billsInWorkOrder.some(bill => 
-            (bill.bill_no && bill.bill_no.toLowerCase().includes(workOrdersSearch)) || 
+    if (workOrdersSearch) {
+        const woNameMatches = wo.work_order_name.toLowerCase().includes(workOrdersSearch);
+        const anyBillMatches = billsInWorkOrder.some(bill =>
+            (bill.bill_no && bill.bill_no.toLowerCase().includes(workOrdersSearch)) ||
             (bill.customer_name && bill.customer_name.toLowerCase().includes(workOrdersSearch))
-        ); 
-        if (!woNameMatches && !anyBillMatches) return; 
+        );
+        if (!woNameMatches && !anyBillMatches) return;
     }
-    
+
     // ป้องกันการโชว์ 0 บิล กรณีที่ข้อมูลยังโหลดไม่มา
+    // (เช็คจาก roster ด้วย เพื่อไม่ให้ใบงานที่ส่ง/ยกเลิกครบแล้วหายไปจากหน้าจอ)
     if (!workOrdersSearch && billsInWorkOrder.length === 0) {
         // ถ้าเป็นช่วงปกติแต่บิลหายไป (เพราะ allOrdersData ว่าง) ให้ข้ามการวาดไปก่อนเพื่อรอ fetch ใหม่
-        return; 
+        return;
     }
-                    
+
                     const allHaveTracking = billsInWorkOrder.length > 0 && billsInWorkOrder.every(bill => bill.tracking_number && bill.tracking_number.trim() !== '');
                     const trackingStatusIcon = allHaveTracking ? '<span style="color: green; font-weight: bold; margin-left: 8px;">✓</span>' : '';
                     const groupEl = document.createElement('div'); 
@@ -2021,7 +2045,15 @@ otherStatuses.forEach(status => {
     <button class="btn btn-sm btn-edit-tracking" title="${bill.tracking_number ? 'แก้ไขเลขพัสดุ' : 'เพิ่มเลขพัสดุ'}">✏️</button>
 </span>`;
                         
-                        billsHTML += `<li class="order-list-item" data-order-id="${bill.id}"><input type="checkbox" class="order-checkbox"><div class="order-info"><div><strong data-order-id="${bill.id}">${bill.bill_no}</strong><span class="customer-info">${bill.customer_name || 'N/A'}${billingIndicator}</span></div></div>${trackingHTML}</li>`; 
+                        // ใบงานที่ปิดงานได้แล้ว ให้บอกสถานะบิลกำกับไว้ด้วย (ส่งแล้ว / ยกเลิก)
+                        let statusIndicator = '';
+                        if (isFinished) {
+                            const isCancelled = bill.status === 'ยกเลิก';
+                            const color = isCancelled ? '#dc3545' : '#28a745';
+                            statusIndicator = ` <span style="font-size: 0.8em; color: ${color}; border: 1px solid ${color}; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${bill.status || 'N/A'}</span>`;
+                        }
+
+                        billsHTML += `<li class="order-list-item" data-order-id="${bill.id}"><input type="checkbox" class="order-checkbox"><div class="order-info"><div><strong data-order-id="${bill.id}">${bill.bill_no}</strong><span class="customer-info">${bill.customer_name || 'N/A'}${billingIndicator}${statusIndicator}</span></div></div>${trackingHTML}</li>`;
                     });
                     billsHTML += '</ul>';
 
@@ -2047,11 +2079,11 @@ else {
     actionButtonsHTML += `<button class="btn btn-info btn-sm import-wo-csv-btn" data-work-order-name="${wo.work_order_name}">นำเข้าเลขพัสดุ</button>`; 
 }
                     
-                    if (currentUserRole === 'superadmin' || currentUserRole === 'manager') { 
-                        actionButtonsHTML += `<button class="btn btn-danger btn-sm cancel-wo-btn" data-work-order-name="${wo.work_order_name}">ยกเลิกใบงาน</button>`; 
+                    if (currentUserRole === 'superadmin' || currentUserRole === 'manager') {
+                        actionButtonsHTML += `<button class="btn btn-danger btn-sm cancel-wo-btn" data-work-order-name="${wo.work_order_name}">ยกเลิกใบงาน</button>`;
                     }
-                    
-                    const batchActionsHTML = `
+
+                    let batchActionsHTML = `
                         <div class="batch-actions" ${(currentUserRole !== 'superadmin' && currentUserRole !== 'manager') ? 'style="display: none;"' : ''}>
                             <button class="btn btn-secondary select-all-in-wo-btn">เลือกทั้งหมด</button>
                             <button class="btn btn-warning revert-to-waiting-btn" data-work-order-name="${wo.work_order_name}">คืนไป "รอลงข้อมูล"</button>
@@ -2059,26 +2091,100 @@ else {
                             <button class="btn btn-danger cancel-bills-from-wo-btn" data-work-order-name="${wo.work_order_name}">ยกเลิกบิลที่เลือก</button>
                         </div>`;
 
-                    groupEl.innerHTML = `<div class="work-order-header"><span class="wo-name">${wo.work_order_name} (${billsInWorkOrder.length} บิล)${trackingStatusIcon}</span><div class="wo-header-actions">${actionButtonsHTML}</div></div><div class="work-order-bills">${batchActionsHTML}${billsHTML}</div>`;
+                    // ใบงานที่ไม่เหลือบิลรอผลิต: ไม่ต้องมีปุ่มผลิต/คืนสถานะ เหลือแค่ "ปิดใบงาน"
+                    // (ห้ามใช้ "ยกเลิกใบงาน" เพราะจะดึงบิลที่ส่งไปแล้วกลับมาเป็น "ลงข้อมูลเสร็จสิ้น")
+                    let finishedNoticeHTML = '';
+                    if (isFinished) {
+                        const shippedCount = rosterBills.filter(b => b.status === 'จัดส่งแล้ว').length;
+                        const cancelledCount = rosterBills.filter(b => b.status === 'ยกเลิก').length;
+                        const otherCount = rosterBills.length - shippedCount - cancelledCount;
+                        actionButtonsHTML = `<button class="btn btn-success btn-sm close-wo-btn" data-work-order-name="${wo.work_order_name}">✅ ปิดใบงาน</button>`;
+                        batchActionsHTML = '';
+                        finishedNoticeHTML = `<div style="background:#fff8e1; border:1px solid #ffc107; border-radius:8px; padding:10px 14px; margin-bottom:10px; font-size:13px; color:#8a6d3b;">
+                            ⚠️ ใบงานนี้ไม่เหลือบิลที่รอผลิตแล้ว (จัดส่งแล้ว ${shippedCount} / ยกเลิก ${cancelledCount}${otherCount > 0 ? ` / อื่นๆ ${otherCount}` : ''} จาก ${rosterBills.length} บิล) แต่ยังไม่ได้ปิดใบงาน — กด "ปิดใบงาน" เพื่อจบงานนี้
+                        </div>`;
+                    }
+
+                    const woCountLabel = isFinished ? `${rosterBills.length} บิล · ไม่เหลือบิลรอผลิต` : `${billsInWorkOrder.length} บิล`;
+                    groupEl.innerHTML = `<div class="work-order-header"><span class="wo-name">${wo.work_order_name} (${woCountLabel})${trackingStatusIcon}</span><div class="wo-header-actions">${actionButtonsHTML}</div></div><div class="work-order-bills">${finishedNoticeHTML}${batchActionsHTML}${billsHTML}</div>`;
                     
                     workOrdersListContainer.appendChild(groupEl);
                 });
                 updateSmartWorkOrderButton();
             }
             
-async function fetchOrdersByStatus(status) {
+// ดึง "ทะเบียนบิล" ของใบงานที่กำลังผลิตทั้งหมด โดยไม่สนใจสถานะบิล
+// ใช้ตัดสินว่าใบงานยังมีบิลผูกอยู่จริงหรือไม่ (บิลที่ส่ง/ยกเลิกไปแล้วจะไม่อยู่ใน allOrdersData)
+async function fetchWorkOrderBillRoster() {
+    const woNames = allWorkOrdersData.map(wo => wo.work_order_name);
+    if (woNames.length === 0) { workOrderBillRoster = []; return; }
+
+    let roster = [];
+    let from = 0;
+    let to = 999;
+    let hasMore = true;
+
+    while (hasMore) {
+        const { data, error } = await supabaseClient
+            .from('orders')
+            .select('id, bill_no, customer_name, status, channel_code, tracking_number, work_order_name')
+            .in('work_order_name', woNames)
+            .range(from, to);
+
+        if (error) { console.error('Roster fetch error:', error); break; }
+
+        roster = roster.concat(data);
+        if (data.length < 1000) { hasMore = false; }
+        else { from += 1000; to += 1000; }
+    }
+    workOrderBillRoster = roster;
+}
+
+// แผนผัง แท็บ -> สถานะบิลในฐานข้อมูล (ใช้ร่วมกันทั้งไฟล์)
+const tabToStatus = {
+    'tab-waiting': 'รอลงข้อมูล',
+    'tab-complete': 'ลงข้อมูลเสร็จสิ้น',
+    'tab-work-orders': 'ใบงาน (กำลังผลิต)',
+    'tab-shipped': 'จัดส่งแล้ว',
+    'tab-cancelled': 'ยกเลิก'
+};
+
+// อ่านค่าช่องทางที่เลือกอยู่ของแท็บที่ตรงกับสถานะนั้นๆ
+const statusToFilterId = {
+    'รอลงข้อมูล': 'filter-waiting',
+    'ลงข้อมูลเสร็จสิ้น': 'filter-complete',
+    'ใบงาน (กำลังผลิต)': 'filter-work-orders',
+    'จัดส่งแล้ว': 'filter-shipped',
+    'ยกเลิก': 'filter-cancelled'
+};
+function getChannelFilterForStatus(status) {
+    const el = container.querySelector(`#${statusToFilterId[status]}`);
+    return (el && el.value) ? el.value : 'all';
+}
+
+async function fetchOrdersByStatus(status, channelFilter = null) {
+    // ถ้าไม่ระบุมา ให้ยึดตามค่าที่เลือกไว้ในดร็อปดาวน์ของแท็บนั้น
+    const channel = channelFilter || getChannelFilterForStatus(status);
+    // แท็บ "ใบงาน" ต้องโหลดบิลทุกช่องทางเสมอ แล้วค่อยกรองที่ตัวใบงาน (wo.channel_code)
+    // ถ้ากรองที่บิล จะทำให้ใบงานช่องทางอื่นถูกมองว่า "ไม่เหลือบิล" ผิดๆ
+    const useChannel = channel && channel !== 'all' && status !== 'ใบงาน (กำลังผลิต)';
+
     loadingOverlay.style.display = 'flex';
     try {
-        // กรณี "จัดส่งแล้ว" เราจำกัดไว้ 300 เพื่อความเร็ว (หรือปรับเพิ่มตามเหมาะสม)
+        // กรณี "จัดส่งแล้ว" จำกัดไว้ 1,000 รายการ
+        // ถ้าเลือกช่องทางไว้ จะนับ 1,000 รายการ "ของช่องทางนั้น" (กรองที่ฐานข้อมูล ไม่ใช่กรองทีหลัง)
         if (status === 'จัดส่งแล้ว') {
-            const { data, error } = await supabaseClient.from('orders')
+            let query = supabaseClient.from('orders')
                 .select('*, order_items(*)')
-                .eq('status', 'จัดส่งแล้ว')
+                .eq('status', 'จัดส่งแล้ว');
+            if (useChannel) query = query.eq('channel_code', channel);
+
+            const { data, error } = await query
                 .order('shipped_time', { ascending: false })
-                .limit(300);
+                .limit(1000);
             if (error) throw error;
             allOrdersData = data || [];
-        } 
+        }
         // กรณีอื่นๆ (ใบงาน, รอลงข้อมูล, ฯลฯ) ให้ดึงจนครบทุกแถว (แก้ปัญหา 0 บิล)
         else {
             let allData = [];
@@ -2087,10 +2193,13 @@ async function fetchOrdersByStatus(status) {
             let hasMore = true;
 
             while (hasMore) {
-                const { data, error } = await supabaseClient
+                let query = supabaseClient
                     .from('orders')
                     .select('*, order_items(*)')
-                    .eq('status', status)
+                    .eq('status', status);
+                if (useChannel) query = query.eq('channel_code', channel);
+
+                const { data, error } = await query
                     .order('created_at', { ascending: false })
                     .range(from, to);
 
@@ -2106,7 +2215,8 @@ async function fetchOrdersByStatus(status) {
             }
             allOrdersData = allData;
         }
-        
+
+        loadedOrdersStatus = status;
         renderAllTabs(); 
     } catch (err) {
         console.error("Fetch Error:", err);
@@ -2508,6 +2618,7 @@ async function fetchOrdersByStatus(status) {
                 filterIds.forEach(id => {
                     const dropdown = container.querySelector(`#${id}`);
                     if (dropdown) {
+                        const prevVal = dropdown.value; // จำช่องทางที่ผู้ใช้เลือกไว้
                         dropdown.innerHTML = ''; // ล้างค่าเก่า
                         
                         // สร้าง Option "ทั้งหมด" แบบเขียนสด
@@ -2525,8 +2636,9 @@ async function fetchOrdersByStatus(status) {
                             dropdown.add(opt);
                         });
 
-                        // --- จุดสำคัญ: บังคับให้ UI แสดงผลคำว่า "ทั้งหมด" ---
-                        dropdown.value = 'all'; 
+                        // คืนค่าช่องทางที่เลือกไว้เดิม (ถ้ายังมีอยู่) ไม่งั้นค่อยกลับไปที่ "ทั้งหมด"
+                        const stillExists = prevVal && channelList.some(ch => ch.channel_code === prevVal);
+                        dropdown.value = stillExists ? prevVal : 'all'; 
                     }
                 });
 
@@ -2591,6 +2703,7 @@ async function fetchOrdersByStatus(status) {
             .eq('status', 'กำลังผลิต')
             .order('created_at', { ascending: false });
         allWorkOrdersData = woData || [];
+        await fetchWorkOrderBillRoster();
     }
 
                 // ถ้าคลิก Tab ที่มีสถานะ ให้ดึงข้อมูลใหม่ทันที
@@ -2758,9 +2871,15 @@ if (mode === 'edit' && order) {
             }
 
             async function loadOrderForEditing(orderId) { 
-                const orderData = allOrdersData.find(o => o.id == orderId);
                 loadingOverlay.style.display = 'flex'; 
                 try { 
+                    // บิลบางใบ (เช่น บิลที่ส่ง/ยกเลิกไปแล้วในใบงาน) อาจไม่อยู่ในชุดข้อมูลของแท็บที่เปิดอยู่
+                    // ถ้าหาในเครื่องไม่เจอ ให้ดึงจากฐานข้อมูลโดยตรง
+                    let orderData = allOrdersData.find(o => o.id == orderId);
+                    if (!orderData) {
+                        const { data } = await supabaseClient.from('orders').select('*, order_items(*)').eq('id', orderId).single();
+                        orderData = data;
+                    }
                     if(!orderData) throw new Error('ไม่พบข้อมูล'); 
                     openTab({ currentTarget: container.querySelector('.tab-link[data-tab="tab-create"]') }, 'tab-create'); 
                     setFormMode('edit', orderData); 
@@ -3084,25 +3203,29 @@ if (mode === 'edit' && order) {
             async function restoreSelectedOrders(newStatus) { const selectedIds = getSelectedOrderIds(container.querySelector('#tab-cancelled .order-list')); if (selectedIds.length === 0) return alert('กรุณาเลือกออร์เดอร์'); const statusText = newStatus === 'รอลงข้อมูล' ? 'รอลงข้อมูล' : 'ลงข้อมูลเสร็จสิ้น'; if (!confirm(`ต้องการดึง ${selectedIds.length} รายการ กลับไปที่ "${statusText}"?`)) return; loadingOverlay.style.display = 'flex'; try { const { error } = await supabaseClient.from('orders').update({ status: newStatus }).in('id', selectedIds); if (error) throw error; alert('ดึงกลับสำเร็จ!'); } catch (error) { alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
             function selectAllInWorkOrder(buttonElement) { const billsContainer = buttonElement.closest('.work-order-bills'); const checkboxes = billsContainer.querySelectorAll('.order-checkbox'); const isAllChecked = Array.from(checkboxes).every(cb => cb.checked); checkboxes.forEach(cb => cb.checked = !isAllChecked); }
             async function updateWorkOrderCount(workOrderName) { const { count, error: countError } = await supabaseClient.from('orders').select('id', { count: 'exact', head: true }).eq('work_order_name', workOrderName); if (countError) { console.error('Error counting:', countError); throw countError; } if (count === 0) { console.log(`WO "${workOrderName}" is empty. Updating status.`); const { error: updateError } = await supabaseClient.from('work_orders').update({ status: 'จัดส่งแล้ว' }).eq('work_order_name', workOrderName); if (updateError) { console.error('Error updating empty WO:', updateError); throw updateError; } } else { const { error: updateError } = await supabaseClient.from('work_orders').update({ order_count: count }).eq('work_order_name', workOrderName); if (updateError) { console.error('Error updating WO count:', updateError); throw updateError; } } }
-            async function updatePlannerJob(workOrderName, selectedIds = []) { const remainingBills = allOrdersData.filter(order => order.work_order_name === workOrderName && !selectedIds.includes(String(order.id))); if (remainingBills.length > 0) { const newQty = { STAMP: 0, STK: 0, CTT: 0, LASER: 0, TUBE: 0, PACK: 0 }; newQty.PACK = remainingBills.length; // ค้นหาโค้ดส่วนนี้ใน updatePlannerJob
-remainingBills.forEach(order => {
-    (order.order_items || []).forEach(item => {
-        const product = fullProductList.find(p => p.id === item.product_id);
-        if (product && product.product_category) {
-            const category = product.product_category.toUpperCase();
-            if (category.includes('STAMP')) newQty.STAMP++;
-            if (category.includes('STK')) newQty.STK++;
-            // --- แก้ไขบรรทัดนี้ ---
-            if (category.includes('UV') || category.includes('SUBLIMATION')) newQty.CTT++;
-            // --------------------
-            if (category.includes('LASER')) newQty.LASER++;
-            if (category.includes('TUBE')) newQty.TUBE++;
-        }
-    });
-}); const { error: updateJobError } = await supabaseClient.from('jobs').update({ qty: newQty }).eq('name', workOrderName); if (updateJobError) console.error('Failed to update job qty:', updateJobError); } else { const { error: deleteJobError } = await supabaseClient.from('jobs').delete().eq('name', workOrderName); if (deleteJobError) console.error('Failed to delete job:', deleteJobError); } }
+            // (ลบฟังก์ชัน updatePlannerJob ตัวเก่าที่เขียนทับตาราง 'jobs' ออก — ตัวที่ใช้งานจริงอยู่ด้านล่าง)
             async function revertSelectedBills(buttonElement, newStatus) { const workOrderName = buttonElement.dataset.workOrderName; const groupEl = buttonElement.closest('.work-order-group'); const selectedIds = getSelectedOrderIds(groupEl); if (selectedIds.length === 0) return alert('กรุณาเลือกบิล'); if (!confirm(`ต้องการคืน ${selectedIds.length} บิล ไปที่ "${newStatus}"?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: newStatus, work_order_name: null }).in('id', selectedIds); if (updateError) throw updateError; await updateWorkOrderCount(workOrderName); await updatePlannerJob(workOrderName, selectedIds); alert('คืนสถานะสำเร็จ!');  await loadInitialData(true);} catch (error) { console.error('Error reverting:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
             async function cancelSelectedBillsFromWorkOrder(buttonElement) { const workOrderName = buttonElement.dataset.workOrderName; const groupEl = buttonElement.closest('.work-order-group'); const selectedIds = getSelectedOrderIds(groupEl); if (selectedIds.length === 0) return alert('กรุณาเลือกบิล'); if (!confirm(`ต้องการ **ยกเลิก** ${selectedIds.length} บิล?`)) return; loadingOverlay.style.display = 'flex'; try { const { error: updateError } = await supabaseClient.from('orders').update({ status: 'ยกเลิก', work_order_name: null }).in('id', selectedIds); if (updateError) throw updateError; await updateWorkOrderCount(workOrderName); await updatePlannerJob(workOrderName, selectedIds); alert('ยกเลิกสำเร็จ!'); await loadInitialData(true); } catch (error) { console.error('Error cancelling:', error); alert(`เกิดพลาด: ${error.message}`); } finally { loadingOverlay.style.display = 'none'; } }
-            async function cancelWorkOrder(workOrderName) { 
+            // ปิดใบงานที่ไม่เหลือบิลรอผลิตแล้ว (บิลถูกส่ง/ยกเลิกไปหมด)
+            // ทำแบบเดียวกับปุ่ม "ปิดใบงาน" ในหน้าจัดของ คือเปลี่ยนสถานะใบงานอย่างเดียว ไม่ยุ่งกับบิล
+            async function closeWorkOrder(workOrderName) {
+                if (!confirm(`ปิดใบงาน "${workOrderName}"?\n(สถานะใบงานจะเป็น "จัดส่งแล้ว" และบิลทั้งหมดจะไม่ถูกแก้ไข)`)) return;
+                loadingOverlay.style.display = 'flex';
+                try {
+                    const { error } = await supabaseClient.from('work_orders').update({ status: 'จัดส่งแล้ว' }).eq('work_order_name', workOrderName);
+                    if (error) throw error;
+                    alert(`ปิดใบงาน "${workOrderName}" เรียบร้อย`);
+                    allWorkOrdersData = allWorkOrdersData.filter(wo => wo.work_order_name !== workOrderName);
+                    workOrderBillRoster = workOrderBillRoster.filter(o => o.work_order_name !== workOrderName);
+                    renderAllTabs();
+                } catch (error) {
+                    alert(`เกิดพลาด: ${error.message}`);
+                } finally {
+                    loadingOverlay.style.display = 'none';
+                }
+            }
+
+            async function cancelWorkOrder(workOrderName) {
     if (!confirm(`ต้องการ **ยกเลิกใบงาน** "${workOrderName}"?\n(ข้อมูลจะถูกลบออกจากแผนผลิตด้วย)`)) return; 
     loadingOverlay.style.display = 'flex'; 
     try { 
@@ -3123,30 +3246,44 @@ remainingBills.forEach(order => {
     } 
 }
 
-            async function updatePlannerJob(workOrderName, selectedIds = []) { 
-    const remainingBills = allOrdersData.filter(order => order.work_order_name === workOrderName && !selectedIds.includes(String(order.id))); 
-    if (remainingBills.length > 0) { 
-        const qty = { "เบิก": 0, "STAMP": 0, "STK": 0, "CTT": 0, "LASER": 0, "TUBE": 0, "QC": remainingBills.length, "PACK": remainingBills.length };
-        remainingBills.forEach(order => {
-            (order.order_items || []).forEach(item => {
-                const product = fullProductList.find(p => p.id === item.product_id);
-                if (product && product.product_category) {
-                    const cat = product.product_category.toUpperCase();
-                    if (cat.includes('STAMP')) { qty["STAMP"]++; qty["เบิก"]++; }
-                    if (cat.includes('STK')) qty["STK"]++;
-                    if (cat.includes('UV') || cat.includes('SUBLIMATION')) qty["CTT"]++; 
-                    if (cat.includes('LASER')) { qty["LASER"]++; qty["เบิก"]++; }
-                    if (cat.includes('TUBE')) qty["TUBE"]++;
+            // อัปเดตจำนวนงานในแผนผลิต (plan_jobs) ให้ตรงกับบิลที่ยังอยู่ในใบงาน
+            // หมายเหตุสำคัญ: ต้องอ่านบิลจากฐานข้อมูลจริง ห้ามใช้ allOrdersData
+            // เพราะ allOrdersData มีเฉพาะบิลของแท็บสถานะที่เปิดอยู่ (เช่น "ใบงาน (กำลังผลิต)")
+            // บิลที่ตรวจ/จัดส่งแล้วจะไม่อยู่ในนั้น ทำให้ใบงานถูกลบทิ้งทั้งที่ยังมีงานที่ผลิตไปแล้ว
+            async function updatePlannerJob(workOrderName, selectedIds = []) {
+                const excluded = (selectedIds || []).map(String);
+                const { data, error } = await supabaseClient
+                    .from('orders')
+                    .select('id, order_items(*)')
+                    .eq('work_order_name', workOrderName);
+                if (error) {
+                    console.error('updatePlannerJob: โหลดบิลในใบงานไม่สำเร็จ', error);
+                    throw error;
                 }
-            });
-        });
-        // อัปเดตในตาราง plan_jobs
-        await supabaseClient.from('plan_jobs').update({ qty: qty }).eq('name', workOrderName); 
-    } else { 
-        // ถ้าไม่เหลือบิลเลย ให้ลบใบงานทิ้งจากแผนผลิต plan_jobs
-        await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName); 
-    } 
-}
+                const remainingBills = (data || []).filter(order => !excluded.includes(String(order.id)));
+
+                // ลบออกจากแผนผลิตเฉพาะกรณีที่ไม่เหลือบิลผูกกับใบงานนี้จริงๆ
+                if (remainingBills.length === 0) {
+                    await supabaseClient.from('plan_jobs').delete().eq('name', workOrderName);
+                    return;
+                }
+
+                const qty = { "เบิก": 0, "STAMP": 0, "STK": 0, "CTT": 0, "LASER": 0, "TUBE": 0, "QC": remainingBills.length, "PACK": remainingBills.length };
+                remainingBills.forEach(order => {
+                    (order.order_items || []).forEach(item => {
+                        const product = fullProductList.find(p => p.id === item.product_id);
+                        if (product && product.product_category) {
+                            const cat = product.product_category.toUpperCase();
+                            if (cat.includes('STAMP')) { qty["STAMP"]++; qty["เบิก"]++; }
+                            if (cat.includes('STK')) qty["STK"]++;
+                            if (cat.includes('UV') || cat.includes('SUBLIMATION')) qty["CTT"]++;
+                            if (cat.includes('LASER')) { qty["LASER"]++; qty["เบิก"]++; }
+                            if (cat.includes('TUBE')) qty["TUBE"]++;
+                        }
+                    });
+                });
+                await supabaseClient.from('plan_jobs').update({ qty: qty }).eq('name', workOrderName);
+            }
             
             function validateOrderForCompletion(order) {
                 if (!order) return { isValid: false, reason: "ไม่พบข้อมูลออร์เดอร์" };
@@ -4712,7 +4849,7 @@ const claimItemsToInsert = originalItems.map(item => {
 	            document.getElementById('master-status-end-date').value = today;
 
                 document.getElementById('export-master-status-btn').addEventListener('click', exportMasterStatusReport);
-                container.querySelector('#channel-summary-container').addEventListener('click', (e) => { if (e.target.matches('.channel-summary-item')) { const channel = e.target.dataset.channel; container.querySelector('#filter-complete').value = channel; renderAllTabs(); } });
+                container.querySelector('#channel-summary-container').addEventListener('click', (e) => { if (e.target.matches('.channel-summary-item')) { const channel = e.target.dataset.channel; container.querySelector('#filter-complete').value = channel; fetchOrdersByStatus('ลงข้อมูลเสร็จสิ้น', channel); } });
                 
                 // ค้นหาส่วนนี้ในฟังก์ชัน initializeEventListeners() 
 document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
@@ -4826,8 +4963,9 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
                             'prepare-waybill-btn': (btn) => prepareForWaybill(btn.dataset.workOrderName), 
                             'export-waybill-sort-btn': (btn) => window.waybillSorter.start(btn.dataset.workOrderName, allOrdersData), 
                             'import-wo-csv-btn': (btn) => window.orderSystem.handleSmartTrackingImport(btn.dataset.workOrderName), 
-                            'cancel-wo-btn': (btn) => cancelWorkOrder(btn.dataset.workOrderName) 
-                        }; 
+                            'cancel-wo-btn': (btn) => cancelWorkOrder(btn.dataset.workOrderName),
+                            'close-wo-btn': (btn) => closeWorkOrder(btn.dataset.workOrderName)
+                        };
                         let actionTaken = false; 
                         for (const className in classToAction) { 
                             const btn = target.closest(`.${className}`); 
@@ -4934,7 +5072,25 @@ document.getElementById('create-wo-smart-btn').addEventListener('click', () => {
                 });
 
                 tabLinks.forEach(link => { link.addEventListener('click', (e) => openTab(e, e.target.dataset.tab)); });
-                ['filter-waiting', 'filter-complete', 'filter-cancelled', 'filter-shipped', 'filter-work-orders'].forEach(id => { const el = container.querySelector(`#${id}`); if (el) el.addEventListener('change', renderAllTabs); });
+                // เปลี่ยนช่องทางในดร็อปดาวน์ = ดึงข้อมูลใหม่จากฐานข้อมูลโดยกรองช่องทางตั้งแต่ต้นทาง
+                // (เดิมกรองในเครื่องจากชุดที่โหลดมาแล้ว ทำให้เห็นบิลของช่องทางนั้นไม่ครบ)
+                const filterIdMap = {
+                    'filter-waiting':     { tab: 'tab-waiting',     status: 'รอลงข้อมูล' },
+                    'filter-complete':    { tab: 'tab-complete',    status: 'ลงข้อมูลเสร็จสิ้น' },
+                    'filter-cancelled':   { tab: 'tab-cancelled',   status: 'ยกเลิก' },
+                    'filter-shipped':     { tab: 'tab-shipped',     status: 'จัดส่งแล้ว' },
+                    'filter-work-orders': { tab: 'tab-work-orders', status: 'ใบงาน (กำลังผลิต)' }
+                };
+                Object.entries(filterIdMap).forEach(([id, info]) => {
+                    const el = container.querySelector(`#${id}`);
+                    if (!el) return;
+                    el.addEventListener('change', async () => {
+                        const activeTab = container.querySelector('.tab-link.active')?.dataset.tab;
+                        // ดึงใหม่เฉพาะเมื่อดร็อปดาวน์นั้นอยู่ในแท็บที่เปิดอยู่ กันการเขียนทับข้อมูลของแท็บอื่น
+                        if (activeTab === info.tab) { await fetchOrdersByStatus(info.status, el.value); }
+                        else { renderAllTabs(); }
+                    });
+                });
 
                 const searchInputIds = ['search-waiting', 'search-complete', 'search-shipped', 'search-cancelled', 'search-work-orders'];
                 searchInputIds.forEach(id => {
