@@ -5590,6 +5590,7 @@ window.packingSystem = (() => {
                         'isOrderComplete': isOrderShipped,
                         'needsTaxInvoice': order.billing_details?.request_tax_invoice || false,
                         'needsCashBill': order.billing_details?.request_cash_bill || false,
+                        'docConfirmed': order.packing_meta?.docConfirmed || false,
                         'claim_type': order.claim_type,
                         'claim_details': order.claim_details,
                         'file_attachment': item.file_attachment
@@ -5611,7 +5612,10 @@ window.packingSystem = (() => {
         aggregatedData = tOrder.map(t => grouped[t]);
 
         aggregatedData.forEach((group, index) => {
-            if (group.every(i => i.scanned)) {
+            const allScanned = group.every(i => i.scanned);
+            const needsDoc = group[0].needsTaxInvoice || group[0].needsCashBill;
+            // บิลที่ต้องแนบเอกสาร จะยังไม่ถือว่าแพ็คเสร็จจนกว่าจะยืนยันว่าใส่เอกสารแล้ว
+            if (allScanned && (!needsDoc || group[0].docConfirmed)) {
                 completedIndices.add(index);
             }
         });
@@ -5734,6 +5738,26 @@ applyPackingFilters();
         tableHTML += "</tbody></table>";
         
         resultContainer.innerHTML = notifHTML + headerHTML + tableHTML;
+
+        // ถ้าสแกนครบแล้วแต่ยังไม่ได้ยืนยันเอกสาร → แสดงปุ่มยืนยันค้างไว้ (กันลืมหลัง reload)
+        const g0 = orderGroup[0];
+        const needsDocBar = (g0.needsTaxInvoice || g0.needsCashBill);
+        if (needsDocBar && !g0.docConfirmed && !g0.isOrderComplete && orderGroup.every(i => i.scanned)) {
+            const docLabel = g0.needsTaxInvoice ? 'ใบกำกับภาษี' : 'บิลเงินสด';
+            const bar = document.createElement('div');
+            bar.style.cssText = 'background:#fff3cd;border:2px solid #ffc107;border-radius:10px;padding:16px;margin-bottom:16px;text-align:center;';
+            bar.innerHTML = `<div style="font-size:1.1em;margin-bottom:10px;color:#856404;">⏳ บิลนี้สแกนของครบแล้ว แต่ยังไม่ได้ยืนยันว่าใส่ <strong>${docLabel}</strong></div>
+                <button id="reopen-doc-confirm" style="padding:12px 22px;border:none;background:#28a745;color:#fff;border-radius:8px;font-size:1.05em;font-weight:bold;cursor:pointer;">✅ ยืนยันว่าใส่${docLabel}แล้ว</button>`;
+            resultContainer.prepend(bar);
+            bar.querySelector('#reopen-doc-confirm').addEventListener('click', async () => {
+                const ok = await confirmDocumentIncluded(docLabel);
+                if (ok) {
+                    orderGroup.forEach(i => i.docConfirmed = true);
+                    completeCurrentOrder(orderGroup);
+                }
+            });
+        }
+
         actionPanel.style.display = "block";
         updateInputStates();
         updateActiveNavItem();
@@ -5809,34 +5833,24 @@ applyPackingFilters();
             
             // 4. CHECK COMPLETION (SLOW, only run once when complete)
             if (scannedItems === group.length) {
-                completedIndices.add(currentIndex);
-                clearTimeout(inactivityTimer); 
+                clearTimeout(inactivityTimer);
                 updateStatus("✅ สแกนครบแล้ว!", "success");
-                
-                // --- เพิ่มโค้ดส่วนนี้เข้าไป ---
-                const finishTime = new Date().toISOString();
-                supabaseClient.from("orders")
-                    .update({ 
-                        packing_meta: { 
-                            parcelScanned: true, 
-                            scannedBy: loggedInUsername, 
-                            scanTime: finishTime 
-                        } 
-                    })
-                    .eq('id', group[0].order_id)
-                    .then(() => {
-                        // อัปเดตข้อมูลในตัวแปรเครื่องด้วยเพื่อให้ UI แสดงผลทันที
-                        group[0].parcelScanned = true;
-                        group[0].scanTime = finishTime;
-                    });
-                // --------------------------
 
-                updateFinalizeButtonVisibility();
-                renderOrderNav();
-                setTimeout(() => {
-                    const nextIndex = aggregatedData.findIndex((_, i) => !completedIndices.has(i) && !aggregatedData[i][0].isOrderComplete);
-                    if (nextIndex !== -1) displayOrder(nextIndex);
-                }, 700);
+                // --- ด่านกันลืมเอกสาร: บิลที่ต้องแนบใบกำกับภาษี/บิลเงินสด ---
+                const needsDoc = group[0].needsTaxInvoice || group[0].needsCashBill;
+                if (needsDoc && !group[0].docConfirmed) {
+                    const docLabel = group[0].needsTaxInvoice ? 'ใบกำกับภาษี' : 'บิลเงินสด';
+                    const ok = await confirmDocumentIncluded(docLabel);
+                    if (!ok) {
+                        // ยังไม่ได้ใส่ → ไม่ปิดบิล ไม่ข้ามไปบิลถัดไป
+                        updateStatus("⏳ กรุณาใส่" + docLabel + "ลงกล่อง แล้วกดยืนยัน", "error");
+                        displayOrder(currentIndex); // แสดงปุ่มยืนยันค้างไว้
+                        return;
+                    }
+                    group.forEach(i => i.docConfirmed = true);
+                }
+
+                completeCurrentOrder(group);
             }
 
             // 5. Reset inactivity timer
@@ -5846,6 +5860,76 @@ applyPackingFilters();
             errorSound.play();
             updateStatus("❌ สินค้าไม่ถูกต้องหรือถูกสแกนแล้ว", "error");
         }
+    }
+
+    // ---- ด่านกันลืมเอกสาร: popup บังคับยืนยันว่าใส่ใบกำกับภาษี/บิลเงินสดแล้ว ----
+    function confirmDocumentIncluded(docLabel) {
+        return new Promise(resolve => {
+            let overlay = document.getElementById('doc-confirm-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'doc-confirm-overlay';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;';
+                overlay.innerHTML = `
+                  <div style="background:#fff;max-width:460px;width:90%;border-radius:14px;padding:28px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,0.35);">
+                    <div style="font-size:3em;line-height:1;">🧾</div>
+                    <h2 style="color:#c82333;margin:12px 0 6px;">อย่าลืมใส่เอกสาร!</h2>
+                    <p style="font-size:1.15em;margin:0 0 18px;">บิลนี้ต้องแนบ <strong id="doc-confirm-label" style="color:#c82333;"></strong> ลงกล่อง</p>
+                    <label style="display:flex;align-items:center;gap:10px;justify-content:center;font-size:1.1em;cursor:pointer;background:#fff8e1;border:1px solid #ffe082;padding:14px;border-radius:8px;">
+                      <input type="checkbox" id="doc-confirm-check" style="width:24px;height:24px;flex:0 0 auto;">
+                      <span>ใส่เอกสารลงกล่องเรียบร้อยแล้ว</span>
+                    </label>
+                    <div style="display:flex;gap:10px;margin-top:20px;">
+                      <button id="doc-confirm-later" style="flex:1;padding:13px;border:1px solid #ccc;background:#f1f1f1;border-radius:8px;font-size:1em;cursor:pointer;">⏳ ยังไม่ได้ใส่</button>
+                      <button id="doc-confirm-ok" disabled style="flex:2;padding:13px;border:none;background:#28a745;color:#fff;border-radius:8px;font-size:1.05em;font-weight:bold;cursor:pointer;opacity:0.5;">✅ ยืนยัน แพ็คเสร็จ</button>
+                    </div>
+                  </div>`;
+                document.body.appendChild(overlay);
+            }
+            const label = overlay.querySelector('#doc-confirm-label');
+            const check = overlay.querySelector('#doc-confirm-check');
+            const okBtn = overlay.querySelector('#doc-confirm-ok');
+            const laterBtn = overlay.querySelector('#doc-confirm-later');
+            label.textContent = docLabel;
+            check.checked = false;
+            okBtn.disabled = true;
+            okBtn.style.opacity = '0.5';
+            overlay.style.display = 'flex';
+            check.onchange = () => {
+                okBtn.disabled = !check.checked;
+                okBtn.style.opacity = check.checked ? '1' : '0.5';
+            };
+            okBtn.onclick = () => { overlay.style.display = 'none'; resolve(true); };
+            laterBtn.onclick = () => { overlay.style.display = 'none'; resolve(false); };
+        });
+    }
+
+    // ปิดบิล (แพ็คเสร็จ) + บันทึกลง DB + เด้งไปบิลถัดไป
+    function completeCurrentOrder(group) {
+        if (!completedIndices.has(currentIndex)) completedIndices.add(currentIndex);
+        const needsDoc = group[0].needsTaxInvoice || group[0].needsCashBill;
+        const finishTime = new Date().toISOString();
+        supabaseClient.from("orders")
+            .update({
+                packing_meta: {
+                    parcelScanned: true,
+                    scannedBy: loggedInUsername,
+                    scanTime: finishTime,
+                    docConfirmed: needsDoc
+                }
+            })
+            .eq('id', group[0].order_id)
+            .then(() => {
+                group[0].parcelScanned = true;
+                group[0].scanTime = finishTime;
+            });
+
+        updateFinalizeButtonVisibility();
+        renderOrderNav();
+        setTimeout(() => {
+            const nextIndex = aggregatedData.findIndex((_, i) => !completedIndices.has(i) && !aggregatedData[i][0].isOrderComplete);
+            if (nextIndex !== -1) displayOrder(nextIndex);
+        }, 700);
     }
 
     async function shipAllScannedOrders() {
@@ -6218,7 +6302,7 @@ window.productSystem = (() => {
                 const fileExt = file.name.split('.').pop();
                 const fileName = `${productCode}-${Date.now()}.${fileExt}`;
                 const filePath = `products/${fileName}`;
-                let { error: uploadError } = await supabaseClient.storage.from('product-images').upload(filePath, resized, { contentType: resized.type });
+                let { error: uploadError } = await supabaseClient.storage.from('product-images').upload(filePath, resized, { contentType: resized.type, cacheControl: '31536000' });
                 if (uploadError) throw uploadError;
                 const { data: publicUrlData } = supabaseClient.storage.from('product-images').getPublicUrl(filePath);
                 imageUrl = publicUrlData.publicUrl;
@@ -6270,7 +6354,7 @@ window.productSystem = (() => {
                 const fileExt = file.name.split('.').pop();
                 const fileName = `${productCode}-${Date.now()}.${fileExt}`;
                 const filePath = `products/${fileName}`;
-                await supabaseClient.storage.from('product-images').upload(filePath, resized, { contentType: resized.type });
+                await supabaseClient.storage.from('product-images').upload(filePath, resized, { contentType: resized.type, cacheControl: '31536000' });
                 const { data: urlData } = supabaseClient.storage.from('product-images').getPublicUrl(filePath);
                 await supabaseClient.from('products').update({ image_url: urlData.publicUrl }).eq('product_code', productCode);
                 successCount++;
@@ -6360,7 +6444,7 @@ window.patternSystem = (() => {
             if (file) {
                 const resized = await resizeImageBlob(file);
                 const fileName = `patterns/${Date.now()}_${file.name}`;
-                const { error: upErr } = await supabaseClient.storage.from('product-images').upload(fileName, resized, { contentType: resized.type });
+                const { error: upErr } = await supabaseClient.storage.from('product-images').upload(fileName, resized, { contentType: resized.type, cacheControl: '31536000' });
                 if (upErr) throw upErr;
                 const { data: urlData } = supabaseClient.storage.from('product-images').getPublicUrl(fileName);
                 imageUrl = urlData.publicUrl;
@@ -6400,7 +6484,7 @@ window.patternSystem = (() => {
                 const name = f.name.substring(0, f.name.lastIndexOf('.'));
                 const resized = await resizeImageBlob(f);
                 const fileName = `patterns/${Date.now()}_${f.name}`;
-                await supabaseClient.storage.from('product-images').upload(fileName, resized, { contentType: resized.type });
+                await supabaseClient.storage.from('product-images').upload(fileName, resized, { contentType: resized.type, cacheControl: '31536000' });
                 const { data } = supabaseClient.storage.from('product-images').getPublicUrl(fileName);
                 await supabaseClient.from('cartoon_patterns').upsert({ pattern_name: name, image_url: data.publicUrl }, { onConflict: 'pattern_name' });
             } catch(err) {}
