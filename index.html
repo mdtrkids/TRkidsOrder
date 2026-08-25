@@ -900,6 +900,18 @@
                                     </select>
                                 </div>
                                 <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <label style="font-size: 12px; font-weight: bold; color: #666; margin-left: 5px;">หมวดหมู่</label>
+                                    <select id="filter-category-select" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; background: white; min-width: 160px; cursor: pointer;">
+                                        <option value="all">ทั้งหมด</option>
+                                    </select>
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <label style="font-size: 12px; font-weight: bold; color: #666; margin-left: 5px;">ประเภท</label>
+                                    <select id="filter-type-select" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; background: white; min-width: 160px; cursor: pointer;">
+                                        <option value="all">ทั้งหมด</option>
+                                    </select>
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
                                     <label style="font-size: 12px; font-weight: bold; color: #666; margin-left: 5px;">ค้นหาสินค้า</label>
                                     <input type="text" id="search-product-input" placeholder="รหัสสินค้า หรือ ชื่อสินค้า..." style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; width: 250px; font-size: 14px;">
                                 </div>
@@ -6087,6 +6099,8 @@ window.productSystem = (() => {
     const bulkUploadBtn = document.getElementById('bulk-upload-images-btn');
     const bulkImageInput = document.getElementById('bulk-image-input');
     const statusFilterSelect = document.getElementById('filter-status-select')
+    const categoryFilterSelect = document.getElementById('filter-category-select');
+    const typeFilterSelect = document.getElementById('filter-type-select');
 
     let allProductsData = [];
 
@@ -6102,6 +6116,8 @@ window.productSystem = (() => {
         if(tableBody) tableBody.addEventListener('click', handleTableClick); 
         if(searchInput) searchInput.addEventListener('input', () => renderProductTable(searchInput.value)); 
         if(statusFilterSelect) statusFilterSelect.addEventListener('change', () => renderProductTable(searchInput.value));
+        if(categoryFilterSelect) categoryFilterSelect.addEventListener('change', () => renderProductTable(searchInput.value));
+        if(typeFilterSelect) typeFilterSelect.addEventListener('change', () => renderProductTable(searchInput.value));
         if(bulkUploadBtn) bulkUploadBtn.addEventListener('click', () => bulkImageInput.click());
         if(bulkImageInput) bulkImageInput.addEventListener('change', (e) => handleBulkImageUpload(e.target.files));
         
@@ -6123,10 +6139,28 @@ window.productSystem = (() => {
         loadingOverlay.style.display = 'flex'; 
         try { 
             const { data, error } = await supabaseClient.from('products').select('*').order('product_code'); 
-            if (error) throw error; 
-            allProductsData = data; 
-            renderProductTable(); 
-        } catch (err) { alert('โหลดข้อมูลสินค้าผิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; } 
+            if (error) throw error;
+            allProductsData = data;
+            populateFilterOptions();
+            renderProductTable();
+        } catch (err) { alert('โหลดข้อมูลสินค้าผิดพลาด: ' + err.message); } finally { loadingOverlay.style.display = 'none'; }
+    }
+
+    // เติมตัวเลือกใน dropdown หมวดหมู่/ประเภท จากข้อมูลสินค้าจริง (คงค่าที่เลือกไว้เดิม)
+    function populateFilterOptions() {
+        const fill = (selectEl, field) => {
+            if (!selectEl) return;
+            const previous = selectEl.value;
+            const values = [...new Set(
+                allProductsData.map(p => (p[field] || '').trim()).filter(Boolean)
+            )].sort((a, b) => a.localeCompare(b, 'th'));
+            selectEl.innerHTML = '<option value="all">ทั้งหมด</option>' +
+                values.map(v => `<option value="${v}">${v}</option>`).join('');
+            // คงค่าเดิมไว้ถ้ายังมีอยู่ ไม่งั้นกลับไปเป็น "ทั้งหมด"
+            selectEl.value = values.includes(previous) ? previous : 'all';
+        };
+        fill(categoryFilterSelect, 'product_category');
+        fill(typeFilterSelect, 'product_type');
     }
 
     function renderProductTable(searchTerm = '') { 
@@ -6135,20 +6169,28 @@ window.productSystem = (() => {
         
         // ดึงค่าจาก Dropdown (all / active / inactive)
         const selectedStatus = statusFilterSelect ? statusFilterSelect.value : 'all';
+        const selectedCategory = categoryFilterSelect ? categoryFilterSelect.value : 'all';
+        const selectedType = typeFilterSelect ? typeFilterSelect.value : 'all';
 
         const filteredData = allProductsData.filter(p => {
             // 1. กรองด้วยคำค้นหา
-            const matchesSearch = (p.product_code || '').toLowerCase().includes(lowercasedFilter) || 
+            const matchesSearch = (p.product_code || '').toLowerCase().includes(lowercasedFilter) ||
                                   (p.product_name || '').toLowerCase().includes(lowercasedFilter);
-            
+
             // 2. กรองด้วยสถานะ
             const isActive = p.is_active !== false;
             let matchesStatus = true;
             if (selectedStatus === 'active') matchesStatus = isActive;
             else if (selectedStatus === 'inactive') matchesStatus = !isActive;
 
-            return matchesSearch && matchesStatus;
-        }); 
+            // 3. กรองด้วยหมวดหมู่
+            const matchesCategory = selectedCategory === 'all' || (p.product_category || '').trim() === selectedCategory;
+
+            // 4. กรองด้วยประเภท
+            const matchesType = selectedType === 'all' || (p.product_type || '').trim() === selectedType;
+
+            return matchesSearch && matchesStatus && matchesCategory && matchesType;
+        });
         
         filteredData.forEach(product => { 
             const isInactive = product.is_active === false;
