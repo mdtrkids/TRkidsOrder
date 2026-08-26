@@ -5618,17 +5618,21 @@ window.packingSystem = (() => {
             }
         });
 
-        const grouped = {}; 
-        const tOrder = [];
+        // จัดกลุ่มตาม "เลขบิล" (order_id) เพราะ 1 บิล = 1 พัสดุเสมอ
+        // ป้องกันเคสเลขพัสดุซ้ำข้ามบิล ไม่ให้ยุบรวมคนละบิลเป็นการ์ดเดียว
+        // และทำให้การบันทึกสแกนลง DB (ที่อ้างอิง group[0].order_id) ตรงกับบิลเสมอ
+        const grouped = {};
+        const orderKeys = [];
         flatData.forEach(item => {
-            if (!grouped[item.tracking_number]) { 
-                grouped[item.tracking_number] = []; 
-                tOrder.push(item.tracking_number); 
+            const key = item.order_id;
+            if (!grouped[key]) {
+                grouped[key] = [];
+                orderKeys.push(key);
             }
-            grouped[item.tracking_number].push(item);
+            grouped[key].push(item);
         });
 
-        aggregatedData = tOrder.map(t => grouped[t]);
+        aggregatedData = orderKeys.map(k => grouped[k]);
 
         aggregatedData.forEach((group, index) => {
             const allScanned = group.every(i => i.scanned);
