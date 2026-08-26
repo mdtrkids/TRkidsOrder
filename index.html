@@ -1033,6 +1033,13 @@
                                 <label for="report-end-date">ถึงวันที่</label>
                                 <input type="date" id="report-end-date">
                             </div>
+                            <div class="control-group">
+                                <label for="report-date-basis">อ้างอิงตามวันที่</label>
+                                <select id="report-date-basis" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; min-width: 160px;">
+                                    <option value="entry_date">วันที่คีย์</option>
+                                    <option value="production_date">วันที่ตัดใบงาน</option>
+                                </select>
+                            </div>
                             <!-- === ADDED FILTERS START === -->
                             <div class="control-group">
                                 <label for="report-category-filter">หมวดหมู่สินค้า</label>
@@ -6855,7 +6862,7 @@ window.patternSystem = (() => {
         // --- SALES REPORT SYSTEM MODULE ---
         window.salesReportSystem = (() => {
             let isInitialized = false;
-            let container, startDateInput, endDateInput, generateBtn, exportBtn, reportTbody, reportTableHead, reportPlaceholder, categoryFilter, productSearch;
+            let container, startDateInput, endDateInput, generateBtn, exportBtn, reportTbody, reportTableHead, reportPlaceholder, categoryFilter, productSearch, dateBasisSelect;
             let reportData = [];
             let allChannels = [];
 
@@ -6871,10 +6878,11 @@ window.patternSystem = (() => {
                 reportPlaceholder = container.querySelector('#report-placeholder');
                 categoryFilter = container.querySelector('#report-category-filter');
                 productSearch = container.querySelector('#report-product-search');
+                dateBasisSelect = container.querySelector('#report-date-basis');
 
                 const todayStr = new Date().toLocaleDateString('en-CA'); // จะได้ฟอร์แมต YYYY-MM-DD ตามเวลาท้องถิ่น
-	document.getElementById('master-status-start-date').value = todayStr;
-	document.getElementById('master-status-end-date').value = todayStr;
+	startDateInput.value = todayStr;
+	endDateInput.value = todayStr;
 
                 generateBtn.addEventListener('click', generateReport);
                 exportBtn.addEventListener('click', exportToExcel);
@@ -6914,38 +6922,71 @@ window.patternSystem = (() => {
                     alert('กรุณาเลือกวันที่เริ่มต้นและสิ้นสุด');
                     return;
                 }
+                const dateBasis = dateBasisSelect ? dateBasisSelect.value : 'entry_date';
                 loadingOverlay.style.display = 'flex';
                 reportPlaceholder.textContent = 'กำลังดึงข้อมูล...';
                 reportTbody.innerHTML = '';
                 exportBtn.style.display = 'none';
 
+                const ORDER_STATUSES = ['จัดส่งแล้ว', 'ลงข้อมูลเสร็จสิ้น', 'ใบงาน (กำลังผลิต)'];
+                const ORDER_SELECT = 'channel_code, order_items(*, products(product_code, product_category))';
+
                 try {
                     let allData = [];
-                    let from = 0;
-                    let to = 999;
-                    let hasMore = true;
 
-                    // --- วนลูปดึงข้อมูลทีละ 1,000 จนกว่าจะหมด ---
-                    while (hasMore) {
-                        const { data, error } = await supabaseClient.from('orders')
-                            .select('channel_code, order_items(*, products(product_code, product_category))')
-                            .in('status', ['จัดส่งแล้ว', 'ลงข้อมูลเสร็จสิ้น', 'ใบงาน (กำลังผลิต)'])
-                            .gte('entry_date', startDate)
-                            .lte('entry_date', endDate)
-                            .range(from, to); // ใช้ range แทน limit เพื่อดึงข้อมูลเป็นชุดๆ
+                    if (dateBasis === 'production_date') {
+                        // === ดึงตาม "วันที่ตัดใบงาน" ===
+                        // orders ผูกกับ work_orders ผ่าน work_order_name (ไม่มี FK ตรง) จึงต้องดึง 2 ขั้น
+                        // 1) หาชื่อใบงานทั้งหมดที่มี production_date อยู่ในช่วงวันที่ที่เลือก
+                        let woNames = [];
+                        let woFrom = 0;
+                        while (true) {
+                            const { data: woData, error: woErr } = await supabaseClient
+                                .from('work_orders')
+                                .select('work_order_name')
+                                .gte('production_date', startDate)
+                                .lte('production_date', endDate)
+                                .range(woFrom, woFrom + 999);
+                            if (woErr) throw woErr;
+                            woNames = woNames.concat((woData || []).map(w => w.work_order_name).filter(Boolean));
+                            if (!woData || woData.length < 1000) break;
+                            woFrom += 1000;
+                        }
 
-                        if (error) throw error;
-
-                        allData = allData.concat(data);
-                        
-                        if (data.length < 1000) {
-                            hasMore = false; // ถ้าได้ข้อมูลมาไม่ถึง 1,000 แสดงว่าหมดแล้ว
-                        } else {
+                        // 2) ดึงบิลของใบงานเหล่านั้น (แบ่ง chunk กัน URL ยาวเกิน + วนดึงทีละ 1,000)
+                        const CHUNK = 100;
+                        for (let i = 0; i < woNames.length; i += CHUNK) {
+                            const chunk = woNames.slice(i, i + CHUNK);
+                            let from = 0;
+                            while (true) {
+                                const { data, error } = await supabaseClient.from('orders')
+                                    .select(ORDER_SELECT)
+                                    .in('status', ORDER_STATUSES)
+                                    .in('work_order_name', chunk)
+                                    .range(from, from + 999);
+                                if (error) throw error;
+                                allData = allData.concat(data || []);
+                                if (!data || data.length < 1000) break;
+                                from += 1000;
+                            }
+                        }
+                    } else {
+                        // === ดึงตาม "วันที่คีย์" (entry_date) แบบเดิม ===
+                        let from = 0;
+                        while (true) {
+                            const { data, error } = await supabaseClient.from('orders')
+                                .select(ORDER_SELECT)
+                                .in('status', ORDER_STATUSES)
+                                .gte('entry_date', startDate)
+                                .lte('entry_date', endDate)
+                                .range(from, from + 999); // ใช้ range แทน limit เพื่อดึงข้อมูลเป็นชุดๆ
+                            if (error) throw error;
+                            allData = allData.concat(data || []);
+                            if (!data || data.length < 1000) break; // ถ้าได้ข้อมูลมาไม่ถึง 1,000 แสดงว่าหมดแล้ว
                             from += 1000;
-                            to += 1000;
                         }
                     }
-                    
+
                     const productMap = new Map();
                     const channelSet = new Set();
 
@@ -7087,7 +7128,8 @@ window.patternSystem = (() => {
                 colWidths[2].wch = 25; // product_category
                 worksheet['!cols'] = colWidths;
                 
-                XLSX.writeFile(workbook, `SalesReport_${startDate}_to_${endDate}.xlsx`);
+                const basisLabel = (dateBasisSelect && dateBasisSelect.value === 'production_date') ? 'ตัดใบงาน' : 'คีย์';
+                XLSX.writeFile(workbook, `SalesReport_${basisLabel}_${startDate}_to_${endDate}.xlsx`);
             }
 
             // รีเฟรช: ถ้าเคยสั่งออกรายงานไว้แล้ว ให้ดึงข้อมูลช่วงวันที่เดิมใหม่ ถ้ายังไม่ได้เลือกวันที่ ให้โหลดหมวดสินค้าใหม่
