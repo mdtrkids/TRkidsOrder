@@ -5487,14 +5487,26 @@ window.packingSystem = (() => {
         workOrders.forEach(wo => {
             const ordersInWo = allProductionOrders.filter(o => o.work_order_name === wo.work_order_name);
             const hasTracking = ordersInWo.some(o => o.tracking_number);
-            const isPartiallyPacked = ordersInWo.some(o => o.packing_meta?.parcelScanned || o.order_items.some(oi => oi.packing_status === 'สแกนแล้ว'));
+
+            // นับบิลที่ "แพ็คครบ" = ทุกรายการในบิลถูกสแกนแล้ว
+            const totalBills = ordersInWo.length;
+            const packedBills = ordersInWo.filter(o => {
+                const items = o.order_items || [];
+                return items.length > 0 && items.every(oi => oi.packing_status === 'สแกนแล้ว');
+            }).length;
+            const isAllPacked = totalBills > 0 && packedBills === totalBills;
+            const isPartiallyPacked = packedBills > 0 && !isAllPacked;
+
             let statusIcon = '📦'; let statusClass = ''; let statusText = '';
             if (!hasTracking) { statusIcon = '⚠️'; statusClass = 'no-tracking'; statusText = ' (รอเลขพัสดุ)'; }
+            else if (isAllPacked) { statusIcon = '✅'; }
             else if (isPartiallyPacked) { statusIcon = '🔄'; }
+
+            const progressColor = isAllPacked ? '#1a7f37' : '#b35900';
             const li = document.createElement("li"); li.className = "work-order-item";
             const btn = document.createElement("button");
             btn.className = statusClass;
-            btn.innerHTML = `<span class="status-icon">${statusIcon}</span> <span>${wo.work_order_name} (${wo.order_count} บิล)${statusText}</span>`;
+            btn.innerHTML = `<span class="status-icon">${statusIcon}</span> <span>${wo.work_order_name} (<b style="color:${progressColor};">${packedBills}/${totalBills}</b> บิล)${statusText}</span>`;
             btn.addEventListener("click", () => {
                 if (!hasTracking) { alert('ใบงานนี้ยังไม่มีเลขพัสดุ ไม่สามารถจัดของได้'); return; }
                 loadPackingData(wo.work_order_name);
