@@ -7424,6 +7424,8 @@ window.patternSystem = (() => {
                 style.innerHTML = `
                     .carrier-btn { padding: 8px 18px; border-radius: 10px; border: 1px solid #e5e5e7; background: white; cursor: pointer; font-weight: 700; font-size: 13px; transition: all 0.2s; }
                     .carrier-btn.active { background: #0071e3; color: white; border-color: #0071e3; box-shadow: 0 4px 8px rgba(0,113,227,0.2); }
+                    .carrier-btn.incomplete:not(.active) { border-color: #ff9500; background: #fff8f0; color: #b35900; }
+                    .carrier-btn.complete:not(.active) { border-color: #34c759; color: #1a7f37; }
                     .pt-btn { padding: 6px 14px; border-radius: 8px; border: 1px solid #e5e5e7; background: #fff; cursor: pointer; font-size: 13px; font-weight: 700; color: #555; }
                     .pt-btn.active { background: #34c759; color: white; border-color: #34c759; }
                     .stat-box { background: white; padding: 15px; border-radius: 15px; border: 1px solid #e5e5e7; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
@@ -7688,8 +7690,21 @@ async function fetchTransportData() {
 
     // ... (ส่วนที่เหลือใน render ทำเหมือนเดิม) ...
     tabsContainer.innerHTML = carriersList.map(c => {
-        const cCount = relevant.filter(o => getCarrierName(o.channel_code) === c && o.status === 'จัดส่งแล้ว').length;
-        return `<button class="carrier-btn ${activeCarrier === c ? 'active' : ''}" onclick="window.transportSystem.setCarrier('${c}')">${c} (${cCount})</button>`;
+        const cOrders = relevant.filter(o => getCarrierName(o.channel_code) === c && o.status === 'จัดส่งแล้ว');
+        const cCount = cOrders.length;
+        const cVerified = cOrders.filter(o => !!o.transport_meta?.verified).length;
+        const isComplete = cCount > 0 && cVerified >= cCount;
+
+        let symbol = '', stateClass = '', label = `${c} (${cCount})`;
+        if (cCount === 0) {
+            // ไม่มีของช่องทางนี้ ไม่ต้องเตือน
+        } else if (isComplete) {
+            symbol = '✅ '; stateClass = 'complete';                 // สแกนครบแล้ว
+        } else {
+            symbol = '⚠️ '; stateClass = 'incomplete';               // ยังสแกนไม่ครบ
+            label = `${c} (${cVerified}/${cCount})`;                 // แสดงความคืบหน้า verified/total
+        }
+        return `<button class="carrier-btn ${stateClass} ${activeCarrier === c ? 'active' : ''}" onclick="window.transportSystem.setCarrier('${c}')">${symbol}${label}</button>`;
     }).join('');
 
     exportBtn.style.display = activeCarrier ? 'block' : 'none';
