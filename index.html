@@ -6865,6 +6865,7 @@ window.patternSystem = (() => {
             let container, startDateInput, endDateInput, generateBtn, exportBtn, reportTbody, reportTableHead, reportPlaceholder, categoryFilter, productSearch, dateBasisSelect;
             let reportData = [];
             let allChannels = [];
+            let sortState = { key: 'total', dir: 'desc' }; // ค่าเริ่มต้น: เรียงยอดรวมมาก→น้อย
 
             function initializeApp() {
                 if (isInitialized) return;
@@ -6889,6 +6890,22 @@ window.patternSystem = (() => {
                 
                 categoryFilter.addEventListener('change', renderReportTable);
                 productSearch.addEventListener('input', renderReportTable);
+
+                // คลิกหัวตารางเพื่อเรียงลำดับ (คลิกซ้ำสลับ ขึ้น/ลง)
+                reportTableHead.addEventListener('click', (e) => {
+                    const th = e.target.closest('th[data-sort-key]');
+                    if (!th) return;
+                    const key = th.dataset.sortKey;
+                    if (sortState.key === key) {
+                        sortState.dir = (sortState.dir === 'asc') ? 'desc' : 'asc';
+                    } else {
+                        // ค่าเริ่มต้นของแต่ละคอลัมน์: ตัวเลขเริ่มจากมาก→น้อย, ข้อความเริ่มจาก ก→ฮ
+                        const numeric = (key === 'total' || key.startsWith('ch:'));
+                        sortState.key = key;
+                        sortState.dir = numeric ? 'desc' : 'asc';
+                    }
+                    renderReportTable();
+                });
 
                 isInitialized = true;
                 populateCategories();
@@ -7026,6 +7043,36 @@ window.patternSystem = (() => {
                 }
             }
 
+            function getSortValue(product, key) {
+                if (key === 'code') return product.code || '';
+                if (key === 'name') return product.name || '';
+                if (key === 'category') return product.category || '';
+                if (key === 'total') return product.total || 0;
+                if (key.startsWith('ch:')) return product.channels[key.slice(3)] || 0;
+                return '';
+            }
+
+            function sortReportData(arr) {
+                const { key, dir } = sortState;
+                const mult = (dir === 'asc') ? 1 : -1;
+                const numeric = (key === 'total' || key.startsWith('ch:'));
+                arr.sort((a, b) => {
+                    const va = getSortValue(a, key);
+                    const vb = getSortValue(b, key);
+                    let cmp = numeric ? (va - vb) : String(va).localeCompare(String(vb), 'th');
+                    if (cmp !== 0) return cmp * mult;
+                    // เท่ากัน: เรียงชื่อสินค้า ก→ฮ เพื่อความคงที่
+                    return String(a.name || '').localeCompare(String(b.name || ''), 'th');
+                });
+            }
+
+            function thHtml(label, key, extraStyle) {
+                const active = (sortState.key === key);
+                const arrow = active ? (sortState.dir === 'asc' ? ' ▲' : ' ▼') : '';
+                const style = `cursor:pointer; user-select:none;${extraStyle || ''}`;
+                return `<th data-sort-key="${key}" style="${style}" title="คลิกเพื่อเรียงลำดับ">${label}${arrow}</th>`;
+            }
+
             function renderReportTable() {
                 const selectedCategory = categoryFilter.value;
                 const searchTerm = productSearch.value.toLowerCase();
@@ -7046,15 +7093,16 @@ window.patternSystem = (() => {
                     reportTableHead.innerHTML = '<tr><th>รหัสสินค้า</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>จำนวนที่ขายได้</th></tr>';
                     return;
                 }
-                let headerHTML = '<tr><th>รหัสสินค้า</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th>';
+                let headerHTML = '<tr>' + thHtml('รหัสสินค้า', 'code') + thHtml('ชื่อสินค้า', 'name') + thHtml('หมวดหมู่', 'category');
                 allChannels.forEach(channel => {
-                    headerHTML += `<th style="text-align: center;">${channel}</th>`;
+                    headerHTML += thHtml(channel, 'ch:' + channel, 'text-align: center;');
                 });
-                headerHTML += '<th style="text-align: center; background-color: #e2e3e5;">รวมทั้งหมด</th></tr>';
+                headerHTML += thHtml('รวมทั้งหมด', 'total', 'text-align: center; background-color: #e2e3e5;');
+                headerHTML += '</tr>';
                 reportTableHead.innerHTML = headerHTML;
-                
-                filteredData.sort((a, b) => b.total - a.total);
-                
+
+                sortReportData(filteredData);
+
                 const columnTotals = {};
                 allChannels.forEach(ch => columnTotals[ch] = 0);
                 let grandTotal = 0;
@@ -7096,6 +7144,8 @@ window.patternSystem = (() => {
                     alert('ไม่มีข้อมูลสำหรับ Export');
                     return;
                 }
+
+                sortReportData(filteredData);
 
                 const startDate = startDateInput.value;
                 const endDate = endDateInput.value;
