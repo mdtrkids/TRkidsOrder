@@ -5666,6 +5666,28 @@ window.packingSystem = (() => {
             });
             orderList.appendChild(li);
         });
+
+        // แสดงบิลที่ "ยังไม่มีเลขพัสดุ" ต่อท้าย เพื่อให้เห็นว่ายังมีบิลค้างที่แพ็คไม่ได้
+        // (ไม่เพิ่มเข้า aggregatedData เพื่อไม่ให้กระทบ logic การสแกน/นับ/ปิดใบงาน)
+        const noTrackingBills = currentWOOrdersList.filter(o =>
+            (!o.tracking_number || !String(o.tracking_number).trim()) && o.status !== 'ยกเลิก'
+        );
+        noTrackingBills.forEach(order => {
+            const li = document.createElement("li");
+            li.className = "order-item no-tracking-item";
+            li.dataset.index = "-1"; // ไม่ผูกกับ aggregatedData
+            li.dataset.trackingId = String(order.bill_no || '');
+            li.style.opacity = "0.7";
+            li.style.cursor = "not-allowed";
+            li.style.backgroundColor = "#fff8e1";
+            li.title = "บิลนี้ยังไม่มีเลขพัสดุ ไม่สามารถแพ็คได้";
+            li.innerHTML = `<span class="tracking-id">⚠️ (ยังไม่มีเลขพัสดุ)</span><span class="customer-name">${order.bill_no ? order.bill_no + ' • ' : ''}${order.customer_name || 'N/A'}</span>`;
+            li.addEventListener("click", () => {
+                alert('บิลนี้ยังไม่มีเลขพัสดุ จึงยังแพ็คไม่ได้\nกรุณาเพิ่มเลขพัสดุให้บิลนี้ก่อน');
+            });
+            orderList.appendChild(li);
+        });
+
         updateCounter();
 applyPackingFilters();
     }
@@ -6010,7 +6032,12 @@ applyPackingFilters();
     }
 
     const updateStatus = (t, c) => { statusMessage.textContent = t; statusMessage.className = `status-${c}`; };
-    const updateCounter = () => { orderCounter.textContent = `สำเร็จ ${completedIndices.size} / ${aggregatedData.length}`; };
+    const updateCounter = () => {
+        // ตัวหาร = จำนวนบิลทั้งหมดในใบงานที่ไม่ถูกยกเลิก (รวมบิลที่ยังไม่มีเลขพัสดุ)
+        // เพื่อให้เห็นว่ายังมีบิลค้างที่จัดของไม่ได้ เช่น 10/11 เมื่อมี 1 บิลไม่มีเลขพัสดุ
+        const totalBills = currentWOOrdersList.filter(o => o.status !== 'ยกเลิก').length || aggregatedData.length;
+        orderCounter.textContent = `สำเร็จ ${completedIndices.size} / ${totalBills}`;
+    };
     const updateActiveNavItem = () => { container.querySelectorAll(".order-item").forEach(i => i.classList.toggle("active", parseInt(i.dataset.index) === currentIndex)); };
     const showPackingView = (v) => { selectionView.style.display = (v === 'selection' ? "block" : "none"); mainView.style.display = (v === 'main' ? "block" : "none"); };
     
