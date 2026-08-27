@@ -2528,15 +2528,59 @@ async function fetchOrdersByStatus(status, channelFilter = null) {
                 }; reader.readAsArrayBuffer(file);
             }
 
+            // ซ่อมไฟล์ CSV/TSV ดิบของ WY (รวม logic เดิมจากเครื่องมือ COVERT):
+            // บรรทัดที่ไม่ได้ขึ้นต้นด้วย 'WY' คือส่วนต่อของบิลก่อนหน้า (เช่น ที่อยู่ขึ้นบรรทัดใหม่)
+            // ให้รวมกลับเข้าบรรทัดบิลเดิม แล้ว parse เป็น TSV คืนค่าเป็น array ของ object แบบเดียวกับ XLSX
+            function parseWyRawText(text) {
+                const allLines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                if (allLines.length < 2) return [];
+
+                const processedLines = [allLines[0]];
+                for (let i = 1; i < allLines.length; i++) {
+                    const currentLine = allLines[i];
+                    if (currentLine.startsWith('WY')) {
+                        processedLines.push(currentLine);
+                    } else {
+                        const lastIndex = processedLines.length - 1;
+                        if (lastIndex > 0) processedLines[lastIndex] += ', ' + currentLine;
+                    }
+                }
+
+                const headers = processedLines[0].split('\t').map(h => h.trim());
+                const rows = [];
+                for (let i = 1; i < processedLines.length; i++) {
+                    const cells = processedLines[i].split('\t');
+                    const obj = {};
+                    headers.forEach((h, idx) => {
+                        let v = cells[idx] !== undefined ? cells[idx] : '';
+                        if (typeof v === 'string') {
+                            v = v.trim();
+                            if (v.startsWith("'")) v = v.substring(1);
+                        }
+                        obj[h] = v;
+                    });
+                    rows.push(obj);
+                }
+                return rows.filter(r => r['เลขบิล'] && r['เลขบิล'] !== 'เลขบิล');
+            }
+
             function handleWyImport(file) {
                 if (!file) return;
+                const isText = /\.(csv|tsv|txt)$/i.test(file.name || '');
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     try {
-                        const workbook = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates: true});
-                        const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {raw:false});
+                        let json;
+                        if (isText) {
+                            // ไฟล์ CSV/TSV ดิบ: ซ่อมบรรทัดที่แตกก่อน แล้วค่อย parse (ไม่ต้องผ่าน COVERT)
+                            json = parseWyRawText(e.target.result);
+                            if (json.length === 0) throw new Error("ไม่พบข้อมูล WY ที่อ่านได้ในไฟล์");
+                        } else {
+                            const workbook = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates: true});
+                            json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {raw:false});
+                        }
                         const map = new Map();
-                        
+
                         for (const r of json) {
                             const b = String(r["เลขบิล"] || '').trim(); 
                             if (!b) continue;
@@ -2603,26 +2647,52 @@ async function fetchOrdersByStatus(status, channelFilter = null) {
                         }
                         await processAndSaveImportedOrders(Array.from(map.values()), true);
                     } catch (err) { 
-                        alert("เกิดข้อผิดพลาด: " + err.message); 
+                        alert("เกิดข้อผิดพลาด: " + err.message);
                     }
-                }; reader.readAsArrayBuffer(file);
+                };
+                if (isText) reader.readAsText(file, "UTF-8");
+                else reader.readAsArrayBuffer(file);
             }
 
             function handleSmartImport(file) {
                 if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-                        const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
-                        if (json.length === 0) throw new Error("ไฟล์ไม่มีข้อมูล");
-                        const headers = Object.keys(json[0]);
-                        const orderH = findHeader(headers, ['เลขออร์เดอร์', 'เลขที่ออเดอร์', 'Order Number']);
-                        if (orderH) { handlePgtrImport(file); }
-                        else if (headers.includes('เลขบิล') && String(json[0]['เลขบิล']).toUpperCase().startsWith('WY')) { handleWyImport(file); }
-                        else { handleExcelImport(file); }
-                    } catch (err) { alert("ไม่สามารถระบุประเภทไฟล์ได้: " + err.message); }
-                }; reader.readAsArrayBuffer(file);
+                // การ sniff ปกติผ่าน XLSX
+                const sniffViaXlsx = () => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                            const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+                            if (json.length === 0) throw new Error("ไฟล์ไม่มีข้อมูล");
+                            const headers = Object.keys(json[0]);
+                            const orderH = findHeader(headers, ['เลขออร์เดอร์', 'เลขที่ออเดอร์', 'Order Number']);
+                            if (orderH) { handlePgtrImport(file); }
+                            else if (headers.includes('เลขบิล') && String(json[0]['เลขบิล']).toUpperCase().startsWith('WY')) { handleWyImport(file); }
+                            else { handleExcelImport(file); }
+                        } catch (err) { alert("ไม่สามารถระบุประเภทไฟล์ได้: " + err.message); }
+                    };
+                    reader.readAsArrayBuffer(file);
+                };
+
+                // ไฟล์ CSV/TSV ดิบของ WY ที่บรรทัดแตก อาจ sniff ผ่าน XLSX ไม่ชัด
+                // ตรวจจากข้อความก่อน: เฉพาะกรณีที่ชัดว่าเป็น WY เท่านั้นจึงลัดเข้าทาง WY
+                // ที่เหลือ (รวม PGTR/Excel ที่เป็น csv) ให้ผ่านการ sniff ปกติ
+                if (/\.(csv|tsv|txt)$/i.test(file.name || '')) {
+                    const textReader = new FileReader();
+                    textReader.onload = (e) => {
+                        const lines = String(e.target.result || '').split(/\r?\n/).filter(l => l.trim() !== '');
+                        const head = lines.slice(0, 3).join('\n');
+                        const looksPgtr = /เลขออร์เดอร์|เลขที่ออเดอร์|Order Number/i.test(head);
+                        if (!looksPgtr && head.includes('เลขบิล') && lines.slice(1).some(l => l.startsWith('WY'))) {
+                            handleWyImport(file);
+                        } else {
+                            sniffViaXlsx();
+                        }
+                    };
+                    textReader.readAsText(file, "UTF-8");
+                    return;
+                }
+                sniffViaXlsx();
             }
 
             // --- 6. Core Saver (ตัวบันทึกและสรุปผล) ---
